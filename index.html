@@ -86,7 +86,7 @@ input:focus,select:focus{outline:none;border-color:#0078d4}
       </div>
       <div style="margin-bottom:12px">
         <label class="label">Cantidad de unidades <span class="req">*</span></label>
-        <input type="number" id="f1-unid" min="1" placeholder="ej. 800" oninput="f1Check()">
+        <input type="number" id="f1-unid" min="1" step="1" placeholder="ej. 800" oninput="f1Check()" onkeypress="return event.charCode>=48&&event.charCode<=57">
       </div>
       <div style="margin-bottom:12px">
         <label class="label">Cantidad de tambores (opcional)</label>
@@ -317,14 +317,26 @@ function f1Check(){
 }
 
 async function f1Guardar(){
-  setBtnLoading('f1-btn', true, 'Guardando...');
+  setBtnLoading('f1-btn', true, 'Verificando...');
   const fgo   = document.getElementById('f1-fgo').value;
   const fecha = document.getElementById('f1-fecha').value;
-  const unid  = gv('f1-unid');
+  const unid  = Math.round(gv('f1-unid'));
   const tamb  = gv('f1-tambores') || '';
   const com   = document.getElementById('f1-comentarios').value.trim();
   const id    = rKey(fgo, fecha);
   const ts    = new Date().toISOString();
+
+  // Verificar duplicado
+  const existe = await buscarRecepcion(fgo, fecha);
+  if(existe){
+    const msg = document.getElementById('f1-msg');
+    msg.className='msg err';
+    msg.textContent='Ya existe un ingreso de '+fgo+' para la fecha '+fecha+' ('+existe.unid+' unidades). No se permiten duplicados.';
+    setBtnLoading('f1-btn', false, 'Registrar ingreso');
+    document.getElementById('f1-btn').disabled=false;
+    return;
+  }
+  setBtnLoading('f1-btn', true, 'Guardando...');
 
   const res = await apiPost('RECEPCIONES', [id,fgo,fecha,unid,tamb,com,ts]);
   if(!res.ok){ alert('Error al guardar. Intentá de nuevo.'); setBtnLoading('f1-btn',false,'Registrar ingreso'); return; }
