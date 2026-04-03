@@ -24,7 +24,7 @@ input:focus,select:focus{outline:none;border-color:#0078d4}
 .bC{background:#FAECE7;color:#712B13}.bD{background:#F1EFE8;color:#444441}
 .totales{background:#f9f9f9;border-radius:8px;padding:12px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px;border:1px solid #eee}
 .tot-item{text-align:center}
-.tot-val{font-size:18px;font-weight:600;color:#1a1a1a}
+.tot-val{font-size:18px;font-weight:600}
 .tot-lbl{font-size:11px;color:#888;margin-top:2px}
 .msg{font-size:13px;padding:9px 12px;border-radius:8px;margin-top:10px;display:none;line-height:1.4}
 .msg.ok{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;display:block}
@@ -33,8 +33,7 @@ input:focus,select:focus{outline:none;border-color:#0078d4}
 .msg.info{background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;display:block}
 .btn-main{width:100%;padding:14px;font-size:16px;font-weight:600;border-radius:10px;cursor:pointer;margin-top:4px;border:none;background:#0078d4;color:#fff}
 .btn-main:disabled{opacity:0.4;cursor:not-allowed}
-.btn-main:active{opacity:0.85}
-.btn-sec{width:100%;padding:11px;font-size:15px;border-radius:10px;cursor:pointer;background:#fff;border:1px solid #ddd;color:#1a1a1a;margin-top:8px}
+.btn-sec{width:100%;padding:11px;font-size:14px;border-radius:10px;cursor:pointer;background:#fff;border:1px solid #ddd;color:#1a1a1a;margin-top:8px}
 .nav{display:grid;grid-template-columns:1fr 1fr;gap:0;margin-bottom:14px;border:1px solid #e5e5e5;border-radius:10px;overflow:hidden}
 .nav-btn{padding:11px;font-size:14px;font-weight:500;cursor:pointer;background:#f5f5f5;color:#888;border:none}
 .nav-btn.active{background:#fff;color:#1a1a1a;font-weight:600}
@@ -43,477 +42,307 @@ input:focus,select:focus{outline:none;border-color:#0078d4}
 .recep-row{display:flex;justify-content:space-between;align-items:flex-start;padding:9px 0;border-bottom:1px solid #f0f0f0;font-size:13px}
 .recep-row:last-child{border-bottom:none}
 .found-card{border:2px solid #16a34a;border-radius:10px;padding:12px 14px;margin-bottom:12px;background:#f0fdf4}
-.lote-ab-card{border:2px solid #d97706;border-radius:10px;padding:12px 14px;margin-bottom:12px;background:#fffbeb}
+.lote-ab{border:2px solid #d97706;border-radius:10px;padding:12px 14px;margin-bottom:12px;background:#fffbeb}
 .progress-bar{height:8px;background:#e5e5e5;border-radius:4px;margin:8px 0;overflow:hidden}
 .progress-fill{height:100%;border-radius:4px;background:#16a34a;transition:width .3s}
 .progress-fill.over{background:#dc2626}
-.stat-row{display:flex;justify-content:space-between;font-size:12px;color:#666}
+.sr{display:flex;justify-content:space-between;font-size:12px;color:#666}
 .sv{font-weight:600;color:#1a1a1a}
 .success-wrap{text-align:center;padding:2rem 1rem}
 .chk{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px}
-.toggle-row{display:flex;align-items:center;gap:10px;padding:8px 0;cursor:pointer;user-select:none}
-.tog{position:relative;width:44px;height:24px;background:#ccc;border-radius:12px;transition:background .2s;flex-shrink:0}
-.tog.on{background:#0078d4}
-.tog-knob{position:absolute;top:3px;left:3px;width:18px;height:18px;background:#fff;border-radius:50%;transition:transform .2s}
-.tog.on .tog-knob{transform:translateX(20px)}
-/* Login screen */
-.login-wrap{text-align:center;padding:3rem 1rem}
-.login-wrap h2{font-size:20px;font-weight:600;margin-bottom:8px}
-.login-wrap p{font-size:14px;color:#666;margin-bottom:24px;line-height:1.5}
-.btn-ms{display:inline-flex;align-items:center;gap:10px;padding:12px 24px;background:#0078d4;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:500;cursor:pointer;width:100%;justify-content:center}
-.btn-ms:hover{background:#106ebe}
-.ms-logo{width:20px;height:20px;flex-shrink:0}
-.status-bar{background:#fff;border:1px solid #e5e5e5;border-radius:8px;padding:8px 12px;display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;font-size:12px}
-.status-dot{width:8px;height:8px;border-radius:50%;background:#16a34a;flex-shrink:0}
-.status-dot.loading{background:#d97706;animation:pulse 1s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.spinner{display:inline-block;width:18px;height:18px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
-<div class="app" id="appRoot">
+<div class="app">
 
-<!-- LOGIN -->
-<div id="loginScreen">
-  <div class="login-wrap">
-    <svg class="ms-logo" style="width:48px;height:48px;margin:0 auto 20px" viewBox="0 0 23 23"><rect x="1" y="1" width="10" height="10" fill="#f25022"/><rect x="12" y="1" width="10" height="10" fill="#7fba00"/><rect x="1" y="12" width="10" height="10" fill="#00a4ef"/><rect x="12" y="12" width="10" height="10" fill="#ffb900"/></svg>
-    <h2>Santa Faz — Lotes</h2>
-    <p>Iniciá sesión con tu cuenta Microsoft para guardar los datos en tu OneDrive.</p>
-    <button class="btn-ms" onclick="iniciarLogin()">
-      <svg class="ms-logo" viewBox="0 0 23 23"><rect x="1" y="1" width="10" height="10" fill="#f25022"/><rect x="12" y="1" width="10" height="10" fill="#7fba00"/><rect x="1" y="12" width="10" height="10" fill="#00a4ef"/><rect x="12" y="12" width="10" height="10" fill="#ffb900"/></svg>
-      Iniciar sesión con Microsoft
-    </button>
-    <p style="font-size:12px;color:#999;margin-top:16px">Solo se accede a los archivos de Excel en tu OneDrive.<br>Nunca se leen otros archivos.</p>
+<div class="nav">
+  <button class="nav-btn active" id="nav1" onclick="showTab(1)">1 — Recepción MP</button>
+  <button class="nav-btn" id="nav2" onclick="showTab(2)">2 — Registro de lote</button>
+</div>
+
+<!-- ══════════════ FORMULARIO 1 ══════════════ -->
+<div id="tab1">
+  <div id="f1-form">
+    <div class="card">
+      <p style="font-size:16px;font-weight:600;margin-bottom:4px">Recepción de materia prima</p>
+      <p style="font-size:13px;color:#666">Registrar al momento de ingreso en Santa Faz</p>
+    </div>
+    <div class="card">
+      <div class="row2" style="margin-bottom:12px">
+        <div>
+          <label class="label">Frigorífico <span class="req">*</span></label>
+          <select id="f1-fgo" onchange="f1Check()">
+            <option value="">— Seleccionar —</option>
+            <option>DELTA</option><option>RECREO</option><option>ALBA</option>
+            <option>SANTA INES</option><option>C.PARANA</option><option>SUIPACHA</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">Fecha de ingreso <span class="req">*</span></label>
+          <input type="date" id="f1-fecha" onchange="f1Check()">
+        </div>
+      </div>
+      <div style="margin-bottom:12px">
+        <label class="label">Cantidad de unidades <span class="req">*</span></label>
+        <input type="number" id="f1-unid" min="1" placeholder="ej. 800" oninput="f1Check()">
+      </div>
+      <div style="margin-bottom:12px">
+        <label class="label">Cantidad de tambores (opcional)</label>
+        <input type="number" id="f1-tambores" min="0" placeholder="ej. 12">
+      </div>
+      <div>
+        <label class="label">Comentarios (opcional)</label>
+        <input type="text" id="f1-comentarios" placeholder="Ej: vino el camión sin frío...">
+      </div>
+      <div class="msg" id="f1-msg"></div>
+    </div>
+    <button class="btn-main" id="f1-btn" onclick="f1Guardar()" disabled>Registrar ingreso</button>
+  </div>
+
+  <div id="f1-success" class="hidden">
+    <div class="success-wrap">
+      <div class="chk" style="background:#f0fdf4">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <p style="font-size:17px;font-weight:600;margin-bottom:6px">Ingreso registrado</p>
+      <p style="font-size:14px;color:#666;margin-bottom:20px" id="f1-s-det"></p>
+      <div style="background:#f9f9f9;border-radius:8px;padding:12px;margin-bottom:20px;font-size:13px;text-align:left" id="f1-s-res"></div>
+      <button class="btn-sec" onclick="f1Nuevo()">Registrar otro ingreso</button>
+      <button class="btn-sec" onclick="showTab(2)" style="color:#0078d4;border-color:#bfdbfe;margin-top:8px">Ir a registro de lote →</button>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:8px">
+    <p style="font-size:13px;font-weight:600;margin-bottom:8px">Ingresos recientes</p>
+    <div id="f1-lista"><p style="font-size:12px;color:#999">Cargando...</p></div>
   </div>
 </div>
 
-<!-- APP PRINCIPAL -->
-<div id="mainApp" class="hidden">
-
-  <div class="status-bar">
-    <div style="display:flex;align-items:center;gap:8px">
-      <div class="status-dot" id="statusDot"></div>
-      <span id="statusText" style="color:#666">Conectado</span>
+<!-- ══════════════ FORMULARIO 2 ══════════════ -->
+<div id="tab2" class="hidden">
+  <div id="f2-form">
+    <div class="card">
+      <p style="font-size:16px;font-weight:600;margin-bottom:4px">Registro de lote clasificado</p>
+      <p style="font-size:13px;color:#666">Completar al finalizar clasificación y empaque</p>
     </div>
-    <span id="userEmail" style="color:#888;font-size:11px"></span>
-  </div>
-
-  <div class="nav">
-    <button class="nav-btn active" id="nav1" onclick="showTab(1)">1 — Recepción MP</button>
-    <button class="nav-btn" id="nav2" onclick="showTab(2)">2 — Registro de lote</button>
-  </div>
-
-  <!-- ══ FORMULARIO 1 ══ -->
-  <div id="tab1">
-    <div id="f1-form">
-      <div class="card">
-        <p style="font-size:16px;font-weight:600;margin-bottom:4px">Recepción de materia prima</p>
-        <p style="font-size:13px;color:#666">Registrar al momento de ingreso en Santa Faz</p>
-      </div>
-      <div class="card">
-        <div class="row2" style="margin-bottom:12px">
-          <div>
-            <label class="label">Frigorífico <span class="req">*</span></label>
-            <select id="f1-fgo" onchange="f1Check()">
-              <option value="">— Seleccionar —</option>
-              <option value="DELTA">Delta</option>
-              <option value="RECREO">Recreo</option>
-              <option value="ALBA">Alba</option>
-              <option value="SANTA INES">Santa Inés</option>
-              <option value="C.PARANA">Coop. Paraná</option>
-              <option value="SUIPACHA">Suipacha</option>
-            </select>
-          </div>
-          <div>
-            <label class="label">Fecha de ingreso <span class="req">*</span></label>
-            <input type="date" id="f1-fecha" onchange="f1Check()">
-          </div>
-        </div>
-        <div style="margin-bottom:12px">
-          <label class="label">Cantidad de unidades <span class="req">*</span></label>
-          <input type="number" id="f1-unid" min="1" placeholder="ej. 800" oninput="f1Check()">
-        </div>
-        <div style="margin-bottom:12px">
-          <label class="label">Cantidad de tambores (opcional)</label>
-          <input type="number" id="f1-tambores" min="0" placeholder="ej. 12">
+    <div class="card">
+      <div class="row2">
+        <div>
+          <label class="label">Frigorífico <span class="req">*</span></label>
+          <select id="f2-fgo" onchange="f2Buscar()">
+            <option value="">— Seleccionar —</option>
+            <option>DELTA</option><option>RECREO</option><option>ALBA</option>
+            <option>SANTA INES</option><option>C.PARANA</option><option>SUIPACHA</option>
+          </select>
         </div>
         <div>
-          <label class="label">Comentarios (opcional)</label>
-          <input type="text" id="f1-comentarios" placeholder="Ej: vino el camión sin frío...">
+          <label class="label">Fecha ingreso del lote <span class="req">*</span></label>
+          <input type="date" id="f2-fecha" onchange="f2Buscar()">
         </div>
-        <div class="msg" id="f1-msg"></div>
-      </div>
-      <button class="btn-main" id="f1-btn" onclick="f1Guardar()" disabled>Registrar ingreso</button>
-    </div>
-
-    <div id="f1-success" class="hidden">
-      <div class="success-wrap">
-        <div class="chk" style="background:#f0fdf4">
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </div>
-        <p style="font-size:17px;font-weight:600;margin-bottom:6px">Ingreso registrado</p>
-        <p style="font-size:14px;color:#666;margin-bottom:4px" id="f1-s-fgo"></p>
-        <p style="font-size:13px;color:#888;margin-bottom:20px" id="f1-s-detalle"></p>
-        <div style="background:#f9f9f9;border-radius:8px;padding:12px;margin-bottom:20px;font-size:13px;text-align:left" id="f1-s-resumen"></div>
-        <button class="btn-sec" onclick="f1Nuevo()">Registrar otro ingreso</button>
-        <button class="btn-sec" onclick="showTab(2)" style="margin-top:8px;color:#0078d4;border-color:#bfdbfe">Ir a registro de lote →</button>
       </div>
     </div>
 
-    <div class="card" style="margin-top:8px">
-      <p style="font-size:13px;font-weight:600;margin-bottom:8px">Ingresos recientes</p>
-      <div id="f1-lista"><p style="font-size:12px;color:#999">Cargando...</p></div>
+    <div id="f2-info"></div>
+    <div id="f2-parcial"></div>
+
+    <div class="card" id="f2-campos" style="display:none">
+      <div style="margin-bottom:12px">
+        <label class="label">Fecha de clasificación <span class="req">*</span></label>
+        <input type="date" id="f2-fc" onchange="f2Recalc()">
+      </div>
+      <div>
+        <label class="label">Unidades clasificadas en esta carga <span class="req">*</span></label>
+        <input type="number" id="f2-unid" min="1" placeholder="ej. 200" oninput="f2Recalc()">
+      </div>
     </div>
+
+    <div class="card" id="f2-cats" style="display:none">
+      <p style="font-size:14px;font-weight:600;margin-bottom:12px">Clasificación por categoría</p>
+      <table class="cat-table">
+        <thead><tr><th style="width:50px">Cat.</th><th>Unidades</th><th>Kgs salados</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge bAAA">AAA</span></td><td><input type="number" id="u-AAA" min="0" placeholder="0" oninput="f2Recalc()"></td><td><input type="number" id="k-AAA" min="0" step="0.1" placeholder="0.0" oninput="f2Recalc()"></td></tr>
+          <tr><td><span class="badge bAA">AA</span></td><td><input type="number" id="u-AA" min="0" placeholder="0" oninput="f2Recalc()"></td><td><input type="number" id="k-AA" min="0" step="0.1" placeholder="0.0" oninput="f2Recalc()"></td></tr>
+          <tr><td><span class="badge bA">A</span></td><td><input type="number" id="u-A" min="0" placeholder="0" oninput="f2Recalc()"></td><td><input type="number" id="k-A" min="0" step="0.1" placeholder="0.0" oninput="f2Recalc()"></td></tr>
+          <tr><td><span class="badge bB">B</span></td><td><input type="number" id="u-B" min="0" placeholder="0" oninput="f2Recalc()"></td><td><input type="number" id="k-B" min="0" step="0.1" placeholder="0.0" oninput="f2Recalc()"></td></tr>
+          <tr><td><span class="badge bC">C</span></td><td><input type="number" id="u-C" min="0" placeholder="0" oninput="f2Recalc()"></td><td><input type="number" id="k-C" min="0" step="0.1" placeholder="0.0" oninput="f2Recalc()"></td></tr>
+          <tr><td><span class="badge bD">D</span></td><td><input type="number" id="u-D" min="0" placeholder="0" oninput="f2Recalc()"></td><td><input type="number" id="k-D" min="0" step="0.1" placeholder="0.0" oninput="f2Recalc()"></td></tr>
+        </tbody>
+      </table>
+      <div class="totales">
+        <div class="tot-item"><div class="tot-val" id="tot-u">0</div><div class="tot-lbl">Unidades salidas</div></div>
+        <div class="tot-item"><div class="tot-val" id="tot-k">0.0</div><div class="tot-lbl">Kgs salados</div></div>
+        <div class="tot-item"><div class="tot-val" id="tot-r">—</div><div class="tot-lbl">Rendimiento</div></div>
+      </div>
+      <div class="msg" id="f2-msg"></div>
+    </div>
+
+    <div class="card" id="f2-obs-card" style="display:none">
+      <label class="label">Observaciones (opcional)</label>
+      <input type="text" id="f2-obs" placeholder="Ej: daño en curado...">
+    </div>
+
+    <button class="btn-main" id="f2-btn" onclick="f2Guardar()" disabled style="display:none">Guardar</button>
   </div>
 
-  <!-- ══ FORMULARIO 2 ══ -->
-  <div id="tab2" class="hidden">
-    <div id="f2-form">
-      <div class="card">
-        <p style="font-size:16px;font-weight:600;margin-bottom:4px">Registro de lote clasificado</p>
-        <p style="font-size:13px;color:#666">Completar al finalizar clasificación y empaque</p>
+  <div id="f2-success" class="hidden">
+    <div class="success-wrap">
+      <div class="chk" id="f2-chk" style="background:#f0fdf4">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path id="f2-chk-p" d="M5 13l4 4L19 7" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
-      <div class="card">
-        <div class="row2">
-          <div>
-            <label class="label">Frigorífico <span class="req">*</span></label>
-            <select id="f2-fgo" onchange="f2Buscar()">
-              <option value="">— Seleccionar —</option>
-              <option value="DELTA">Delta</option>
-              <option value="RECREO">Recreo</option>
-              <option value="ALBA">Alba</option>
-              <option value="SANTA INES">Santa Inés</option>
-              <option value="C.PARANA">Coop. Paraná</option>
-              <option value="SUIPACHA">Suipacha</option>
-            </select>
-          </div>
-          <div>
-            <label class="label">Fecha de ingreso del lote <span class="req">*</span></label>
-            <input type="date" id="f2-fecha" onchange="f2Buscar()">
-          </div>
-        </div>
+      <p style="font-size:17px;font-weight:600;margin-bottom:6px" id="f2-s-tit"></p>
+      <p style="font-size:14px;color:#666;margin-bottom:16px" id="f2-s-sub"></p>
+      <div id="f2-s-prog" style="display:none;margin-bottom:16px">
+        <div class="progress-bar"><div class="progress-fill" id="f2-s-pf"></div></div>
+        <div class="sr"><span id="f2-s-ac"></span><span id="f2-s-to"></span></div>
+        <p id="f2-s-df" style="display:none;font-size:12px;margin-top:6px"></p>
       </div>
-      <div id="f2-recepcion-info"></div>
-      <div id="f2-lote-abierto"></div>
-      <div class="card" id="f2-campos" style="display:none">
-        <div style="margin-bottom:12px">
-          <label class="label">Fecha de clasificación <span class="req">*</span></label>
-          <input type="date" id="f2-fechaclasif" onchange="f2Recalc()">
-        </div>
-        <div>
-          <label class="label">Unidades clasificadas en esta carga <span class="req">*</span></label>
-          <input type="number" id="f2-unid" min="1" placeholder="ej. 200" oninput="f2Recalc()">
-        </div>
-      </div>
-      <div class="card" id="f2-cats" style="display:none">
-        <p style="font-size:14px;font-weight:600;margin-bottom:12px">Clasificación por categoría</p>
-        <table class="cat-table">
-          <thead><tr><th style="width:50px">Cat.</th><th>Unidades</th><th>Kgs salados</th></tr></thead>
-          <tbody>
-            <tr><td><span class="badge bAAA">AAA</span></td><td><input type="number" id="u-AAA" min="0" placeholder="0" oninput="f2Recalc()"></td><td><input type="number" id="k-AAA" min="0" step="0.1" placeholder="0.0" oninput="f2Recalc()"></td></tr>
-            <tr><td><span class="badge bAA">AA</span></td><td><input type="number" id="u-AA" min="0" placeholder="0" oninput="f2Recalc()"></td><td><input type="number" id="k-AA" min="0" step="0.1" placeholder="0.0" oninput="f2Recalc()"></td></tr>
-            <tr><td><span class="badge bA">A</span></td><td><input type="number" id="u-A" min="0" placeholder="0" oninput="f2Recalc()"></td><td><input type="number" id="k-A" min="0" step="0.1" placeholder="0.0" oninput="f2Recalc()"></td></tr>
-            <tr><td><span class="badge bB">B</span></td><td><input type="number" id="u-B" min="0" placeholder="0" oninput="f2Recalc()"></td><td><input type="number" id="k-B" min="0" step="0.1" placeholder="0.0" oninput="f2Recalc()"></td></tr>
-            <tr><td><span class="badge bC">C</span></td><td><input type="number" id="u-C" min="0" placeholder="0" oninput="f2Recalc()"></td><td><input type="number" id="k-C" min="0" step="0.1" placeholder="0.0" oninput="f2Recalc()"></td></tr>
-            <tr><td><span class="badge bD">D</span></td><td><input type="number" id="u-D" min="0" placeholder="0" oninput="f2Recalc()"></td><td><input type="number" id="k-D" min="0" step="0.1" placeholder="0.0" oninput="f2Recalc()"></td></tr>
-          </tbody>
-        </table>
-        <div class="totales">
-          <div class="tot-item"><div class="tot-val" id="tot-unid">0</div><div class="tot-lbl">Unidades salidas</div></div>
-          <div class="tot-item"><div class="tot-val" id="tot-kgs">0.0</div><div class="tot-lbl">Kgs salados</div></div>
-          <div class="tot-item"><div class="tot-val" id="tot-rinde">—</div><div class="tot-lbl">Rendimiento</div></div>
-        </div>
-        <div class="msg" id="f2-msg"></div>
-      </div>
-      <div class="card" id="f2-obs-card" style="display:none">
-        <label class="label">Observaciones (opcional)</label>
-        <input type="text" id="f2-obs" placeholder="Ej: daño en curado...">
-      </div>
-      <button class="btn-main" id="f2-btn" onclick="f2Guardar()" disabled style="display:none">Guardar</button>
-    </div>
-
-    <div id="f2-success" class="hidden">
-      <div class="success-wrap">
-        <div class="chk" id="f2-chk" style="background:#f0fdf4">
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path id="f2-chk-path" d="M5 13l4 4L19 7" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </div>
-        <p style="font-size:17px;font-weight:600;margin-bottom:6px" id="f2-s-titulo"></p>
-        <p style="font-size:14px;color:#666;margin-bottom:16px" id="f2-s-sub"></p>
-        <div id="f2-s-prog" style="margin-bottom:16px;display:none">
-          <div class="progress-bar"><div class="progress-fill" id="f2-s-pfill"></div></div>
-          <div class="stat-row"><span id="f2-s-acum"></span><span id="f2-s-tot"></span></div>
-          <p id="f2-s-diff" style="display:none;font-size:12px;margin-top:6px"></p>
-        </div>
-        <div style="background:#f9f9f9;border-radius:8px;padding:12px;margin-bottom:20px;font-size:13px;text-align:left" id="f2-s-res"></div>
-        <button class="btn-sec" onclick="f2Nuevo()">Cargar otro lote</button>
-      </div>
+      <div style="background:#f9f9f9;border-radius:8px;padding:12px;margin-bottom:20px;font-size:13px;text-align:left" id="f2-s-res"></div>
+      <button class="btn-sec" onclick="f2Nuevo()">Cargar otro lote</button>
     </div>
   </div>
+</div>
 
-</div><!-- /mainApp -->
 </div><!-- /app -->
 
 <script>
-// ── CONFIG ──────────────────────────────────────────────────────────────────
-const CLIENT_ID   = 'ab9b8c07-8f02-4f72-87fa-80105867a763';
-const SCOPES      = 'Files.ReadWrite User.Read';
-const REDIRECT    = window.location.href.split('?')[0].split('#')[0];
-const AUTHORITY   = 'https://login.microsoftonline.com/common/oauth2/v2.0';
-const FILE_NAME   = 'SantaFaz_Lotes.xlsx';
-const SHEET_RECEPCIONES = 'RECEPCIONES';
-const SHEET_LOTES       = 'LOTES';
+const API = 'https://script.google.com/macros/s/AKfycbyDLSnH7GQt8pwJsJFoEwwKXYBW2PNS28M2KFsIn7R0QxKgNcZEx9yXM9xoo12TdeP0/exec';
 const CATS = ['AAA','AA','A','B','C','D'];
+const HDR_REC  = ['ID','Frigorifico','Fecha','Unidades','Tambores','Comentarios','Timestamp'];
+const HDR_LOT  = ['ID_Recepcion','Frigorifico','Fecha_Ingreso','Fecha_Clasif','Num_Parcial',
+  'Es_Final','Unid_Esta_Carga','Unid_Acum','Total_Lote',
+  'AAA_unid','AA_unid','A_unid','B_unid','C_unid','D_unid',
+  'AAA_kgs','AA_kgs','A_kgs','B_kgs','C_kgs','D_kgs',
+  'Total_Kgs','Rendimiento','Observaciones','Timestamp'];
 
-// ── AUTH ─────────────────────────────────────────────────────────────────────
-let accessToken = sessionStorage.getItem('msft_token') || null;
-let tokenExpiry  = parseInt(sessionStorage.getItem('msft_expiry')||'0');
-let fileId = null;
+function gv(id){return parseFloat(document.getElementById(id).value)||0;}
+function today(){return new Date().toISOString().slice(0,10);}
+function rKey(f,d){return f+'||'+d;}
 
-function tokenValido(){ return accessToken && Date.now() < tokenExpiry - 60000; }
-
-function iniciarLogin(){
-  const verifier = Array.from(crypto.getRandomValues(new Uint8Array(32)))
-    .map(b=>b.toString(16).padStart(2,'0')).join('');
-  sessionStorage.setItem('pkce_verifier', verifier);
-  const params = new URLSearchParams({
-    client_id: CLIENT_ID,
-    response_type: 'code',
-    redirect_uri: REDIRECT,
-    scope: SCOPES,
-    code_challenge_method: 'plain',
-    code_challenge: verifier,
-    response_mode: 'query',
-    prompt: 'select_account'
+// ── API ──────────────────────────────────────────────────────────────────────
+async function apiPost(sheet, row){
+  const r = await fetch(API, {
+    method:'POST',
+    body: JSON.stringify({sheet, row}),
+    headers:{'Content-Type':'application/json'}
   });
-  window.location.href = AUTHORITY + '/authorize?' + params;
+  return r.json();
 }
 
-async function procesarCallback(){
-  const params = new URLSearchParams(window.location.search);
-  const code = params.get('code');
-  if(!code) return false;
-  history.replaceState({}, '', REDIRECT);
-  const verifier = sessionStorage.getItem('pkce_verifier');
-  const body = new URLSearchParams({
-    client_id: CLIENT_ID,
-    grant_type: 'authorization_code',
-    code,
-    redirect_uri: REDIRECT,
-    code_verifier: verifier,
-    scope: SCOPES
-  });
-  const resp = await fetch(AUTHORITY+'/token', {method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});
-  if(!resp.ok){ alert('Error al obtener token. Intentá de nuevo.'); return false; }
-  const data = await resp.json();
-  accessToken = data.access_token;
-  tokenExpiry  = Date.now() + data.expires_in*1000;
-  sessionStorage.setItem('msft_token', accessToken);
-  sessionStorage.setItem('msft_expiry', tokenExpiry);
-  return true;
+async function apiGet(sheet){
+  const r = await fetch(API+'?sheet='+encodeURIComponent(sheet));
+  const d = await r.json();
+  return d.ok ? d.values : [];
 }
 
-async function getUser(){
-  const r = await apiFetch('https://graph.microsoft.com/v1.0/me');
-  return r;
-}
-
-function apiFetch(url, opts={}){
-  return fetch(url, {
-    ...opts,
-    headers: { 'Authorization':'Bearer '+accessToken, 'Content-Type':'application/json', ...(opts.headers||{}) }
-  });
-}
-
-// ── EXCEL en OneDrive ─────────────────────────────────────────────────────────
-async function getOrCreateFile(){
-  setStatus('Buscando archivo en OneDrive...', true);
-  // Buscar archivo en raíz de OneDrive
-  let r = await apiFetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${FILE_NAME}`);
-  if(r.ok){
-    const data = await r.json();
-    fileId = data.id;
-    setStatus('Conectado', false);
-    return true;
+async function initHeaders(){
+  // Check if RECEPCIONES has headers, if not add them
+  const rows = await apiGet('RECEPCIONES');
+  if(!rows.length || rows[0][0] !== 'ID'){
+    await apiPost('RECEPCIONES', HDR_REC);
   }
-  // No existe → crear
-  setStatus('Creando archivo Excel...', true);
-  const created = await crearExcel();
-  setStatus('Conectado', false);
-  return created;
-}
-
-async function crearExcel(){
-  // Subir un Excel vacío con las dos solapas usando base64
-  // Workbook mínimo con dos sheets: RECEPCIONES y LOTES
-  const wb64 = await generarWorkbookBase64();
-  const r = await apiFetch(
-    `https://graph.microsoft.com/v1.0/me/drive/root:/${FILE_NAME}:/content`,
-    { method:'PUT', headers:{'Content-Type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}, body: base64ToBlob(wb64) }
-  );
-  if(!r.ok){ alert('No se pudo crear el archivo Excel. Error: '+(await r.text())); return false; }
-  const data = await r.json();
-  fileId = data.id;
-
-  // Agregar headers a las solapas via Graph workbook API
-  await initSheets();
-  return true;
-}
-
-async function initSheets(){
-  const base = `https://graph.microsoft.com/v1.0/me/drive/items/${fileId}/workbook`;
-
-  // Renombrar Sheet1 → RECEPCIONES
-  await apiFetch(`${base}/worksheets/Sheet1`, {
-    method:'PATCH', body: JSON.stringify({name: SHEET_RECEPCIONES})
-  });
-
-  // Agregar LOTES
-  await apiFetch(`${base}/worksheets`, {
-    method:'POST', body: JSON.stringify({name: SHEET_LOTES})
-  });
-
-  // Headers RECEPCIONES: ID | Frigorifico | Fecha | Unidades | Tambores | Comentarios | Timestamp
-  await apiFetch(`${base}/worksheets/${SHEET_RECEPCIONES}/range(address='A1:G1')`, {
-    method:'PATCH',
-    body: JSON.stringify({values:[['ID','Frigorifico','Fecha','Unidades','Tambores','Comentarios','Timestamp']]})
-  });
-
-  // Headers LOTES: ID_Recepcion | Frigorifico | Fecha_Ingreso | Fecha_Clasif | Num_Parcial |
-  //   Es_Final | Unid_Esta_Carga | Unid_Acum | Total_Lote |
-  //   AAA_unid | AA_unid | A_unid | B_unid | C_unid | D_unid |
-  //   AAA_kgs  | AA_kgs  | A_kgs  | B_kgs  | C_kgs  | D_kgs  |
-  //   Total_Kgs | Rendimiento | Observaciones | Timestamp
-  const hdrs = ['ID_Recepcion','Frigorifico','Fecha_Ingreso','Fecha_Clasif','Num_Parcial','Es_Final',
-    'Unid_Esta_Carga','Unid_Acum','Total_Lote',
-    'AAA_unid','AA_unid','A_unid','B_unid','C_unid','D_unid',
-    'AAA_kgs','AA_kgs','A_kgs','B_kgs','C_kgs','D_kgs',
-    'Total_Kgs','Rendimiento','Observaciones','Timestamp'];
-  const lastCol = String.fromCharCode(64+hdrs.length);
-  await apiFetch(`${base}/worksheets/${SHEET_LOTES}/range(address='A1:${lastCol}1')`, {
-    method:'PATCH', body: JSON.stringify({values:[hdrs]})
-  });
-}
-
-// Minimal valid XLSX (empty workbook) as base64
-function generarWorkbookBase64(){
-  // Pre-generated minimal XLSX base64 (1 sheet named Sheet1)
-  return "UEsDBBQAAAAIAAAAIQBi7p1oXgEAAJAEAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbK2Uy27CMBBF95X6D5G3ihPaRVVBYNG+lg/wrVkVMrCBJH8fJ02VSqgqJYuR5bnHc8cjA5AMTIH/YBQF4oA5sYsHOTBi7y8lFp3TlXaIPP8X+YQAOwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUEsBAi0AFAAAAAgAAAAhAGLunWheAQAAkAQAABMAAAAAAAAAAAAAAAAAAAAAAFtDb250ZW50X1R5cGVzXS54bWxQSwUGAAAAAAEAAQBBAAAAnwEAAAAA";
-}
-
-function base64ToBlob(b64){
-  const bin = atob(b64.replace(/\s/g,''));
-  const arr = new Uint8Array(bin.length);
-  for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
-  return new Blob([arr],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
-}
-
-// ── OPERACIONES EXCEL ─────────────────────────────────────────────────────────
-async function leerRecepcion(fgo, fecha){
-  const base = `https://graph.microsoft.com/v1.0/me/drive/items/${fileId}/workbook`;
-  const r = await apiFetch(`${base}/worksheets/${SHEET_RECEPCIONES}/usedRange`);
-  if(!r.ok) return null;
-  const data = await r.json();
-  const rows = data.values||[];
-  for(let i=1;i<rows.length;i++){
-    if(rows[i][1]===fgo && rows[i][2]===fecha){
-      return {id:rows[i][0],fgo:rows[i][1],fecha:rows[i][2],unid:rows[i][3],tambores:rows[i][4],comentarios:rows[i][5]};
-    }
+  const rows2 = await apiGet('LOTES');
+  if(!rows2.length || rows2[0][0] !== 'ID_Recepcion'){
+    await apiPost('LOTES', HDR_LOT);
   }
-  return null;
 }
 
-async function leerLotesAbiertos(fgo, fecha){
-  // Devuelve cargas parciales ya guardadas para este lote
-  const base = `https://graph.microsoft.com/v1.0/me/drive/items/${fileId}/workbook`;
-  const r = await apiFetch(`${base}/worksheets/${SHEET_LOTES}/usedRange`);
-  if(!r.ok) return null;
-  const data = await r.json();
-  const rows = data.values||[];
-  const cargas = rows.slice(1).filter(r=>r[1]===fgo&&r[2]===fecha&&r[5]!==true&&r[5]!=='TRUE'&&r[5]!==1);
+// ── CACHE local para búsquedas rápidas ───────────────────────────────────────
+let cacheRec = null;
+let cacheLot = null;
+let cacheTs  = 0;
+const CACHE_TTL = 30000; // 30 segundos
+
+async function getRecepciones(force=false){
+  if(!force && cacheRec && Date.now()-cacheTs < CACHE_TTL) return cacheRec;
+  const rows = await apiGet('RECEPCIONES');
+  cacheRec = rows.slice(1).filter(r=>r[0]);
+  cacheTs = Date.now();
+  return cacheRec;
+}
+
+async function getLotes(force=false){
+  if(!force && cacheLot && Date.now()-cacheTs < CACHE_TTL) return cacheLot;
+  const rows = await apiGet('LOTES');
+  cacheLot = rows.slice(1).filter(r=>r[0]);
+  cacheTs = Date.now();
+  return cacheLot;
+}
+
+function invalidateCache(){ cacheRec=null; cacheLot=null; }
+
+async function buscarRecepcion(fgo, fecha){
+  const rows = await getRecepciones();
+  const found = rows.find(r=>r[1]===fgo && String(r[2]).slice(0,10)===fecha);
+  if(!found) return null;
+  return {id:found[0], fgo:found[1], fecha:String(found[2]).slice(0,10),
+    unid:Number(found[3]), tambores:found[4], comentarios:found[5]};
+}
+
+async function buscarLotesAbiertos(fgo, fecha){
+  const rows = await getLotes();
+  // Cargas de este lote que NO son finales
+  const cargas = rows.filter(r=>r[1]===fgo && String(r[2]).slice(0,10)===fecha && r[5]!=1 && r[5]!=='TRUE' && r[5]!==true);
   if(!cargas.length) return null;
-  const acum = cargas.reduce((s,r)=>s+Number(r[6]),0);
+  const acum  = cargas.reduce((s,r)=>s+Number(r[6]),0);
   const total = Number(cargas[cargas.length-1][8]);
   return {acum, total, numParcial:cargas.length+1,
-    cargas:cargas.map(r=>({unid:r[6],fecha:r[3]}))};
+    cargas:cargas.map(r=>({unid:r[6], fecha:String(r[3]).slice(0,10)}))};
 }
 
-async function appendRow(sheet, values){
-  const base = `https://graph.microsoft.com/v1.0/me/drive/items/${fileId}/workbook`;
-  // Get next empty row
-  const r = await apiFetch(`${base}/worksheets/${sheet}/usedRange`);
-  let nextRow = 2;
-  if(r.ok){ const d=await r.json(); nextRow=(d.rowCount||1)+1; }
-  const lastCol = String.fromCharCode(64+values.length);
-  await apiFetch(`${base}/worksheets/${sheet}/range(address='A${nextRow}:${lastCol}${nextRow}')`, {
-    method:'PATCH', body: JSON.stringify({values:[values]})
-  });
-}
-
-async function leerRecepcionesRecientes(){
-  const base = `https://graph.microsoft.com/v1.0/me/drive/items/${fileId}/workbook`;
-  const r = await apiFetch(`${base}/worksheets/${SHEET_RECEPCIONES}/usedRange`);
-  if(!r.ok) return [];
-  const data = await r.json();
-  const rows = (data.values||[]).slice(1).filter(r=>r[1]);
-  return rows.reverse().slice(0,8).map(r=>({fgo:r[1],fecha:r[2],unid:r[3],tambores:r[4],comentarios:r[5]}));
-}
-
-// ── UI HELPERS ────────────────────────────────────────────────────────────────
-function setStatus(txt, loading){
-  document.getElementById('statusText').textContent=txt;
-  document.getElementById('statusDot').className='status-dot'+(loading?' loading':'');
-}
-
+// ── UI ────────────────────────────────────────────────────────────────────────
 function showTab(n){
   document.getElementById('tab1').classList.toggle('hidden',n!==1);
   document.getElementById('tab2').classList.toggle('hidden',n!==2);
   document.getElementById('nav1').classList.toggle('active',n===1);
   document.getElementById('nav2').classList.toggle('active',n===2);
-  if(n===1) renderF1Lista();
+  if(n===1) renderLista();
 }
 
-function gv(id){return parseFloat(document.getElementById(id).value)||0;}
-function today(){return new Date().toISOString().slice(0,10);}
+function setBtnLoading(id, loading, txt){
+  const b = document.getElementById(id);
+  b.disabled = loading;
+  b.innerHTML = loading ? '<span class="spinner"></span>'+txt : txt;
+}
 
 // ── FORMULARIO 1 ─────────────────────────────────────────────────────────────
-document.getElementById('f1-fecha').value=today();
+document.getElementById('f1-fecha').value = today();
 
-async function f1Check(){
-  const fgo=document.getElementById('f1-fgo').value;
-  const fecha=document.getElementById('f1-fecha').value;
-  const unid=gv('f1-unid');
-  const msg=document.getElementById('f1-msg');
-  msg.className='msg'; msg.textContent='';
-  if(fgo&&fecha&&unid>0&&fileId){
-    const existe = await leerRecepcion(fgo,fecha);
-    if(existe){ msg.className='msg warn'; msg.textContent='Ya existe un ingreso de '+fgo+' para esta fecha ('+existe.unid+' un). Si guardás, se agregará una nueva fila.'; }
-  }
-  document.getElementById('f1-btn').disabled=!(fgo&&fecha&&unid>0);
+function f1Check(){
+  const ok = document.getElementById('f1-fgo').value &&
+             document.getElementById('f1-fecha').value &&
+             gv('f1-unid') > 0;
+  document.getElementById('f1-btn').disabled = !ok;
 }
 
 async function f1Guardar(){
-  document.getElementById('f1-btn').disabled=true;
-  document.getElementById('f1-btn').textContent='Guardando...';
-  setStatus('Guardando en OneDrive...', true);
-  const fgo=document.getElementById('f1-fgo').value;
-  const fecha=document.getElementById('f1-fecha').value;
-  const unid=gv('f1-unid');
-  const tambores=gv('f1-tambores')||'';
-  const comentarios=document.getElementById('f1-comentarios').value.trim();
-  const id=fgo+'||'+fecha;
-  const ts=new Date().toISOString();
-  await appendRow(SHEET_RECEPCIONES,[id,fgo,fecha,unid,tambores,comentarios,ts]);
-  setStatus('Conectado', false);
-  document.getElementById('f1-s-fgo').textContent=fgo+' — '+fecha;
-  document.getElementById('f1-s-detalle').textContent=unid+' unidades'+(tambores?' · '+tambores+' tambores':'');
-  let html='<div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#666">Frigorífico</span><strong>'+fgo+'</strong></div>'+
-    '<div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#666">Fecha</span><strong>'+fecha+'</strong></div>'+
-    '<div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#666">Unidades</span><strong>'+unid+'</strong></div>';
-  if(tambores) html+='<div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#666">Tambores</span><strong>'+tambores+'</strong></div>';
-  if(comentarios) html+='<div style="padding:3px 0"><span style="color:#666">Comentarios: </span>'+comentarios+'</div>';
-  document.getElementById('f1-s-resumen').innerHTML=html;
+  setBtnLoading('f1-btn', true, 'Guardando...');
+  const fgo   = document.getElementById('f1-fgo').value;
+  const fecha = document.getElementById('f1-fecha').value;
+  const unid  = gv('f1-unid');
+  const tamb  = gv('f1-tambores') || '';
+  const com   = document.getElementById('f1-comentarios').value.trim();
+  const id    = rKey(fgo, fecha);
+  const ts    = new Date().toISOString();
+
+  const res = await apiPost('RECEPCIONES', [id,fgo,fecha,unid,tamb,com,ts]);
+  if(!res.ok){ alert('Error al guardar. Intentá de nuevo.'); setBtnLoading('f1-btn',false,'Registrar ingreso'); return; }
+
+  invalidateCache();
+  document.getElementById('f1-s-det').textContent = fgo+' — '+fecha+' · '+unid+' unidades'+(tamb?' · '+tamb+' tambores':'');
+  let html = row2('Frigorífico',fgo)+row2('Fecha',fecha)+row2('Unidades',unid);
+  if(tamb)  html+=row2('Tambores',tamb);
+  if(com)   html+=row2('Comentarios',com);
+  document.getElementById('f1-s-res').innerHTML = '<table style="width:100%;font-size:13px;border-collapse:collapse">'+html+'</table>';
   document.getElementById('f1-form').classList.add('hidden');
   document.getElementById('f1-success').classList.remove('hidden');
-  renderF1Lista();
+  renderLista();
+}
+
+function row2(lbl,val){
+  return `<tr><td style="color:#666;padding:3px 0">${lbl}</td><td style="text-align:right;font-weight:600;padding:3px 0">${val}</td></tr>`;
 }
 
 function f1Nuevo(){
@@ -527,66 +356,83 @@ function f1Nuevo(){
   document.getElementById('f1-btn').textContent='Registrar ingreso';
 }
 
-async function renderF1Lista(){
-  const el=document.getElementById('f1-lista');
+async function renderLista(){
+  const el = document.getElementById('f1-lista');
   el.innerHTML='<p style="font-size:12px;color:#999">Cargando...</p>';
-  const rows=await leerRecepcionesRecientes();
+  const rows = await getRecepciones(true);
   if(!rows.length){el.innerHTML='<p style="font-size:12px;color:#999">Sin registros aún</p>';return;}
-  el.innerHTML=rows.map(r=>`<div class="recep-row">
-    <div><strong>${r.fgo}</strong> <span style="font-size:12px;color:#888;margin-left:6px">${r.fecha}</span>
-    ${r.comentarios?`<br><span style="font-size:11px;color:#999">${r.comentarios}</span>`:''}</div>
-    <div style="text-align:right;flex-shrink:0;margin-left:12px">
-      <strong>${r.unid} un</strong>
-      ${r.tambores?`<br><span style="font-size:11px;color:#999">${r.tambores} tambores</span>`:''}
-    </div>
-  </div>`).join('');
+  const recientes = [...rows].reverse().slice(0,8);
+  el.innerHTML = recientes.map(r=>`
+    <div class="recep-row">
+      <div>
+        <strong>${r[1]}</strong>
+        <span style="font-size:12px;color:#888;margin-left:6px">${String(r[2]).slice(0,10)}</span>
+        ${r[5]?`<br><span style="font-size:11px;color:#999">${r[5]}</span>`:''}
+      </div>
+      <div style="text-align:right;flex-shrink:0;margin-left:12px">
+        <strong>${r[3]} un</strong>
+        ${r[4]?`<br><span style="font-size:11px;color:#999">${r[4]} tamb.</span>`:''}
+      </div>
+    </div>`).join('');
 }
 
 // ── FORMULARIO 2 ─────────────────────────────────────────────────────────────
-document.getElementById('f2-fechaclasif').value=today();
-let f2Rec=null, f2Estado=null;
+document.getElementById('f2-fc').value = today();
+let f2Rec = null, f2Estado = null;
 
 async function f2Buscar(){
-  const fgo=document.getElementById('f2-fgo').value;
-  const fecha=document.getElementById('f2-fecha').value;
-  const infoDiv=document.getElementById('f2-recepcion-info');
-  const lotDiv=document.getElementById('f2-lote-abierto');
-  infoDiv.innerHTML=''; lotDiv.innerHTML='';
+  const fgo   = document.getElementById('f2-fgo').value;
+  const fecha = document.getElementById('f2-fecha').value;
+  const info  = document.getElementById('f2-info');
+  const parc  = document.getElementById('f2-parcial');
+  info.innerHTML=''; parc.innerHTML='';
   ['f2-campos','f2-cats','f2-obs-card','f2-btn'].forEach(id=>document.getElementById(id).style.display='none');
   f2Rec=null; f2Estado=null;
   if(!fgo||!fecha) return;
-  setStatus('Buscando lote...', true);
-  f2Rec = await leerRecepcion(fgo, fecha);
-  f2Estado = await leerLotesAbiertos(fgo, fecha);
-  setStatus('Conectado', false);
+
+  info.innerHTML='<p style="font-size:13px;color:#666;padding:8px 0"><span class="spinner" style="border-color:rgba(0,0,0,.2);border-top-color:#666"></span>Buscando lote...</p>';
+
+  f2Rec    = await buscarRecepcion(fgo, fecha);
+  f2Estado = await buscarLotesAbiertos(fgo, fecha);
+
   if(!f2Rec){
-    infoDiv.innerHTML=`<div class="card" style="border-color:#fca5a5">
+    info.innerHTML=`<div class="card" style="border-color:#fca5a5">
       <p style="font-size:13px;color:#991b1b;font-weight:600">Recepción no encontrada</p>
-      <p style="font-size:12px;color:#666;margin-top:4px">No hay ingreso de <strong>${fgo}</strong> con fecha <strong>${fecha}</strong>.</p>
+      <p style="font-size:12px;color:#666;margin-top:4px">No hay ingreso de <strong>${fgo}</strong> con fecha <strong>${fecha}</strong>.<br>Registralo primero en Recepción MP.</p>
       <button onclick="showTab(1)" style="margin-top:10px;font-size:12px;color:#0078d4;background:none;border:none;cursor:pointer;padding:0">← Ir a Recepción MP</button>
     </div>`;
     return;
   }
-  let foundHtml=`<div class="found-card">
+
+  let fhtml=`<div class="found-card">
     <p style="font-size:12px;font-weight:600;color:#166534;margin-bottom:6px">Recepción encontrada</p>
     <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px">
-      <span style="color:#666">Total del lote</span><strong>${f2Rec.unid} unidades</strong>
+      <span style="color:#555">Total del lote</span><strong>${f2Rec.unid} unidades</strong>
     </div>`;
-  if(f2Rec.tambores) foundHtml+=`<div style="font-size:12px;color:#666">Tambores: ${f2Rec.tambores}</div>`;
-  if(f2Rec.comentarios) foundHtml+=`<div style="font-size:12px;color:#666;margin-top:2px">Obs recepción: ${f2Rec.comentarios}</div>`;
-  foundHtml+='</div>';
-  infoDiv.innerHTML=foundHtml;
+  if(f2Rec.tambores) fhtml+=`<div style="font-size:12px;color:#666">Tambores: ${f2Rec.tambores}</div>`;
+  if(f2Rec.comentarios) fhtml+=`<div style="font-size:12px;color:#666;margin-top:2px">Obs recepción: ${f2Rec.comentarios}</div>`;
+  fhtml+='</div>';
+  info.innerHTML=fhtml;
+
   if(f2Estado){
     const pct=Math.min(100,Math.round(f2Estado.acum/f2Estado.total*100));
     const over=f2Estado.acum>f2Estado.total;
-    lotDiv.innerHTML=`<div class="lote-ab-card">
+    parc.innerHTML=`<div class="lote-ab">
       <p style="font-size:13px;font-weight:600;color:#92400e;margin-bottom:6px">Lote parcial — carga N° ${f2Estado.numParcial}</p>
       <div class="progress-bar"><div class="progress-fill ${over?'over':''}" style="width:${pct}%"></div></div>
-      <div class="stat-row"><span>Clasificadas: <span class="sv">${f2Estado.acum} un</span></span><span>Total: <span class="sv">${f2Estado.total} un</span></span></div>
-      <div style="margin-top:5px;font-size:12px;color:#666">${over?`<span style="color:#dc2626;font-weight:600">Superado en ${f2Estado.acum-f2Estado.total} un</span>`:`Faltan: <span class="sv">${f2Estado.total-f2Estado.acum} un</span>`}</div>
-      <div style="margin-top:6px;font-size:11px;color:#888">${f2Estado.cargas.map((c,i)=>`Carga ${i+1}: ${c.unid} un · ${c.fecha}`).join(' · ')}</div>
+      <div class="sr">
+        <span>Clasificadas: <span class="sv">${f2Estado.acum} un</span></span>
+        <span>Total: <span class="sv">${f2Estado.total} un</span></span>
+      </div>
+      <div style="margin-top:5px;font-size:12px;color:#666">
+        ${over?`<span style="color:#dc2626;font-weight:600">Superado en ${f2Estado.acum-f2Estado.total} un</span>`:`Faltan: <span class="sv">${f2Estado.total-f2Estado.acum} un</span>`}
+      </div>
+      <div style="margin-top:6px;font-size:11px;color:#888">
+        ${f2Estado.cargas.map((c,i)=>`Carga ${i+1}: ${c.unid} un · ${c.fecha}`).join(' &nbsp;·&nbsp; ')}
+      </div>
     </div>`;
   }
+
   ['f2-campos','f2-cats','f2-obs-card','f2-btn'].forEach(id=>document.getElementById(id).style.display='block');
   f2Recalc();
 }
@@ -595,87 +441,74 @@ function f2Recalc(){
   if(!f2Rec) return;
   let totU=0,totK=0;
   CATS.forEach(c=>{totU+=gv('u-'+c);totK+=gv('k-'+c);});
-  document.getElementById('tot-unid').textContent=totU;
-  document.getElementById('tot-kgs').textContent=totK.toFixed(1);
-  const totalLote=f2Rec.unid;
-  const acumPrev=f2Estado?f2Estado.acum:0;
-  const unidEsta=gv('f2-unid');
-  const acumNuevo=acumPrev+unidEsta;
-  const rinde=totalLote>0&&totK>0?totK/totalLote:null;
-  document.getElementById('tot-rinde').textContent=rinde?(rinde*100).toFixed(1)+'%':'—';
+  document.getElementById('tot-u').textContent=totU;
+  document.getElementById('tot-k').textContent=totK.toFixed(1);
+  const tl=f2Rec.unid, ap=f2Estado?f2Estado.acum:0, ue=gv('f2-unid'), an=ap+ue;
+  const rinde=tl>0&&totK>0?totK/tl:null;
+  document.getElementById('tot-r').textContent=rinde?(rinde*100).toFixed(1)+'%':'—';
   const msg=document.getElementById('f2-msg');
   msg.className='msg'; msg.textContent='';
-  const fc=document.getElementById('f2-fechaclasif').value;
-  const fi=document.getElementById('f2-fecha').value;
+  const fc=document.getElementById('f2-fc').value, fi=document.getElementById('f2-fecha').value;
   if(fc&&fi&&fc<fi){msg.className='msg err';msg.textContent='La fecha de clasificación no puede ser anterior al ingreso.';f2ValidarBtn();return;}
-  if(unidEsta>0&&totalLote>0){
-    if(acumNuevo===totalLote){msg.className='msg ok';msg.textContent='Lote completo — '+totalLote+' unidades clasificadas.';}
-    else if(acumNuevo>totalLote){msg.className='msg err';msg.textContent='Superás el total en '+(acumNuevo-totalLote)+' un. Verificar.';}
-    else{msg.className='msg info';msg.textContent='Carga N°'+(f2Estado?f2Estado.numParcial:1)+' — quedan '+(totalLote-acumNuevo)+' un por clasificar.';}
+  if(ue>0&&tl>0){
+    if(an===tl){msg.className='msg ok';msg.textContent='Lote completo — '+tl+' unidades clasificadas.';}
+    else if(an>tl){msg.className='msg err';msg.textContent='Superás el total en '+(an-tl)+' un. Verificar.';}
+    else{msg.className='msg info';msg.textContent='Carga N°'+(f2Estado?f2Estado.numParcial:1)+' — quedan '+(tl-an)+' unidades por clasificar.';}
   } else if(totU>0){msg.className='msg ok';msg.textContent='Listo para guardar.';}
   f2ValidarBtn();
 }
 
 function f2ValidarBtn(){
   if(!f2Rec){document.getElementById('f2-btn').disabled=true;return;}
-  const fc=document.getElementById('f2-fechaclasif').value;
-  const fi=document.getElementById('f2-fecha').value;
-  const unidEsta=gv('f2-unid');
-  const totU=CATS.reduce((s,c)=>s+gv('u-'+c),0);
-  const ok=fc&&fi&&fc>=fi&&unidEsta>0&&totU>0;
+  const fc=document.getElementById('f2-fc').value, fi=document.getElementById('f2-fecha').value;
+  const ue=gv('f2-unid'), totU=CATS.reduce((s,c)=>s+gv('u-'+c),0);
+  const ok=fc&&fi&&fc>=fi&&ue>0&&totU>0;
   document.getElementById('f2-btn').disabled=!ok;
   if(ok){
-    const acum=(f2Estado?f2Estado.acum:0)+unidEsta;
-    document.getElementById('f2-btn').textContent=acum>=f2Rec.unid?'Guardar — cerrar lote':'Guardar parcial N°'+(f2Estado?f2Estado.numParcial:1);
+    const an=(f2Estado?f2Estado.acum:0)+ue;
+    document.getElementById('f2-btn').textContent=an>=f2Rec.unid?'Guardar — cerrar lote':'Guardar parcial N°'+(f2Estado?f2Estado.numParcial:1);
   } else { document.getElementById('f2-btn').textContent='Guardar'; }
 }
 
 async function f2Guardar(){
-  document.getElementById('f2-btn').disabled=true;
-  document.getElementById('f2-btn').textContent='Guardando...';
-  setStatus('Guardando en OneDrive...', true);
+  const txtOrig = document.getElementById('f2-btn').textContent;
+  setBtnLoading('f2-btn', true, 'Guardando...');
   const fgo=document.getElementById('f2-fgo').value;
   const fi=document.getElementById('f2-fecha').value;
-  const fc=document.getElementById('f2-fechaclasif').value;
-  const unidEsta=gv('f2-unid');
-  const obs=document.getElementById('f2-obs').value;
-  const totalLote=f2Rec.unid;
-  const acumPrev=f2Estado?f2Estado.acum:0;
-  const acumNuevo=acumPrev+unidEsta;
-  const esFinal=acumNuevo>=totalLote;
-  const diff=acumNuevo-totalLote;
-  const numParcial=f2Estado?f2Estado.numParcial:1;
-  let totU=0,totK=0,rows_='';
+  const fc=document.getElementById('f2-fc').value;
+  const ue=gv('f2-unid'), obs=document.getElementById('f2-obs').value;
+  const tl=f2Rec.unid, ap=f2Estado?f2Estado.acum:0, an=ap+ue;
+  const esFinal=an>=tl, diff=an-tl, np=f2Estado?f2Estado.numParcial:1;
+  let totU=0,totK=0;
   CATS.forEach(c=>{totU+=gv('u-'+c);totK+=gv('k-'+c);});
-  const rinde=totalLote>0?(totK/totalLote).toFixed(4):0;
-  const catValsU=CATS.map(c=>gv('u-'+c));
-  const catValsK=CATS.map(c=>gv('k-'+c));
-  const row=[f2Rec.id,fgo,fi,fc,numParcial,esFinal?1:0,unidEsta,acumNuevo,totalLote,
-    ...catValsU,...catValsK,totK,rinde,obs,new Date().toISOString()];
-  await appendRow(SHEET_LOTES, row);
-  setStatus('Conectado', false);
+  const rinde=tl>0?(totK/tl).toFixed(4):0;
+  const row=[f2Rec.id,fgo,fi,fc,np,esFinal?1:0,ue,an,tl,
+    ...CATS.map(c=>gv('u-'+c)), ...CATS.map(c=>gv('k-'+c)),
+    totK,rinde,obs,new Date().toISOString()];
+  const res = await apiPost('LOTES', row);
+  if(!res.ok){ alert('Error al guardar. Intentá de nuevo.'); setBtnLoading('f2-btn',false,txtOrig); return; }
+  invalidateCache();
   const dias=Math.round((new Date(fc)-new Date(fi))/(1000*86400));
-  const chk=document.getElementById('f2-chk'),chkp=document.getElementById('f2-chk-path');
+  const chk=document.getElementById('f2-chk'), chkp=document.getElementById('f2-chk-p');
   if(esFinal&&diff!==0){chk.style.background='#fffbeb';chkp.setAttribute('stroke','#d97706');}
   else if(esFinal){chk.style.background='#f0fdf4';chkp.setAttribute('stroke','#16a34a');}
   else{chk.style.background='#eff6ff';chkp.setAttribute('stroke','#1d4ed8');}
-  document.getElementById('f2-s-titulo').textContent=esFinal?(diff===0?'Lote completo':'Lote cerrado con diferencia'):'Parcial N°'+numParcial+' guardado';
+  document.getElementById('f2-s-tit').textContent=esFinal?(diff===0?'Lote completo':'Lote cerrado con diferencia'):'Parcial N°'+np+' guardado';
   document.getElementById('f2-s-sub').textContent=fgo+' · Ingreso: '+fi+' → Clasif.: '+fc+' ('+dias+' días)';
-  const pd=document.getElementById('f2-s-prog');pd.style.display='block';
-  const pct=Math.min(100,Math.round(acumNuevo/totalLote*100));
-  document.getElementById('f2-s-pfill').style.width=pct+'%';
-  document.getElementById('f2-s-pfill').className='progress-fill'+(acumNuevo>totalLote?' over':'');
-  document.getElementById('f2-s-acum').innerHTML='Clasificadas: <strong>'+acumNuevo+' un</strong>';
-  document.getElementById('f2-s-tot').innerHTML='Total: <strong>'+totalLote+' un</strong>';
-  const dv=document.getElementById('f2-s-diff');
+  const pd=document.getElementById('f2-s-prog'); pd.style.display='block';
+  const pct=Math.min(100,Math.round(an/tl*100));
+  document.getElementById('f2-s-pf').style.width=pct+'%';
+  document.getElementById('f2-s-pf').className='progress-fill'+(an>tl?' over':'');
+  document.getElementById('f2-s-ac').innerHTML='Clasificadas: <strong>'+an+' un</strong>';
+  document.getElementById('f2-s-to').innerHTML='Total: <strong>'+tl+' un</strong>';
+  const dv=document.getElementById('f2-s-df');
   if(esFinal&&diff!==0){dv.style.display='block';dv.style.color='#92400e';dv.textContent=(diff>0?'Excedente de '+diff+' un.':'Faltaron '+Math.abs(diff)+' un.')+' Verificar con encargado.';}
-  else if(!esFinal){dv.style.display='block';dv.style.color='#666';dv.textContent='Quedan '+(totalLote-acumNuevo)+' unidades por clasificar.';}
+  else if(!esFinal){dv.style.display='block';dv.style.color='#666';dv.textContent='Quedan '+(tl-an)+' unidades por clasificar.';}
   else{dv.style.display='none';}
-  let resHtml='<table style="width:100%;border-collapse:collapse">';
-  resHtml+='<tr><th style="text-align:left;font-size:11px;color:#888;padding:0 8px 5px 0">Cat.</th><th style="text-align:right;font-size:11px;color:#888;padding:0 8px 5px">Unid.</th><th style="text-align:right;font-size:11px;color:#888">Kgs</th></tr>';
+  let resHtml='<table style="width:100%;border-collapse:collapse"><tr><th style="text-align:left;font-size:11px;color:#888;padding:0 8px 5px 0">Cat.</th><th style="text-align:right;font-size:11px;color:#888;padding:0 8px 5px">Unid.</th><th style="text-align:right;font-size:11px;color:#888">Kgs</th></tr>';
   CATS.forEach(c=>{const u=gv('u-'+c),k=gv('k-'+c);if(u>0||k>0)resHtml+=`<tr><td><span class="badge b${c}">${c}</span></td><td style="text-align:right;padding:3px 8px">${u}</td><td style="text-align:right;padding:3px">${k.toFixed(1)}</td></tr>`;});
   resHtml+=`<tr style="border-top:1px solid #eee"><td style="padding:5px 0;font-weight:600">Total</td><td style="text-align:right;padding:5px 8px;font-weight:600">${totU}</td><td style="text-align:right;font-weight:600">${totK.toFixed(1)}</td></tr>`;
-  resHtml+=`<tr><td style="font-size:11px;color:#888">Rendimiento</td><td colspan="2" style="text-align:right;font-size:11px;color:#888">${totalLote>0?(totK/totalLote*100).toFixed(1)+'%':'—'}</td></tr>`;
+  resHtml+=`<tr><td style="font-size:11px;color:#888">Rendimiento</td><td colspan="2" style="text-align:right;font-size:11px;color:#888">${tl>0?(totK/tl*100).toFixed(1)+'%':'—'}</td></tr>`;
   if(obs) resHtml+=`<tr><td style="font-size:11px;color:#888">Obs.</td><td colspan="2" style="text-align:right;font-size:11px;color:#888">${obs}</td></tr>`;
   resHtml+='</table>';
   document.getElementById('f2-s-res').innerHTML=resHtml;
@@ -691,33 +524,15 @@ function f2Nuevo(){
   document.getElementById('f2-unid').value='';
   document.getElementById('f2-obs').value='';
   CATS.forEach(c=>{document.getElementById('u-'+c).value='';document.getElementById('k-'+c).value='';});
-  ['f2-recepcion-info','f2-lote-abierto'].forEach(id=>document.getElementById(id).innerHTML='');
+  ['f2-info','f2-parcial'].forEach(id=>document.getElementById(id).innerHTML='');
   ['f2-campos','f2-cats','f2-obs-card','f2-btn'].forEach(id=>document.getElementById(id).style.display='none');
   f2Rec=null; f2Estado=null;
-  document.getElementById('f2-fechaclasif').value=today();
+  document.getElementById('f2-fc').value=today();
   document.getElementById('f2-btn').textContent='Guardar';
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
-async function init(){
-  // ¿Venimos del redirect OAuth?
-  const loggedIn = await procesarCallback();
-  if(!tokenValido()&&!loggedIn){
-    document.getElementById('loginScreen').classList.remove('hidden');
-    document.getElementById('mainApp').classList.add('hidden');
-    return;
-  }
-  document.getElementById('loginScreen').classList.add('hidden');
-  document.getElementById('mainApp').classList.remove('hidden');
-  try{
-    const user = await getUser();
-    document.getElementById('userEmail').textContent = user.mail||user.userPrincipalName||'';
-  } catch(e){}
-  await getOrCreateFile();
-  renderF1Lista();
-}
-
-init();
+initHeaders().then(()=>renderLista()).catch(e=>console.error(e));
 </script>
 </body>
 </html>
