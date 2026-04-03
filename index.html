@@ -217,7 +217,7 @@ const HDR_LOT  = ['ID_Recepcion','Frigorifico','Fecha_Ingreso','Fecha_Clasif','N
   'AAA_kgs','AA_kgs','A_kgs','B_kgs','C_kgs','D_kgs',
   'Total_Kgs','Rendimiento','Observaciones','Timestamp'];
 
-function gv(id){return parseFloat(document.getElementById(id).value)||0;}
+function gv(id){const v=document.getElementById(id).value.replace(',','.');return parseFloat(v)||0;}
 function today(){return new Date().toISOString().slice(0,10);}
 function rKey(f,d){return f+'||'+d;}
 
