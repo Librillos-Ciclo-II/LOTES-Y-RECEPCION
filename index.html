@@ -92,7 +92,7 @@ input:focus,select:focus{outline:none;border-color:#0078d4}
         <label class="label">Cantidad de tambores (opcional)</label>
         <input type="number" id="f1-tambores" min="0" placeholder="ej. 12">
       </div>
-      <div style="margin-bottom:12px">
+      <div>
         <label class="label">Comentarios (opcional)</label>
         <input type="text" id="f1-comentarios" placeholder="Ej: vino el camión sin frío...">
       </div>
@@ -179,11 +179,8 @@ input:focus,select:focus{outline:none;border-color:#0078d4}
     </div>
 
     <div class="card" id="f2-obs-card" style="display:none">
-      <div style="margin-bottom:12px">
-        <label class="label">Observaciones (opcional)</label>
-        <input type="text" id="f2-obs" placeholder="Ej: daño en curado...">
-      </div>
-
+      <label class="label">Observaciones (opcional)</label>
+      <input type="text" id="f2-obs" placeholder="Ej: daño en curado...">
     </div>
 
     <button class="btn-main" id="f2-btn" onclick="f2Guardar()" disabled style="display:none">Guardar</button>
@@ -293,7 +290,7 @@ async function buscarLotesAbiertos(fgo, fecha){
   // Cargas de este lote que NO son finales
   const cargas = rows.filter(r=>r[1]===fgo && String(r[2]).slice(0,10)===fecha && r[5]!=1 && r[5]!=='TRUE' && r[5]!==true);
   if(!cargas.length) return null;
-      const acum  = cargas.reduce((s,r)=>s+Number(r[6]),0);
+  const acum  = cargas.reduce((s,r)=>s+Number(r[6]),0);
   const total = Number(cargas[cargas.length-1][8]);
   return {acum, total, numParcial:cargas.length+1,
     cargas:cargas.map(r=>({unid:r[6], fecha:String(r[3]).slice(0,10)}))};
@@ -314,18 +311,21 @@ async function renderLotesRecientes(){
   const el=document.getElementById('f2-resumen-items');
   if(!card) return;
   card.style.display='block';
-  el.innerHTML='<p style="font-size:12px;color:#999">Cargando...</p>';
+  invalidateCache();
   const rows=await getLotes(true);
-  if(!rows||!rows.length){el.innerHTML='<p style="font-size:12px;color:#999">Sin lotes registrados aún</p>';return;}
-  const recientes=[...rows].reverse().slice(0,10);
-  el.innerHTML=recientes.map(r=>{
-    const esFinal=r[5]==1||r[5]===true||r[5]==='TRUE';
+  if(!rows||!rows.length){el.innerHTML='<p style="font-size:12px;color:#999">Sin lotes aún</p>';return;}
+  // Un registro por lote (el más reciente)
+  const mapa={};
+  rows.forEach(r=>{const k=r[1]+'||'+String(r[2]).slice(0,10); mapa[k]=r;});
+  const lista=Object.values(mapa).reverse().slice(0,10);
+  el.innerHTML=lista.map(r=>{
+    const cerrado=String(r[5])==='1'||r[5]===true||r[5]==='TRUE';
     const acum=Number(r[7])||0, total=Number(r[8])||1;
     const pct=Math.min(100,Math.round(acum/total*100));
-    const color=esFinal?'#16a34a':(acum>=total?'#dc2626':'#d97706');
-    const badge=esFinal
-      ? '<span style="font-size:10px;background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;border-radius:4px;padding:1px 6px;margin-left:6px">CERRADO</span>'
-      : '<span style="font-size:10px;background:#fffbeb;color:#92400e;border:1px solid #fde68a;border-radius:4px;padding:1px 6px;margin-left:6px">PARCIAL</span>';
+    const color=cerrado?'#16a34a':'#d97706';
+    const badge=cerrado
+      ?'<span style="font-size:10px;background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;border-radius:4px;padding:1px 6px;margin-left:6px">CERRADO</span>'
+      :'<span style="font-size:10px;background:#fffbeb;color:#92400e;border:1px solid #fde68a;border-radius:4px;padding:1px 6px;margin-left:6px">PARCIAL</span>';
     return '<div style="padding:9px 0;border-bottom:1px solid #f0f0f0">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'+
         '<div><strong style="font-size:13px">'+r[1]+'</strong>'+
@@ -335,7 +335,7 @@ async function renderLotesRecientes(){
       '<div style="height:5px;background:#eee;border-radius:3px;overflow:hidden">'+
         '<div style="height:100%;width:'+pct+'%;background:'+color+';border-radius:3px"></div>'+
       '</div>'+
-      '<div style="font-size:11px;color:#888;margin-top:3px">Clasif: '+fmt(r[3])+' · Carga N°'+r[4]+(r[23]?' · '+r[23]:'')+'</div>'+
+      '<div style="font-size:11px;color:#888;margin-top:3px">Clasif: '+fmt(r[3])+'</div>'+
     '</div>';
   }).join('');
 }
@@ -444,57 +444,75 @@ async function f2Buscar(){
 
   info.innerHTML='<p style="font-size:13px;color:#666;padding:8px 0"><span class="spinner" style="border-color:rgba(0,0,0,.2);border-top-color:#666"></span>Buscando lote...</p>';
 
-  f2Rec    = await buscarRecepcion(fgo, fecha);
-  f2Estado = await buscarLotesAbiertos(fgo, fecha);
+  // Siempre forzar refresh para evitar datos viejos
+  invalidateCache();
+  const [recRows, lotRows] = await Promise.all([getRecepciones(true), getLotes(true)]);
 
-  // Verificar si el lote ya fue cerrado (Es_Final=1 existe)
-  const lotRows = await getLotes();
-  const yaCerrado = lotRows.some(r=>r[1]===fgo && String(r[2]).slice(0,10)===fecha && (r[5]==1||r[5]===true||r[5]==='TRUE'));
-  if(yaCerrado && f2Rec){
-    infoDiv.innerHTML='<div class="card" style="border-color:#16a34a;background:#f0fdf4">'+
-      '<p style="font-size:13px;color:#166534;font-weight:600">Lote cerrado</p>'+
-      '<p style="font-size:12px;color:#166534;margin-top:4px">Este lote ya fue completado y cerrado. No se pueden agregar más cargas.</p>'+
-    '</div>';
-    setStatus('Conectado',false);
-    return;
-  }
+  // Buscar recepción
+  const recFound = recRows.find(r=>r[1]===fgo && String(r[2]).slice(0,10)===fecha);
+  f2Rec = recFound ? {id:recFound[0], fgo:recFound[1], fecha:String(recFound[2]).slice(0,10),
+    unid:Number(recFound[3]), tambores:recFound[4], comentarios:recFound[5]} : null;
 
   if(!f2Rec){
-    info.innerHTML=`<div class="card" style="border-color:#fca5a5">
-      <p style="font-size:13px;color:#991b1b;font-weight:600">Recepción no encontrada</p>
-      <p style="font-size:12px;color:#666;margin-top:4px">No hay ingreso de <strong>${fgo}</strong> con fecha <strong>${fecha}</strong>.<br>Registralo primero en Recepción MP.</p>
-      <button onclick="showTab(1)" style="margin-top:10px;font-size:12px;color:#0078d4;background:none;border:none;cursor:pointer;padding:0">← Ir a Recepción MP</button>
-    </div>`;
+    info.innerHTML='<div class="card" style="border-color:#fca5a5">'+
+      '<p style="font-size:13px;color:#991b1b;font-weight:600">Recepción no encontrada</p>'+
+      '<p style="font-size:12px;color:#666;margin-top:4px">No hay ingreso de <strong>'+fgo+'</strong> con fecha <strong>'+fmt(fecha)+'</strong>.<br>Registralo primero en Recepción MP.</p>'+
+      '<button onclick="showTab(1)" style="margin-top:10px;font-size:12px;color:#0078d4;background:none;border:none;cursor:pointer;padding:0">← Ir a Recepción MP</button>'+
+    '</div>';
     return;
   }
 
-  let fhtml=`<div class="found-card">
-    <p style="font-size:12px;font-weight:600;color:#166534;margin-bottom:6px">Recepción encontrada</p>
-    <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px">
-      <span style="color:#555">Total del lote</span><strong>${f2Rec.unid} unidades</strong>
-    </div>`;
-  if(f2Rec.tambores) fhtml+=`<div style="font-size:12px;color:#666">Tambores: ${f2Rec.tambores}</div>`;
-  if(f2Rec.comentarios) fhtml+=`<div style="font-size:12px;color:#666;margin-top:2px">Obs recepción: ${f2Rec.comentarios}</div>`;
+  // Verificar si ya está cerrado — buscar cualquier fila con Es_Final=1
+  const filasLote = lotRows.filter(r=>r[1]===fgo && String(r[2]).slice(0,10)===fecha);
+  const yaCerrado = filasLote.some(r=>String(r[5])==='1'||r[5]===true||r[5]==='TRUE');
+
+  if(yaCerrado){
+    const acumFinal = Math.max(...filasLote.map(r=>Number(r[7])||0));
+    info.innerHTML='<div class="found-card">'+
+      '<p style="font-size:12px;font-weight:600;color:#166534;margin-bottom:6px">Lote cerrado</p>'+
+      '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px">'+
+        '<span style="color:#555">Total del lote</span><strong>'+f2Rec.unid+' unidades</strong>'+
+      '</div>'+
+      '<div style="background:#dcfce7;border-radius:6px;padding:8px 10px;font-size:12px;color:#166534">'+
+        'Lote completo y cerrado ('+acumFinal+'/'+f2Rec.unid+' un). No se pueden agregar más cargas.'+
+      '</div>'+
+    '</div>';
+    return;
+  }
+
+  // Armar estado parcial desde filas no finales
+  const cargasParciales = filasLote.filter(r=>String(r[5])!=='1'&&r[5]!==true&&r[5]!=='TRUE');
+  f2Estado = cargasParciales.length ? {
+    acum: cargasParciales.reduce((s,r)=>s+Number(r[6]),0),
+    total: Number(f2Rec.unid),
+    numParcial: cargasParciales.length+1,
+    cargas: cargasParciales.map(r=>({unid:Number(r[6]), fecha:String(r[3]).slice(0,10)}))
+  } : null;
+
+  let fhtml='<div class="found-card">'+
+    '<p style="font-size:12px;font-weight:600;color:#166534;margin-bottom:6px">Recepción encontrada</p>'+
+    '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px">'+
+      '<span style="color:#555">Total del lote</span><strong>'+f2Rec.unid+' unidades</strong>'+
+    '</div>';
+  if(f2Rec.tambores) fhtml+='<div style="font-size:12px;color:#666">Tambores: '+f2Rec.tambores+'</div>';
+  if(f2Rec.comentarios) fhtml+='<div style="font-size:12px;color:#666;margin-top:2px">Obs: '+f2Rec.comentarios+'</div>';
   fhtml+='</div>';
   info.innerHTML=fhtml;
 
   if(f2Estado){
-    const pct=Math.min(100,Math.round(f2Estado.acum/f2Estado.total*100));
-    const over=f2Estado.acum>f2Estado.total;
-    parc.innerHTML=`<div class="lote-ab">
-      <p style="font-size:13px;font-weight:600;color:#92400e;margin-bottom:6px">Lote parcial — carga N° ${f2Estado.numParcial}</p>
-      <div class="progress-bar"><div class="progress-fill ${over?'over':''}" style="width:${pct}%"></div></div>
-      <div class="sr">
-        <span>Clasificadas: <span class="sv">${f2Estado.acum} un</span></span>
-        <span>Total: <span class="sv">${f2Estado.total} un</span></span>
-      </div>
-      <div style="margin-top:5px;font-size:12px;color:#666">
-        ${over?`<span style="color:#dc2626;font-weight:600">Superado en ${f2Estado.acum-f2Estado.total} un</span>`:`Faltan: <span class="sv">${f2Estado.total-f2Estado.acum} un</span>`}
-      </div>
-      <div style="margin-top:6px;font-size:11px;color:#888">
-        ${f2Estado.cargas.map((c,i)=>`Carga ${i+1}: ${c.unid} un · ${fmt(c.fecha)}`).join(' &nbsp;·&nbsp; ')}
-      </div>
-    </div>`;
+    const acum=f2Estado.acum, total=f2Estado.total;
+    const pct=Math.min(100,Math.round(acum/total*100));
+    parc.innerHTML='<div class="lote-ab">'+
+      '<p style="font-size:13px;font-weight:600;color:#92400e;margin-bottom:6px">Lote parcial — carga N° '+f2Estado.numParcial+'</p>'+
+      '<div class="progress-bar"><div class="progress-fill" style="width:'+pct+'%"></div></div>'+
+      '<div class="sr">'+
+        '<span>Clasificadas: <span class="sv">'+acum+' un</span></span>'+
+        '<span>Faltan: <span class="sv">'+(total-acum)+' un</span></span>'+
+      '</div>'+
+      '<div style="margin-top:6px;font-size:11px;color:#888">'+
+        f2Estado.cargas.map((cg,i)=>'Carga '+(i+1)+': '+cg.unid+' un · '+fmt(cg.fecha)).join(' &nbsp;·&nbsp; ')+
+      '</div>'+
+    '</div>';
   }
 
   ['f2-campos','f2-cats','f2-obs-card','f2-btn'].forEach(id=>document.getElementById(id).style.display='block');
@@ -518,9 +536,11 @@ function f2Recalc(){
     else if(an>tl){msg.className='msg err';msg.textContent='Superás el total en '+(an-tl)+' un. Verificar.';}
     else{msg.className='msg info';msg.textContent='Carga N°'+(f2Estado?f2Estado.numParcial:1)+' — quedan '+(tl-an)+' unidades por clasificar.';}
   } else if(totU>0){msg.className='msg ok';msg.textContent='Listo para guardar.';}
-  // Validación cruzada categorías
-  const err=catError();
-  if(err){msg.className='msg err';msg.textContent=err;}
+  // Siempre validar categorías — se re-evalúa en cada cambio
+  const catErr=catError();
+  if(catErr){msg.className='msg err';msg.textContent=catErr;}
+  // Bloquear si acumulado ya supera el total
+  if(an>tl&&tl>0){msg.className='msg err';msg.textContent='Las unidades clasificadas ('+an+') superan el total del lote ('+tl+'). Reducí las unidades de esta carga.';}
   f2ValidarBtn();
 }
 
@@ -529,47 +549,52 @@ function catError(){
   for(const cat of CATS){
     const u=gv('u-'+cat), k=gv('k-'+cat);
     if(u<0||k<0) return 'No se permiten valores negativos.';
-    if(u>0&&k===0) return 'Categoría '+cat+': si hay unidades debe haber kgs salados.';
+    if(u>0&&k===0) return 'Categoría '+cat+': si hay unidades debe haber kgs.';
     if(k>0&&u===0) return 'Categoría '+cat+': si hay kgs debe haber unidades.';
     sumU+=u;
   }
   const ue=gv('f2-unid');
-  if(ue>0&&sumU>0&&sumU!==ue) return 'La suma de unidades por categoría ('+sumU+') debe ser igual a las unidades clasificadas ('+ue+').';
+  if(ue>0&&sumU>0&&sumU!==ue)
+    return 'Suma de categorías ('+sumU+') ≠ unidades clasificadas ('+ue+').';
   return null;
 }
 
 function f2ValidarBtn(){
   if(!f2Rec){document.getElementById('f2-btn').disabled=true;return;}
-  const fc=document.getElementById('f2-fc').value, fi=document.getElementById('f2-fecha').value;
-  const ue=gv('f2-unid'), totU=CATS.reduce((s,c)=>s+gv('u-'+c),0);
-  const catErr=catError();
-  const ap_check=Number(f2Estado?f2Estado.acum:0);
-  const an_check=ap_check+ue;
-  const tl_check=Number(f2Rec?f2Rec.unid:0);
-  const overLimit=tl_check>0&&an_check>tl_check;
-  const ok=fc&&fi&&fc>=fi&&ue>0&&totU>0&&!catErr&&!overLimit;
+  const fc=document.getElementById('f2-fc').value;
+  const fi=document.getElementById('f2-fecha').value;
+  const ue=gv('f2-unid');
+  const ap=Number(f2Estado?f2Estado.acum:0);
+  const tl=Number(f2Rec.unid);
+  const an=ap+ue;
+  const totU=CATS.reduce((s,cat)=>s+gv('u-'+cat),0);
+  const err=catError();
+  // an debe ser EXACTAMENTE igual a tl para cerrar, o menor para parcial
+  // Nunca puede superar tl
+  const ok=fc&&fi&&fc>=fi&&ue>0&&totU>0&&!err&&an<=tl;
   document.getElementById('f2-btn').disabled=!ok;
   if(ok){
-    const an=(f2Estado?f2Estado.acum:0)+ue;
-    document.getElementById('f2-btn').textContent=an>=f2Rec.unid?'Guardar — cerrar lote':'Guardar parcial N°'+(f2Estado?f2Estado.numParcial:1);
-  } else { document.getElementById('f2-btn').textContent='Guardar'; }
+    document.getElementById('f2-btn').textContent=
+      an===tl?'Guardar — cerrar lote':'Guardar parcial N°'+(f2Estado?f2Estado.numParcial:1);
+  } else {
+    document.getElementById('f2-btn').textContent='Guardar';
+  }
 }
 
 async function f2Guardar(){
   const txtOrig = document.getElementById('f2-btn').textContent;
   setBtnLoading('f2-btn', true, 'Guardando...');
-  invalidateCache(); // flush before re-read to get fresh state
   const fgo=document.getElementById('f2-fgo').value;
   const fi=document.getElementById('f2-fecha').value;
   const fc=document.getElementById('f2-fc').value;
   const ue=gv('f2-unid'), obs=document.getElementById('f2-obs').value;
-  const tl=f2Rec.unid, ap=f2Estado?f2Estado.acum:0, an=ap+ue;
-  const esFinal=an>=tl, diff=an-tl, np=f2Estado?f2Estado.numParcial:1;
+  const tl=Number(f2Rec.unid), ap=Number(f2Estado?f2Estado.acum:0), an=ap+ue;
+  const esFinal=(an===tl), diff=an-tl, np=f2Estado?f2Estado.numParcial:1;
   let totU=0,totK=0;
-  CATS.forEach(c=>{totU+=gv('u-'+c);totK+=gv('k-'+c);});
+  CATS.forEach(cat=>{totU+=gv('u-'+cat);totK+=gv('k-'+cat);});
   const ua=navigator.userAgent.slice(0,200);
   const row=[f2Rec.id,fgo,fi,fc,np,esFinal?1:0,ue,an,tl,
-    ...CATS.map(c=>gv('u-'+c)), ...CATS.map(c=>gv('k-'+c)),
+    ...CATS.map(cat=>gv('u-'+cat)), ...CATS.map(cat=>gv('k-'+cat)),
     totK,obs,ua,new Date().toISOString()];
   const res = await apiPost('LOTES', row);
   if(!res.ok){ alert('Error al guardar. Intentá de nuevo.'); setBtnLoading('f2-btn',false,txtOrig); return; }
@@ -580,7 +605,7 @@ async function f2Guardar(){
   else if(esFinal){chk.style.background='#f0fdf4';chkp.setAttribute('stroke','#16a34a');}
   else{chk.style.background='#eff6ff';chkp.setAttribute('stroke','#1d4ed8');}
   document.getElementById('f2-s-tit').textContent=esFinal?(diff===0?'Lote completo':'Lote cerrado con diferencia'):'Parcial N°'+np+' guardado';
-  document.getElementById('f2-s-sub').textContent=fgo+' · Ingreso: '+fi+' → Clasif.: '+fc+' ('+dias+' días)';
+  document.getElementById('f2-s-sub').textContent=fgo+' · Ingreso: '+fmt(fi)+' → Clasif.: '+fmt(fc)+' ('+dias+' días)';
   const pd=document.getElementById('f2-s-prog'); pd.style.display='block';
   const pct=Math.min(100,Math.round(an/tl*100));
   document.getElementById('f2-s-pf').style.width=pct+'%';
@@ -609,7 +634,6 @@ function f2Nuevo(){
   document.getElementById('f2-fecha').value='';
   document.getElementById('f2-unid').value='';
   document.getElementById('f2-obs').value='';
-
   CATS.forEach(c=>{document.getElementById('u-'+c).value='';document.getElementById('k-'+c).value='';});
   ['f2-info','f2-parcial'].forEach(id=>document.getElementById(id).innerHTML='');
   ['f2-campos','f2-cats','f2-obs-card','f2-btn'].forEach(id=>document.getElementById(id).style.display='none');
