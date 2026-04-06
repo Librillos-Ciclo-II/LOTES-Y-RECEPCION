@@ -293,7 +293,7 @@ async function buscarLotesAbiertos(fgo, fecha){
   // Cargas de este lote que NO son finales
   const cargas = rows.filter(r=>r[1]===fgo && String(r[2]).slice(0,10)===fecha && r[5]!=1 && r[5]!=='TRUE' && r[5]!==true);
   if(!cargas.length) return null;
-  const acum  = cargas.reduce((s,r)=>s+Number(r[6]),0);
+      const acum  = cargas.reduce((s,r)=>s+Number(r[6]),0);
   const total = Number(cargas[cargas.length-1][8]);
   return {acum, total, numParcial:cargas.length+1,
     cargas:cargas.map(r=>({unid:r[6], fecha:String(r[3]).slice(0,10)}))};
@@ -495,7 +495,7 @@ function f2Recalc(){
   CATS.forEach(c=>{totU+=gv('u-'+c);totK+=gv('k-'+c);});
   document.getElementById('tot-u').textContent=totU;
   document.getElementById('tot-k').textContent=totK.toFixed(1);
-  const tl=Number(f2Rec.unid), ap=f2Estado?f2Estado.acum:0, ue=gv('f2-unid'), an=ap+ue;
+  const tl=Number(f2Rec.unid), ap=Number(f2Estado?f2Estado.acum:0), ue=gv('f2-unid'), an=ap+ue;
 
   const msg=document.getElementById('f2-msg');
   msg.className='msg'; msg.textContent='';
@@ -527,7 +527,11 @@ function f2ValidarBtn(){
   const fc=document.getElementById('f2-fc').value, fi=document.getElementById('f2-fecha').value;
   const ue=gv('f2-unid'), totU=CATS.reduce((s,c)=>s+gv('u-'+c),0);
   const catErr=catError();
-  const ok=fc&&fi&&fc>=fi&&ue>0&&totU>0&&!catErr;
+  const ap_check=Number(f2Estado?f2Estado.acum:0);
+  const an_check=ap_check+ue;
+  const tl_check=Number(f2Rec?f2Rec.unid:0);
+  const overLimit=tl_check>0&&an_check>tl_check;
+  const ok=fc&&fi&&fc>=fi&&ue>0&&totU>0&&!catErr&&!overLimit;
   document.getElementById('f2-btn').disabled=!ok;
   if(ok){
     const an=(f2Estado?f2Estado.acum:0)+ue;
@@ -538,6 +542,7 @@ function f2ValidarBtn(){
 async function f2Guardar(){
   const txtOrig = document.getElementById('f2-btn').textContent;
   setBtnLoading('f2-btn', true, 'Guardando...');
+  invalidateCache(); // flush before re-read to get fresh state
   const fgo=document.getElementById('f2-fgo').value;
   const fi=document.getElementById('f2-fecha').value;
   const fc=document.getElementById('f2-fc').value;
