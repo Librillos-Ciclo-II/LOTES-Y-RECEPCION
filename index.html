@@ -118,6 +118,11 @@ input:focus,select:focus{outline:none;border-color:#0078d4}
     <p style="font-size:13px;font-weight:600;margin-bottom:8px">Ingresos recientes</p>
     <div id="f1-lista"><p style="font-size:12px;color:#999">Cargando...</p></div>
   </div>
+
+  <div class="card" style="margin-top:8px">
+    <p style="font-size:13px;font-weight:600;margin-bottom:8px">Resumen de lotes</p>
+    <div id="f1-resumen-lotes"><p style="font-size:12px;color:#999">Cargando...</p></div>
+  </div>
 </div>
 
 <!-- ══════════════ FORMULARIO 2 ══════════════ -->
@@ -163,7 +168,7 @@ input:focus,select:focus{outline:none;border-color:#0078d4}
       <table class="cat-table">
         <thead><tr><th style="width:50px">Cat.</th><th>Unidades</th><th>Kgs salados</th></tr></thead>
         <tbody>
-          <tr><td><span class="badge bAAA">AAA</span></td><td><input type="number" id="u-AAA" min="0" placeholder="0" oninput="f2Recalc()"></td><td><input type="number" id="k-AAA" min="0" step="0.1" placeholder="0.0" oninput="f2Recalc()"></td></tr>
+          <tr><td><span class="badge bAAA">AAA</span></td><td><input type="number" id="u-AAA" min="0" step="1" placeholder="0" oninput="f2Recalc()"></td><td><input type="number" id="k-AAA" min="0" step="0.1" placeholder="0.0" oninput="f2Recalc()"></td></tr>
           <tr><td><span class="badge bAA">AA</span></td><td><input type="number" id="u-AA" min="0" placeholder="0" oninput="f2Recalc()"></td><td><input type="number" id="k-AA" min="0" step="0.1" placeholder="0.0" oninput="f2Recalc()"></td></tr>
           <tr><td><span class="badge bA">A</span></td><td><input type="number" id="u-A" min="0" placeholder="0" oninput="f2Recalc()"></td><td><input type="number" id="k-A" min="0" step="0.1" placeholder="0.0" oninput="f2Recalc()"></td></tr>
           <tr><td><span class="badge bB">B</span></td><td><input type="number" id="u-B" min="0" placeholder="0" oninput="f2Recalc()"></td><td><input type="number" id="k-B" min="0" step="0.1" placeholder="0.0" oninput="f2Recalc()"></td></tr>
@@ -210,15 +215,21 @@ input:focus,select:focus{outline:none;border-color:#0078d4}
 <script>
 const API = 'https://script.google.com/macros/s/AKfycbyFaBG74hgGaNSpemzxHrfe874Qxojr8ZZl0f1pa2QSaLU-QlYdO5SyH5Xi2vl1tHP5/exec';
 const CATS = ['AAA','AA','A','B','C','D'];
-const HDR_REC  = ['ID','Frigorifico','Fecha','Unidades','Tambores','Comentarios','Timestamp'];
+const HDR_REC  = ['ID','Frigorifico','Fecha','Unidades','Tambores','Comentarios','Timestamp','UserAgent'];
 const HDR_LOT  = ['ID_Recepcion','Frigorifico','Fecha_Ingreso','Fecha_Clasif','Num_Parcial',
   'Es_Final','Unid_Esta_Carga','Unid_Acum','Total_Lote',
   'AAA_unid','AA_unid','A_unid','B_unid','C_unid','D_unid',
   'AAA_kgs','AA_kgs','A_kgs','B_kgs','C_kgs','D_kgs',
-  'Total_Kgs','Rendimiento','Observaciones','Timestamp'];
+  'Total_Kgs','Rendimiento','Observaciones','Timestamp','UserAgent'];
 
 function gv(id){const v=document.getElementById(id).value.replace(',','.');return parseFloat(v)||0;}
 function today(){return new Date().toISOString().slice(0,10);}
+function fmtFecha(s){
+  if(!s) return '';
+  const d = String(s).slice(0,10).split('-');
+  if(d.length!==3) return s;
+  return d[2]+'/'+d[1]+'/'+d[0];
+}
 function rKey(f,d){return f+'||'+d;}
 
 // ── API ──────────────────────────────────────────────────────────────────────
@@ -325,6 +336,7 @@ async function f1Guardar(){
   const com   = document.getElementById('f1-comentarios').value.trim();
   const id    = rKey(fgo, fecha);
   const ts    = new Date().toISOString();
+  const ua    = navigator.userAgent;
 
   // Verificar duplicado
   const existe = await buscarRecepcion(fgo, fecha);
@@ -338,18 +350,18 @@ async function f1Guardar(){
   }
   setBtnLoading('f1-btn', true, 'Guardando...');
 
-  const res = await apiPost('RECEPCIONES', [id,fgo,fecha,unid,tamb,com,ts]);
+  const res = await apiPost('RECEPCIONES', [id,fgo,fecha,unid,tamb,com,ts,ua]);
   if(!res.ok){ alert('Error al guardar. Intentá de nuevo.'); setBtnLoading('f1-btn',false,'Registrar ingreso'); return; }
 
   invalidateCache();
-  document.getElementById('f1-s-det').textContent = fgo+' — '+fecha+' · '+unid+' unidades'+(tamb?' · '+tamb+' tambores':'');
-  let html = row2('Frigorífico',fgo)+row2('Fecha',fecha)+row2('Unidades',unid);
+  document.getElementById('f1-s-det').textContent = fgo+' — '+fmtFecha(fecha)+' · '+unid+' unidades'+(tamb?' · '+tamb+' tambores':'');
+  let html = row2('Frigorífico',fgo)+row2('Fecha',fmtFecha(fecha))+row2('Unidades',unid);
   if(tamb)  html+=row2('Tambores',tamb);
   if(com)   html+=row2('Comentarios',com);
   document.getElementById('f1-s-res').innerHTML = '<table style="width:100%;font-size:13px;border-collapse:collapse">'+html+'</table>';
   document.getElementById('f1-form').classList.add('hidden');
   document.getElementById('f1-success').classList.remove('hidden');
-  renderLista();
+  renderLista(); renderResumenLotes();
 }
 
 function row2(lbl,val){
@@ -367,6 +379,66 @@ function f1Nuevo(){
   document.getElementById('f1-btn').textContent='Registrar ingreso';
 }
 
+async function renderResumenLotes(){
+  const el = document.getElementById('f1-resumen-lotes');
+  if(!el) return;
+  const recs  = await getRecepciones(false);
+  const lotes = await getLotes(false);
+  if(!recs.length){ el.innerHTML='<p style="font-size:12px;color:#999">Sin lotes aún</p>'; return; }
+
+  // Agrupar lotes por ID_Recepcion
+  const lotMap = {};
+  lotes.forEach(l=>{
+    const id = l[0]; // ID_Recepcion
+    if(!lotMap[id]) lotMap[id]={cargas:0, acum:0, final:false};
+    lotMap[id].cargas++;
+    lotMap[id].acum   = Number(l[7]);  // Unid_Acum
+    lotMap[id].total  = Number(l[8]);  // Total_Lote
+    lotMap[id].final  = l[5]==1||l[5]=='1'||l[5]===true;
+    lotMap[id].kgsTot = Number(l[21]); // Total_Kgs
+    lotMap[id].clasif = String(l[3]).slice(0,10); // Fecha_Clasif
+  });
+
+  const recientes = [...recs].reverse().slice(0,10);
+  let html = '<table style="width:100%;border-collapse:collapse;font-size:12px">';
+  html += '<tr style="border-bottom:1px solid #eee">'
+    +'<th style="text-align:left;padding:4px 6px;color:#888;font-weight:500">Frigorífico</th>'
+    +'<th style="text-align:left;padding:4px 6px;color:#888;font-weight:500">Ingreso</th>'
+    +'<th style="text-align:right;padding:4px 6px;color:#888;font-weight:500">Total</th>'
+    +'<th style="text-align:right;padding:4px 6px;color:#888;font-weight:500">Clasif.</th>'
+    +'<th style="text-align:center;padding:4px 6px;color:#888;font-weight:500">Estado</th>'
+    +'</tr>';
+
+  recientes.forEach(r=>{
+    const id   = r[0];
+    const fgo  = r[1];
+    const fi   = fmtFecha(r[2]);
+    const unid = r[3];
+    const lot  = lotMap[id];
+    let estado, color;
+    if(!lot){
+      estado='Sin clasificar'; color='#888';
+    } else if(lot.final){
+      const diff = lot.acum - lot.total;
+      if(diff===0){ estado='Completo'; color='#16a34a'; }
+      else{ estado='Cerrado '+(diff>0?'+'+diff:''+diff)+' un'; color='#d97706'; }
+    } else {
+      const pct = Math.round(lot.acum/lot.total*100);
+      estado=pct+'% ('+lot.cargas+' carga'+( lot.cargas>1?'s':'')+')'; color='#1d4ed8';
+    }
+    const clasif = lot ? fmtFecha(lot.clasif) : '—';
+    html += `<tr style="border-bottom:1px solid #f5f5f5">
+      <td style="padding:5px 6px;font-weight:500">${fgo}</td>
+      <td style="padding:5px 6px;color:#555">${fi}</td>
+      <td style="padding:5px 6px;text-align:right">${unid} un</td>
+      <td style="padding:5px 6px;text-align:right;color:#555">${clasif}</td>
+      <td style="padding:5px 6px;text-align:center;color:${color};font-weight:500">${estado}</td>
+    </tr>`;
+  });
+  html += '</table>';
+  el.innerHTML = html;
+}
+
 async function renderLista(){
   const el = document.getElementById('f1-lista');
   el.innerHTML='<p style="font-size:12px;color:#999">Cargando...</p>';
@@ -377,7 +449,7 @@ async function renderLista(){
     <div class="recep-row">
       <div>
         <strong>${r[1]}</strong>
-        <span style="font-size:12px;color:#888;margin-left:6px">${String(r[2]).slice(0,10)}</span>
+        <span style="font-size:12px;color:#888;margin-left:6px">${fmtFecha(r[2])}</span>
         ${r[5]?`<br><span style="font-size:11px;color:#999">${r[5]}</span>`:''}
       </div>
       <div style="text-align:right;flex-shrink:0;margin-left:12px">
@@ -439,7 +511,7 @@ async function f2Buscar(){
         ${over?`<span style="color:#dc2626;font-weight:600">Superado en ${f2Estado.acum-f2Estado.total} un</span>`:`Faltan: <span class="sv">${f2Estado.total-f2Estado.acum} un</span>`}
       </div>
       <div style="margin-top:6px;font-size:11px;color:#888">
-        ${f2Estado.cargas.map((c,i)=>`Carga ${i+1}: ${c.unid} un · ${c.fecha}`).join(' &nbsp;·&nbsp; ')}
+        ${f2Estado.cargas.map((c,i)=>`Carga ${i+1}: ${c.unid} un · ${fmtFecha(c.fecha)}`).join(' &nbsp;·&nbsp; ')}
       </div>
     </div>`;
   }
@@ -448,6 +520,17 @@ async function f2Buscar(){
   f2Recalc();
 }
 
+function validarCats(){
+  // Retorna mensaje de error o '' si ok
+  const CATS = ['AAA','AA','A','B','C','D'];
+  for(const cat of CATS){
+    const u = gv('u-'+cat), k = gv('k-'+cat);
+    if(u < 0 || k < 0) return 'Los valores no pueden ser negativos ('+cat+')';
+    if(u > 0 && k === 0) return 'Si cargás unidades en '+cat+' debés cargar los kgs también';
+    if(k > 0 && u === 0) return 'Si cargás kgs en '+cat+' debés cargar las unidades también';
+  }
+  return '';
+}
 function f2Recalc(){
   if(!f2Rec) return;
   let totU=0,totK=0;
@@ -455,6 +538,9 @@ function f2Recalc(){
   document.getElementById('tot-u').textContent=totU;
   document.getElementById('tot-k').textContent=totK.toFixed(1);
   const tl=Number(f2Rec.unid), ap=f2Estado?f2Estado.acum:0, ue=gv('f2-unid'), an=ap+ue;
+  // Validar cats
+  const catErr = validarCats();
+  if(catErr){ msg.className='msg err'; msg.textContent=catErr; f2ValidarBtn(); return; }
   const rinde=tl>0&&totK>0?totK/tl:null;
   document.getElementById('tot-r').textContent=rinde?(rinde*100).toFixed(1)+'%':'—';
   const msg=document.getElementById('f2-msg');
@@ -493,9 +579,10 @@ async function f2Guardar(){
   let totU=0,totK=0;
   CATS.forEach(c=>{totU+=gv('u-'+c);totK+=gv('k-'+c);});
   const rinde=tl>0?parseFloat((totK/tl).toFixed(4)):0;
+  const ua2 = navigator.userAgent;
   const row=[f2Rec.id,fgo,fi,fc,np,esFinal?1:0,ue,an,tl,
     ...CATS.map(c=>gv('u-'+c)), ...CATS.map(c=>gv('k-'+c)),
-    totK,rinde,obs,new Date().toISOString()];
+    totK,rinde,obs,new Date().toISOString(),ua2];
   const res = await apiPost('LOTES', row);
   if(!res.ok){ alert('Error al guardar. Intentá de nuevo.'); setBtnLoading('f2-btn',false,txtOrig); return; }
   invalidateCache();
@@ -505,7 +592,7 @@ async function f2Guardar(){
   else if(esFinal){chk.style.background='#f0fdf4';chkp.setAttribute('stroke','#16a34a');}
   else{chk.style.background='#eff6ff';chkp.setAttribute('stroke','#1d4ed8');}
   document.getElementById('f2-s-tit').textContent=esFinal?(diff===0?'Lote completo':'Lote cerrado con diferencia'):'Parcial N°'+np+' guardado';
-  document.getElementById('f2-s-sub').textContent=fgo+' · Ingreso: '+fi+' → Clasif.: '+fc+' ('+dias+' días)';
+  document.getElementById('f2-s-sub').textContent=fgo+' · Ingreso: '+fmtFecha(fi)+' → Clasif.: '+fmtFecha(fc)+' ('+dias+' días)';
   const pd=document.getElementById('f2-s-prog'); pd.style.display='block';
   const pct=Math.min(100,Math.round(an/tl*100));
   document.getElementById('f2-s-pf').style.width=pct+'%';
@@ -525,6 +612,7 @@ async function f2Guardar(){
   document.getElementById('f2-s-res').innerHTML=resHtml;
   document.getElementById('f2-form').classList.add('hidden');
   document.getElementById('f2-success').classList.remove('hidden');
+  renderResumenLotes();
 }
 
 function f2Nuevo(){
@@ -543,7 +631,7 @@ function f2Nuevo(){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
-initHeaders().then(()=>renderLista()).catch(e=>console.error(e));
+initHeaders().then(()=>{ renderLista(); renderResumenLotes(); }).catch(e=>console.error(e));
 </script>
 </body>
 </html>
