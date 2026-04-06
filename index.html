@@ -447,6 +447,18 @@ async function f2Buscar(){
   f2Rec    = await buscarRecepcion(fgo, fecha);
   f2Estado = await buscarLotesAbiertos(fgo, fecha);
 
+  // Verificar si el lote ya fue cerrado (Es_Final=1 existe)
+  const lotRows = await getLotes();
+  const yaCerrado = lotRows.some(r=>r[1]===fgo && String(r[2]).slice(0,10)===fecha && (r[5]==1||r[5]===true||r[5]==='TRUE'));
+  if(yaCerrado && f2Rec){
+    infoDiv.innerHTML='<div class="card" style="border-color:#16a34a;background:#f0fdf4">'+
+      '<p style="font-size:13px;color:#166534;font-weight:600">Lote cerrado</p>'+
+      '<p style="font-size:12px;color:#166534;margin-top:4px">Este lote ya fue completado y cerrado. No se pueden agregar más cargas.</p>'+
+    '</div>';
+    setStatus('Conectado',false);
+    return;
+  }
+
   if(!f2Rec){
     info.innerHTML=`<div class="card" style="border-color:#fca5a5">
       <p style="font-size:13px;color:#991b1b;font-weight:600">Recepción no encontrada</p>
@@ -513,12 +525,16 @@ function f2Recalc(){
 }
 
 function catError(){
+  let sumU=0;
   for(const cat of CATS){
     const u=gv('u-'+cat), k=gv('k-'+cat);
     if(u<0||k<0) return 'No se permiten valores negativos.';
     if(u>0&&k===0) return 'Categoría '+cat+': si hay unidades debe haber kgs salados.';
     if(k>0&&u===0) return 'Categoría '+cat+': si hay kgs debe haber unidades.';
+    sumU+=u;
   }
+  const ue=gv('f2-unid');
+  if(ue>0&&sumU>0&&sumU!==ue) return 'La suma de unidades por categoría ('+sumU+') debe ser igual a las unidades clasificadas ('+ue+').';
   return null;
 }
 
