@@ -454,7 +454,7 @@ function f2Recalc(){
   CATS.forEach(c=>{totU+=gv('u-'+c);totK+=gv('k-'+c);});
   document.getElementById('tot-u').textContent=totU;
   document.getElementById('tot-k').textContent=totK.toFixed(1);
-  const tl=f2Rec.unid, ap=f2Estado?f2Estado.acum:0, ue=gv('f2-unid'), an=ap+ue;
+  const tl=Number(f2Rec.unid), ap=f2Estado?f2Estado.acum:0, ue=gv('f2-unid'), an=ap+ue;
   const rinde=tl>0&&totK>0?totK/tl:null;
   document.getElementById('tot-r').textContent=rinde?(rinde*100).toFixed(1)+'%':'—';
   const msg=document.getElementById('f2-msg');
@@ -492,7 +492,7 @@ async function f2Guardar(){
   const esFinal=an>=tl, diff=an-tl, np=f2Estado?f2Estado.numParcial:1;
   let totU=0,totK=0;
   CATS.forEach(c=>{totU+=gv('u-'+c);totK+=gv('k-'+c);});
-  const rinde=tl>0?(totK/tl).toFixed(4):0;
+  const rinde=tl>0?parseFloat((totK/tl).toFixed(4)):0;
   const row=[f2Rec.id,fgo,fi,fc,np,esFinal?1:0,ue,an,tl,
     ...CATS.map(c=>gv('u-'+c)), ...CATS.map(c=>gv('k-'+c)),
     totK,rinde,obs,new Date().toISOString()];
