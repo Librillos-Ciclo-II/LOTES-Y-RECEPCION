@@ -99,6 +99,56 @@ input:focus,select:focus{outline:none;border-color:#0078d4}
       <div class="msg" id="f1-msg"></div>
     </div>
     <button class="btn-main" id="f1-btn" onclick="f1Guardar()" disabled>Registrar ingreso</button>
+
+    <!-- MODIFICAR RECEPCIÓN T+1 -->
+    <div id="f1-mod-section" style="margin-top:16px">
+      <button class="btn-sec" onclick="f1ModToggle()" id="f1-mod-toggle-btn" style="color:#d97706;border-color:#fde68a">
+        Modificar recepción del día anterior
+      </button>
+      <div id="f1-mod-form" style="display:none;margin-top:12px">
+        <div class="card" style="border-color:#fde68a;background:#fffbeb">
+          <p style="font-size:13px;font-weight:600;color:#92400e;margin-bottom:12px">Modificar recepción — solo disponible hasta las 23:59 del día siguiente al registro</p>
+          <div class="row2" style="margin-bottom:12px">
+            <div>
+              <label class="label">Frigorífico <span class="req">*</span></label>
+              <select id="f1m-fgo" onchange="f1mBuscar()">
+                <option value="">— Seleccionar —</option>
+                <option>DELTA</option><option>RECREO</option><option>ALBA</option>
+                <option>SANTA INES</option><option>C.PARANA</option><option>SUIPACHA</option>
+              </select>
+            </div>
+            <div>
+              <label class="label">Fecha de ingreso <span class="req">*</span></label>
+              <input type="date" id="f1m-fecha" onchange="f1mBuscar()">
+            </div>
+          </div>
+          <div id="f1m-found" style="display:none">
+            <div style="margin-bottom:12px">
+              <label class="label">Unidades <span class="req">*</span></label>
+              <input type="number" id="f1m-unid" min="1" placeholder="ej. 800" oninput="f1mCheck()">
+            </div>
+            <div style="margin-bottom:12px">
+              <label class="label">Tambores (opcional)</label>
+              <input type="number" id="f1m-tambores" min="0" placeholder="ej. 12">
+            </div>
+            <div style="margin-bottom:12px">
+              <label class="label">Comentarios (opcional)</label>
+              <input type="text" id="f1m-comentarios" placeholder="Ej: reconteo muestra diferencia...">
+            </div>
+            <div id="f1m-lotes-aviso" style="display:none" class="msg warn">
+              Este lote tiene cargas parciales registradas. Se actualizará el Total_Lote en todos los registros.
+            </div>
+            <div class="msg" id="f1m-msg"></div>
+            <button class="btn-main" id="f1m-btn" onclick="f1mGuardar()" disabled style="background:#d97706;border-color:#d97706">
+              Confirmar modificación
+            </button>
+          </div>
+          <div id="f1m-notfound" style="display:none">
+            <p style="font-size:13px;color:#991b1b">No se encontró recepción para ese frigorífico y fecha, o ya pasó el plazo de modificación (T+1).</p>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div id="f1-success" class="hidden">
@@ -183,7 +233,7 @@ input:focus,select:focus{outline:none;border-color:#0078d4}
       <input type="text" id="f2-obs" placeholder="Ej: daño en curado...">
     </div>
 
-    <button class="btn-main" id="f2-btn" onclick="f2Guardar()" disabled style="display:none">Guardar</button>
+    <button class="btn-main" id="f2-btn" onclick="f2GuardarConControl()" disabled style="display:none">Guardar</button>
   </div>
 
   <div class="card" id="f2-resumen-card" style="margin-top:8px;display:none">
@@ -211,8 +261,35 @@ input:focus,select:focus{outline:none;border-color:#0078d4}
 
 </div><!-- /app -->
 
+<!-- MODAL: confirmar cierre con diferencia pequeña -->
+<div id="modal-confirmar" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:12px;padding:24px;max-width:360px;width:90%;margin:auto">
+    <p style="font-size:16px;font-weight:600;margin-bottom:8px;color:#1a1a1a" id="modal-titulo">¿Cerrar lote?</p>
+    <p style="font-size:14px;color:#666;margin-bottom:20px" id="modal-detalle"></p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <button onclick="modalCancelar()" style="padding:11px;border-radius:8px;cursor:pointer;background:#fff;border:1px solid #ddd;font-size:14px">Cancelar</button>
+      <button onclick="modalConfirmar()" id="modal-ok-btn" style="padding:11px;border-radius:8px;cursor:pointer;background:#16a34a;border:none;color:#fff;font-size:14px;font-weight:600">Cerrar lote</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: contraseña supervisor -->
+<div id="modal-pass" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:12px;padding:24px;max-width:360px;width:90%;margin:auto">
+    <p style="font-size:16px;font-weight:600;margin-bottom:4px;color:#1a1a1a">Autorización requerida</p>
+    <p style="font-size:13px;color:#666;margin-bottom:4px" id="pass-detalle"></p>
+    <p style="font-size:12px;color:#991b1b;margin-bottom:14px">La diferencia supera el 0,5% — requiere contraseña del supervisor.</p>
+    <input type="password" id="pass-input" placeholder="Contraseña del supervisor" style="width:100%;font-size:15px;margin-bottom:4px">
+    <p style="font-size:12px;color:#991b1b;display:none" id="pass-error">Contraseña incorrecta</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px">
+      <button onclick="passCancelar()" style="padding:11px;border-radius:8px;cursor:pointer;background:#fff;border:1px solid #ddd;font-size:14px">Cancelar</button>
+      <button onclick="passConfirmar()" style="padding:11px;border-radius:8px;cursor:pointer;background:#dc2626;border:none;color:#fff;font-size:14px;font-weight:600">Autorizar cierre</button>
+    </div>
+  </div>
+</div>
+
 <script>
-const API = 'https://script.google.com/macros/s/AKfycbyFaBG74hgGaNSpemzxHrfe874Qxojr8ZZl0f1pa2QSaLU-QlYdO5SyH5Xi2vl1tHP5/exec';
+const API = 'https://script.google.com/macros/s/AKfycbydNgWAGxitV_OqRUtTm3esNgArQopIZqMpElqoadU2dTQwMoxy_VZLQm8h4PYbZ_Ts/exec';
 const CATS = ['AAA','AA','A','B','C','D'];
 const HDR_REC  = ['ID','Frigorifico','Fecha','Unidades','Tambores','Comentarios','Timestamp'];
 const HDR_LOT  = ['ID_Recepcion','Frigorifico','Fecha_Ingreso','Fecha_Clasif','Num_Parcial',
@@ -309,14 +386,11 @@ function showTab(n){
 async function renderLotesRecientes(){
   const card=document.getElementById('f2-resumen-card');
   const el=document.getElementById('f2-resumen-items');
-  if(!card) return;
-  card.style.display='block';
+  if(!card) return; card.style.display='block';
   invalidateCache();
   const rows=await getLotes(true);
   if(!rows||!rows.length){el.innerHTML='<p style="font-size:12px;color:#999">Sin lotes aún</p>';return;}
-  // Un registro por lote (el más reciente)
-  const mapa={};
-  rows.forEach(r=>{const k=r[1]+'||'+String(r[2]).slice(0,10); mapa[k]=r;});
+  const mapa={}; rows.forEach(r=>{const k=r[1]+'||'+String(r[2]).slice(0,10); mapa[k]=r;});
   const lista=Object.values(mapa).reverse().slice(0,10);
   el.innerHTML=lista.map(r=>{
     const cerrado=String(r[5])==='1'||r[5]===true||r[5]==='TRUE';
@@ -328,15 +402,11 @@ async function renderLotesRecientes(){
       :'<span style="font-size:10px;background:#fffbeb;color:#92400e;border:1px solid #fde68a;border-radius:4px;padding:1px 6px;margin-left:6px">PARCIAL</span>';
     return '<div style="padding:9px 0;border-bottom:1px solid #f0f0f0">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'+
-        '<div><strong style="font-size:13px">'+r[1]+'</strong>'+
-        '<span style="font-size:12px;color:#888;margin-left:6px">'+fmt(r[2])+'</span>'+badge+'</div>'+
-        '<span style="font-size:12px;font-weight:600">'+acum+'/'+total+' un</span>'+
-      '</div>'+
+        '<div><strong style="font-size:13px">'+r[1]+'</strong><span style="font-size:12px;color:#888;margin-left:6px">'+fmt(r[2])+'</span>'+badge+'</div>'+
+        '<span style="font-size:12px;font-weight:600">'+acum+'/'+total+' un</span></div>'+
       '<div style="height:5px;background:#eee;border-radius:3px;overflow:hidden">'+
-        '<div style="height:100%;width:'+pct+'%;background:'+color+';border-radius:3px"></div>'+
-      '</div>'+
-      '<div style="font-size:11px;color:#888;margin-top:3px">Clasif: '+fmt(r[3])+'</div>'+
-    '</div>';
+        '<div style="height:100%;width:'+pct+'%;background:'+color+';border-radius:3px"></div></div>'+
+      '<div style="font-size:11px;color:#888;margin-top:3px">Clasif: '+fmt(r[3])+'</div></div>';
   }).join('');
 }
 
@@ -444,75 +514,62 @@ async function f2Buscar(){
 
   info.innerHTML='<p style="font-size:13px;color:#666;padding:8px 0"><span class="spinner" style="border-color:rgba(0,0,0,.2);border-top-color:#666"></span>Buscando lote...</p>';
 
-  // Siempre forzar refresh para evitar datos viejos
   invalidateCache();
-  const [recRows, lotRows] = await Promise.all([getRecepciones(true), getLotes(true)]);
-
-  // Buscar recepción
+  const allLotes = await getLotes(true);
+  const recRows  = await getRecepciones(true);
   const recFound = recRows.find(r=>r[1]===fgo && String(r[2]).slice(0,10)===fecha);
   f2Rec = recFound ? {id:recFound[0], fgo:recFound[1], fecha:String(recFound[2]).slice(0,10),
     unid:Number(recFound[3]), tambores:recFound[4], comentarios:recFound[5]} : null;
-
-  if(!f2Rec){
-    info.innerHTML='<div class="card" style="border-color:#fca5a5">'+
-      '<p style="font-size:13px;color:#991b1b;font-weight:600">Recepción no encontrada</p>'+
-      '<p style="font-size:12px;color:#666;margin-top:4px">No hay ingreso de <strong>'+fgo+'</strong> con fecha <strong>'+fmt(fecha)+'</strong>.<br>Registralo primero en Recepción MP.</p>'+
-      '<button onclick="showTab(1)" style="margin-top:10px;font-size:12px;color:#0078d4;background:none;border:none;cursor:pointer;padding:0">← Ir a Recepción MP</button>'+
-    '</div>';
-    return;
-  }
-
-  // Verificar si ya está cerrado — buscar cualquier fila con Es_Final=1
-  const filasLote = lotRows.filter(r=>r[1]===fgo && String(r[2]).slice(0,10)===fecha);
+  const filasLote = allLotes.filter(r=>r[1]===fgo && String(r[2]).slice(0,10)===fecha);
   const yaCerrado = filasLote.some(r=>String(r[5])==='1'||r[5]===true||r[5]==='TRUE');
-
-  if(yaCerrado){
-    const acumFinal = Math.max(...filasLote.map(r=>Number(r[7])||0));
-    info.innerHTML='<div class="found-card">'+
-      '<p style="font-size:12px;font-weight:600;color:#166534;margin-bottom:6px">Lote cerrado</p>'+
-      '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px">'+
-        '<span style="color:#555">Total del lote</span><strong>'+f2Rec.unid+' unidades</strong>'+
-      '</div>'+
-      '<div style="background:#dcfce7;border-radius:6px;padding:8px 10px;font-size:12px;color:#166534">'+
-        'Lote completo y cerrado ('+acumFinal+'/'+f2Rec.unid+' un). No se pueden agregar más cargas.'+
-      '</div>'+
-    '</div>';
-    return;
+  if(yaCerrado && f2Rec){
+    info.innerHTML='<div class="found-card"><p style="font-size:12px;font-weight:600;color:#166534;margin-bottom:6px">Lote cerrado</p>'+
+      '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px"><span style="color:#555">Total del lote</span><strong>'+f2Rec.unid+' unidades</strong></div>'+
+      '<div style="background:#dcfce7;border-radius:6px;padding:8px 10px;font-size:12px;color:#166534">Lote completo y cerrado. No se pueden agregar más cargas.</div></div>';
+    setStatus && setStatus('Conectado',false); return;
   }
-
-  // Armar estado parcial desde filas no finales
   const cargasParciales = filasLote.filter(r=>String(r[5])!=='1'&&r[5]!==true&&r[5]!=='TRUE');
   f2Estado = cargasParciales.length ? {
-    acum: cargasParciales.reduce((s,r)=>s+Number(r[6]),0),
-    total: Number(f2Rec.unid),
-    numParcial: cargasParciales.length+1,
-    cargas: cargasParciales.map(r=>({unid:Number(r[6]), fecha:String(r[3]).slice(0,10)}))
+    acum:cargasParciales.reduce((s,r)=>s+Number(r[6]),0), total:Number(f2Rec?f2Rec.unid:0),
+    numParcial:cargasParciales.length+1, cargas:cargasParciales.map(r=>({unid:Number(r[6]),fecha:String(r[3]).slice(0,10)}))
   } : null;
 
-  let fhtml='<div class="found-card">'+
-    '<p style="font-size:12px;font-weight:600;color:#166534;margin-bottom:6px">Recepción encontrada</p>'+
-    '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px">'+
-      '<span style="color:#555">Total del lote</span><strong>'+f2Rec.unid+' unidades</strong>'+
-    '</div>';
-  if(f2Rec.tambores) fhtml+='<div style="font-size:12px;color:#666">Tambores: '+f2Rec.tambores+'</div>';
-  if(f2Rec.comentarios) fhtml+='<div style="font-size:12px;color:#666;margin-top:2px">Obs: '+f2Rec.comentarios+'</div>';
+  if(!f2Rec){
+    info.innerHTML=`<div class="card" style="border-color:#fca5a5">
+      <p style="font-size:13px;color:#991b1b;font-weight:600">Recepción no encontrada</p>
+      <p style="font-size:12px;color:#666;margin-top:4px">No hay ingreso de <strong>${fgo}</strong> con fecha <strong>${fecha}</strong>.<br>Registralo primero en Recepción MP.</p>
+      <button onclick="showTab(1)" style="margin-top:10px;font-size:12px;color:#0078d4;background:none;border:none;cursor:pointer;padding:0">← Ir a Recepción MP</button>
+    </div>`;
+    return;
+  }
+
+  let fhtml=`<div class="found-card">
+    <p style="font-size:12px;font-weight:600;color:#166534;margin-bottom:6px">Recepción encontrada</p>
+    <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px">
+      <span style="color:#555">Total del lote</span><strong>${f2Rec.unid} unidades</strong>
+    </div>`;
+  if(f2Rec.tambores) fhtml+=`<div style="font-size:12px;color:#666">Tambores: ${f2Rec.tambores}</div>`;
+  if(f2Rec.comentarios) fhtml+=`<div style="font-size:12px;color:#666;margin-top:2px">Obs recepción: ${f2Rec.comentarios}</div>`;
   fhtml+='</div>';
   info.innerHTML=fhtml;
 
   if(f2Estado){
-    const acum=f2Estado.acum, total=f2Estado.total;
-    const pct=Math.min(100,Math.round(acum/total*100));
-    parc.innerHTML='<div class="lote-ab">'+
-      '<p style="font-size:13px;font-weight:600;color:#92400e;margin-bottom:6px">Lote parcial — carga N° '+f2Estado.numParcial+'</p>'+
-      '<div class="progress-bar"><div class="progress-fill" style="width:'+pct+'%"></div></div>'+
-      '<div class="sr">'+
-        '<span>Clasificadas: <span class="sv">'+acum+' un</span></span>'+
-        '<span>Faltan: <span class="sv">'+(total-acum)+' un</span></span>'+
-      '</div>'+
-      '<div style="margin-top:6px;font-size:11px;color:#888">'+
-        f2Estado.cargas.map((cg,i)=>'Carga '+(i+1)+': '+cg.unid+' un · '+fmt(cg.fecha)).join(' &nbsp;·&nbsp; ')+
-      '</div>'+
-    '</div>';
+    const pct=Math.min(100,Math.round(f2Estado.acum/f2Estado.total*100));
+    const over=f2Estado.acum>f2Estado.total;
+    parc.innerHTML=`<div class="lote-ab">
+      <p style="font-size:13px;font-weight:600;color:#92400e;margin-bottom:6px">Lote parcial — carga N° ${f2Estado.numParcial}</p>
+      <div class="progress-bar"><div class="progress-fill ${over?'over':''}" style="width:${pct}%"></div></div>
+      <div class="sr">
+        <span>Clasificadas: <span class="sv">${f2Estado.acum} un</span></span>
+        <span>Total: <span class="sv">${f2Estado.total} un</span></span>
+      </div>
+      <div style="margin-top:5px;font-size:12px;color:#666">
+        ${over?`<span style="color:#dc2626;font-weight:600">Superado en ${f2Estado.acum-f2Estado.total} un</span>`:`Faltan: <span class="sv">${f2Estado.total-f2Estado.acum} un</span>`}
+      </div>
+      <div style="margin-top:6px;font-size:11px;color:#888">
+        ${f2Estado.cargas.map((c,i)=>`Carga ${i+1}: ${c.unid} un · ${fmt(c.fecha)}`).join(' &nbsp;·&nbsp; ')}
+      </div>
+    </div>`;
   }
 
   ['f2-campos','f2-cats','f2-obs-card','f2-btn'].forEach(id=>document.getElementById(id).style.display='block');
@@ -536,11 +593,9 @@ function f2Recalc(){
     else if(an>tl){msg.className='msg err';msg.textContent='Superás el total en '+(an-tl)+' un. Verificar.';}
     else{msg.className='msg info';msg.textContent='Carga N°'+(f2Estado?f2Estado.numParcial:1)+' — quedan '+(tl-an)+' unidades por clasificar.';}
   } else if(totU>0){msg.className='msg ok';msg.textContent='Listo para guardar.';}
-  // Siempre validar categorías — se re-evalúa en cada cambio
   const catErr=catError();
   if(catErr){msg.className='msg err';msg.textContent=catErr;}
-  // Bloquear si acumulado ya supera el total
-  if(an>tl&&tl>0){msg.className='msg err';msg.textContent='Las unidades clasificadas ('+an+') superan el total del lote ('+tl+'). Reducí las unidades de esta carga.';}
+  if(an>tl&&tl>0){msg.className='msg err';msg.textContent='Las unidades ('+an+') superan el total del lote ('+tl+').';}
   f2ValidarBtn();
 }
 
@@ -554,8 +609,7 @@ function catError(){
     sumU+=u;
   }
   const ue=gv('f2-unid');
-  if(ue>0&&sumU>0&&sumU!==ue)
-    return 'Suma de categorías ('+sumU+') ≠ unidades clasificadas ('+ue+').';
+  if(ue>0&&sumU>0&&sumU!==ue) return 'Suma de categorías ('+sumU+') ≠ unidades clasificadas ('+ue+').';
   return null;
 }
 
@@ -569,16 +623,12 @@ function f2ValidarBtn(){
   const an=ap+ue;
   const totU=CATS.reduce((s,cat)=>s+gv('u-'+cat),0);
   const err=catError();
-  // an debe ser EXACTAMENTE igual a tl para cerrar, o menor para parcial
-  // Nunca puede superar tl
   const ok=fc&&fi&&fc>=fi&&ue>0&&totU>0&&!err&&an<=tl;
   document.getElementById('f2-btn').disabled=!ok;
   if(ok){
     document.getElementById('f2-btn').textContent=
       an===tl?'Guardar — cerrar lote':'Guardar parcial N°'+(f2Estado?f2Estado.numParcial:1);
-  } else {
-    document.getElementById('f2-btn').textContent='Guardar';
-  }
+  } else { document.getElementById('f2-btn').textContent='Guardar'; }
 }
 
 async function f2Guardar(){
@@ -588,13 +638,13 @@ async function f2Guardar(){
   const fi=document.getElementById('f2-fecha').value;
   const fc=document.getElementById('f2-fc').value;
   const ue=gv('f2-unid'), obs=document.getElementById('f2-obs').value;
-  const tl=Number(f2Rec.unid), ap=Number(f2Estado?f2Estado.acum:0), an=ap+ue;
-  const esFinal=(an===tl), diff=an-tl, np=f2Estado?f2Estado.numParcial:1;
+  const tl=f2Rec.unid, ap=f2Estado?f2Estado.acum:0, an=ap+ue;
+  const esFinal=an>=tl, diff=an-tl, np=f2Estado?f2Estado.numParcial:1;
   let totU=0,totK=0;
-  CATS.forEach(cat=>{totU+=gv('u-'+cat);totK+=gv('k-'+cat);});
+  CATS.forEach(c=>{totU+=gv('u-'+c);totK+=gv('k-'+c);});
   const ua=navigator.userAgent.slice(0,200);
   const row=[f2Rec.id,fgo,fi,fc,np,esFinal?1:0,ue,an,tl,
-    ...CATS.map(cat=>gv('u-'+cat)), ...CATS.map(cat=>gv('k-'+cat)),
+    ...CATS.map(c=>gv('u-'+c)), ...CATS.map(c=>gv('k-'+c)),
     totK,obs,ua,new Date().toISOString()];
   const res = await apiPost('LOTES', row);
   if(!res.ok){ alert('Error al guardar. Intentá de nuevo.'); setBtnLoading('f2-btn',false,txtOrig); return; }
@@ -605,7 +655,7 @@ async function f2Guardar(){
   else if(esFinal){chk.style.background='#f0fdf4';chkp.setAttribute('stroke','#16a34a');}
   else{chk.style.background='#eff6ff';chkp.setAttribute('stroke','#1d4ed8');}
   document.getElementById('f2-s-tit').textContent=esFinal?(diff===0?'Lote completo':'Lote cerrado con diferencia'):'Parcial N°'+np+' guardado';
-  document.getElementById('f2-s-sub').textContent=fgo+' · Ingreso: '+fmt(fi)+' → Clasif.: '+fmt(fc)+' ('+dias+' días)';
+  document.getElementById('f2-s-sub').textContent=fgo+' · Ingreso: '+fi+' → Clasif.: '+fc+' ('+dias+' días)';
   const pd=document.getElementById('f2-s-prog'); pd.style.display='block';
   const pct=Math.min(100,Math.round(an/tl*100));
   document.getElementById('f2-s-pf').style.width=pct+'%';
@@ -643,7 +693,166 @@ function f2Nuevo(){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
-initHeaders().then(()=>renderLista()).catch(e=>console.error(e));
+
+// ── CONFIG ────────────────────────────────────────────────────────────────────
+let supervisorPass = null;
+async function getPass() {
+  if (supervisorPass !== null) return supervisorPass;
+  try {
+    const r = await fetch(API + '?action=get_config');
+    const d = await r.json();
+    supervisorPass = d.ok ? d.pass : '1234';
+  } catch(e) { supervisorPass = '1234'; }
+  return supervisorPass;
+}
+
+// ── MODIFICAR RECEPCIÓN (F1) ──────────────────────────────────────────────────
+let f1mRec = null;
+
+function f1ModToggle() {
+  const form = document.getElementById('f1-mod-form');
+  const btn  = document.getElementById('f1-mod-toggle-btn');
+  const show = form.style.display === 'none';
+  form.style.display = show ? 'block' : 'none';
+  btn.textContent = show ? 'Ocultar modificación' : 'Modificar recepción del día anterior';
+  if (show) {
+    // Pre-fill yesterday's date
+    const d = new Date(); d.setDate(d.getDate()-1);
+    document.getElementById('f1m-fecha').value = d.toISOString().slice(0,10);
+  }
+}
+
+async function f1mBuscar() {
+  const fgo   = document.getElementById('f1m-fgo').value;
+  const fecha = document.getElementById('f1m-fecha').value;
+  document.getElementById('f1m-found').style.display    = 'none';
+  document.getElementById('f1m-notfound').style.display = 'none';
+  document.getElementById('f1m-btn').disabled = true;
+  f1mRec = null;
+  if (!fgo || !fecha) return;
+
+  // Validar que sea T+1: fecha del registro debe ser ayer o hoy
+  // Buscamos la recepción y verificamos su timestamp
+  invalidateCache();
+  const rows = await getRecepciones(true);
+  const found = rows.find(r => r[1]===fgo && String(r[2]).slice(0,10)===fecha);
+
+  if (!found) {
+    document.getElementById('f1m-notfound').style.display = 'block'; return;
+  }
+
+  // Verificar T+1: timestamp de la recepción (col 8 = índice 8)
+  const ts = found[8] || found[7]; // UserAgent is col 7, Timestamp col 8
+  const tsDate = ts ? new Date(ts) : null;
+  const now = new Date();
+  const diffHoras = tsDate ? (now - tsDate) / (1000*3600) : 999;
+
+  if (diffHoras > 48) {
+    document.getElementById('f1m-notfound').style.display = 'block'; return;
+  }
+
+  f1mRec = {id: found[0], fgo: found[1], fecha: String(found[2]).slice(0,10),
+             unid: Number(found[3]), tambores: found[4], comentarios: found[5]};
+
+  document.getElementById('f1m-unid').value        = f1mRec.unid || '';
+  document.getElementById('f1m-tambores').value    = f1mRec.tambores || '';
+  document.getElementById('f1m-comentarios').value = f1mRec.comentarios || '';
+
+  // Verificar si hay lotes parciales asociados
+  const lotes = await getLotes(true);
+  const tieneParc = lotes.some(l => l[0] === f1mRec.id);
+  document.getElementById('f1m-lotes-aviso').style.display = tieneParc ? 'block' : 'none';
+
+  document.getElementById('f1m-found').style.display    = 'block';
+  document.getElementById('f1m-notfound').style.display = 'none';
+  f1mCheck();
+}
+
+function f1mCheck() {
+  const unid = gv('f1m-unid');
+  document.getElementById('f1m-btn').disabled = !f1mRec || unid <= 0;
+}
+
+async function f1mGuardar() {
+  if (!f1mRec) return;
+  document.getElementById('f1m-btn').disabled = true;
+  document.getElementById('f1m-btn').textContent = 'Guardando...';
+
+  const unid       = Math.round(gv('f1m-unid'));
+  const tambores   = gv('f1m-tambores') || '';
+  const comentarios= document.getElementById('f1m-comentarios').value.trim();
+
+  // 1. Actualizar RECEPCIONES
+  const dataRec = encodeURIComponent(JSON.stringify({id: f1mRec.id, unidades: unid, tambores, comentarios}));
+  const r1 = await fetch(API + '?action=update_recepcion&data=' + dataRec);
+  const d1 = await r1.json();
+  if (!d1.ok) { alert('Error al actualizar: ' + d1.error); document.getElementById('f1m-btn').disabled=false; document.getElementById('f1m-btn').textContent='Confirmar modificación'; return; }
+
+  // 2. Si cambiaron las unidades, actualizar Total_Lote en LOTES
+  if (unid !== f1mRec.unid) {
+    const dataLot = encodeURIComponent(JSON.stringify({id_recepcion: f1mRec.id, nuevo_total: unid}));
+    await fetch(API + '?action=update_total_lote&data=' + dataLot);
+  }
+
+  invalidateCache();
+  const msg = document.getElementById('f1m-msg');
+  msg.className = 'msg ok';
+  msg.textContent = 'Recepción actualizada: ' + f1mRec.fgo + ' ' + fmt(f1mRec.fecha) + ' → ' + unid + ' unidades.';
+  document.getElementById('f1m-btn').textContent = 'Confirmar modificación';
+  document.getElementById('f1m-btn').disabled = false;
+  renderLista();
+}
+
+// ── CIERRE CON DIFERENCIA ─────────────────────────────────────────────────────
+let pendingGuardar = null; // función guardada para ejecutar tras confirmación
+
+async function f2GuardarConControl() {
+  if (!f2Rec) return;
+  const tl  = Number(f2Rec.unid);
+  const ap  = Number(f2Estado ? f2Estado.acum : 0);
+  const ue  = gv('f2-unid');
+  const an  = ap + ue;
+  const diff= an - tl;
+  const pct = tl > 0 ? Math.abs(diff) / tl * 100 : 0;
+  const esFinal = (an === tl);
+
+  // Sin diferencia → guardar directo
+  if (esFinal || pct === 0) { f2Guardar(); return; }
+
+  const signo  = diff > 0 ? 'sobrantes' : 'faltantes';
+  const detalle= `Diferencia: ${pct.toFixed(2)}% (${Math.abs(diff)} unidades ${signo})`;
+
+  if (pct <= 0.5) {
+    // Confirmación simple
+    document.getElementById('modal-titulo').textContent  = '¿Cerrar lote con diferencia?';
+    document.getElementById('modal-detalle').textContent = detalle;
+    document.getElementById('modal-confirmar').style.display = 'flex';
+    pendingGuardar = () => f2Guardar(true);
+  } else {
+    // Requiere contraseña
+    document.getElementById('pass-detalle').textContent = detalle;
+    document.getElementById('pass-input').value = '';
+    document.getElementById('pass-error').style.display = 'none';
+    document.getElementById('modal-pass').style.display = 'flex';
+    pendingGuardar = () => f2Guardar(true);
+  }
+}
+
+function modalCancelar()  { document.getElementById('modal-confirmar').style.display='none'; pendingGuardar=null; }
+function modalConfirmar() { document.getElementById('modal-confirmar').style.display='none'; if(pendingGuardar) pendingGuardar(); }
+function passCancelar()   { document.getElementById('modal-pass').style.display='none'; pendingGuardar=null; }
+
+async function passConfirmar() {
+  const input = document.getElementById('pass-input').value;
+  const pass  = await getPass();
+  if (input !== pass) {
+    document.getElementById('pass-error').style.display = 'block'; return;
+  }
+  document.getElementById('modal-pass').style.display = 'none';
+  if (pendingGuardar) pendingGuardar();
+}
+
+initHeaders().then(()=>{ renderLista(); getPass(); }).catch(e=>console.error(e));
 </script>
 </body>
 </html>
