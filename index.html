@@ -234,6 +234,9 @@ input:focus,select:focus{outline:none;border-color:#0078d4}
     </div>
 
     <button class="btn-main" id="f2-btn" onclick="f2GuardarConControl()" disabled style="display:none">Guardar</button>
+    <button class="btn-sec" id="f2-btn-forzar" onclick="f2ForzarCierre()" style="display:none;margin-top:8px;color:#d97706;border-color:#fde68a">
+      Cerrar lote con diferencia
+    </button>
   </div>
 
   <div class="card" id="f2-resumen-card" style="margin-top:8px;display:none">
@@ -276,9 +279,9 @@ input:focus,select:focus{outline:none;border-color:#0078d4}
 <!-- MODAL: contraseña supervisor -->
 <div id="modal-pass" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:12px;padding:24px;max-width:360px;width:90%;margin:auto">
-    <p style="font-size:16px;font-weight:600;margin-bottom:4px;color:#1a1a1a">Autorización requerida</p>
+    <p style="font-size:16px;font-weight:600;margin-bottom:4px;color:#1a1a1a">Autorización requerida — <span id="pass-nivel">Supervisor</span></p>
     <p style="font-size:13px;color:#666;margin-bottom:4px" id="pass-detalle"></p>
-    <p style="font-size:12px;color:#991b1b;margin-bottom:14px">La diferencia supera el 0,5% — requiere contraseña del supervisor.</p>
+    <p style="font-size:12px;color:#991b1b;margin-bottom:14px" id="pass-nivel-msg">Requiere autorización del <span id="pass-nivel2">supervisor</span>.</p>
     <input type="password" id="pass-input" placeholder="Contraseña del supervisor" style="width:100%;font-size:15px;margin-bottom:4px">
     <p style="font-size:12px;color:#991b1b;display:none" id="pass-error">Contraseña incorrecta</p>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px">
@@ -289,7 +292,7 @@ input:focus,select:focus{outline:none;border-color:#0078d4}
 </div>
 
 <script>
-const API = 'https://script.google.com/macros/s/AKfycbydNgWAGxitV_OqRUtTm3esNgArQopIZqMpElqoadU2dTQwMoxy_VZLQm8h4PYbZ_Ts/exec';
+const API = 'https://script.google.com/macros/s/AKfycbwRO_xsmIOTFtxUNwzCC6O_-317PE62VREOskaIPWs1Wi5sEQQNSf6FIH8FfkCNeVY6/exec';
 const CATS = ['AAA','AA','A','B','C','D'];
 const HDR_REC  = ['ID','Frigorifico','Fecha','Unidades','Tambores','Comentarios','Timestamp'];
 const HDR_LOT  = ['ID_Recepcion','Frigorifico','Fecha_Ingreso','Fecha_Clasif','Num_Parcial',
@@ -623,15 +626,37 @@ function f2ValidarBtn(){
   const an=ap+ue;
   const totU=CATS.reduce((s,cat)=>s+gv('u-'+cat),0);
   const err=catError();
-  const ok=fc&&fi&&fc>=fi&&ue>0&&totU>0&&!err&&an<=tl;
+  const ok=fc&&fi&&fc>=fi&&ue>0&&totU>0&&!err;
   document.getElementById('f2-btn').disabled=!ok;
   if(ok){
-    document.getElementById('f2-btn').textContent=
-      an===tl?'Guardar — cerrar lote':'Guardar parcial N°'+(f2Estado?f2Estado.numParcial:1);
-  } else { document.getElementById('f2-btn').textContent='Guardar'; }
+    if(an===tl){
+      document.getElementById('f2-btn').textContent='Guardar — cerrar lote';
+      document.getElementById('f2-btn').disabled=false;
+    } else if(an<tl){
+      document.getElementById('f2-btn').textContent='Guardar parcial N°'+(f2Estado?f2Estado.numParcial:1);
+      document.getElementById('f2-btn').disabled=false;
+    } else {
+      // an > tl: solo permitir mediante forzar
+      document.getElementById('f2-btn').textContent='Guardar';
+      document.getElementById('f2-btn').disabled=true;
+    }
+  } else {
+    document.getElementById('f2-btn').textContent='Guardar';
+  }
+  // Botón forzar cierre: visible siempre que haya diferencia y el form sea válido
+  const btnForzar = document.getElementById('f2-btn-forzar');
+  if(btnForzar){
+    const showForzar = ok && tl>0 && an>0 && an!==tl;
+    btnForzar.style.display = showForzar ? 'block' : 'none';
+    if(showForzar){
+      const pctDiff = Math.abs(an-tl)/tl*100;
+      const signo = an>tl ? 'sobrantes' : 'faltantes';
+      btnForzar.textContent = `Cerrar lote con diferencia (${pctDiff.toFixed(1)}% — ${Math.abs(an-tl)} un ${signo})`;
+    }
+  }
 }
 
-async function f2Guardar(){
+async function f2Guardar(forceClose=false){
   const txtOrig = document.getElementById('f2-btn').textContent;
   setBtnLoading('f2-btn', true, 'Guardando...');
   const fgo=document.getElementById('f2-fgo').value;
@@ -639,7 +664,7 @@ async function f2Guardar(){
   const fc=document.getElementById('f2-fc').value;
   const ue=gv('f2-unid'), obs=document.getElementById('f2-obs').value;
   const tl=f2Rec.unid, ap=f2Estado?f2Estado.acum:0, an=ap+ue;
-  const esFinal=an>=tl, diff=an-tl, np=f2Estado?f2Estado.numParcial:1;
+  const esFinal=(an===tl||forceClose), diff=an-tl, np=f2Estado?f2Estado.numParcial:1;
   let totU=0,totK=0;
   CATS.forEach(c=>{totU+=gv('u-'+c);totK+=gv('k-'+c);});
   const ua=navigator.userAgent.slice(0,200);
@@ -694,16 +719,57 @@ function f2Nuevo(){
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 
+// ── FORZAR CIERRE CON DIFERENCIA ─────────────────────────────────────────────
+// Umbrales: <=0.5% confirmación simple | 0.5%-5% supervisor | >5% administrador
+function f2ForzarCierre() {
+  if (!f2Rec) return;
+  const tl   = Number(f2Rec.unid);
+  const ap   = Number(f2Estado ? f2Estado.acum : 0);
+  const ue   = gv('f2-unid');
+  const an   = ap + ue;
+  const diff = an - tl;
+  const pct  = tl > 0 ? Math.abs(diff) / tl * 100 : 0;
+  const signo  = diff > 0 ? 'sobrantes' : 'faltantes';
+  const detalle= `Diferencia: ${pct.toFixed(2)}% (${Math.abs(diff)} unidades ${signo})`;
+
+  if (pct <= 0.5) {
+    // Confirmación simple
+    document.getElementById('modal-titulo').textContent  = '¿Cerrar lote con diferencia?';
+    document.getElementById('modal-detalle').textContent = detalle;
+    document.getElementById('modal-confirmar').style.display = 'flex';
+    pendingGuardar = () => f2Guardar(true);
+  } else if (pct <= 5) {
+    // Contraseña supervisor
+    document.getElementById('pass-nivel').textContent   = 'Supervisor';
+    document.getElementById('pass-detalle').textContent = detalle;
+    document.getElementById('pass-input').value = '';
+    document.getElementById('pass-error').style.display = 'none';
+    document.getElementById('modal-pass').style.display = 'flex';
+    passNivel = 'supervisor';
+    pendingGuardar = () => f2Guardar(true);
+  } else {
+    // Contraseña administrador
+    document.getElementById('pass-nivel').textContent   = 'Administrador';
+    document.getElementById('pass-detalle').textContent = detalle;
+    document.getElementById('pass-input').value = '';
+    document.getElementById('pass-error').style.display = 'none';
+    document.getElementById('modal-pass').style.display = 'flex';
+    passNivel = 'admin';
+    pendingGuardar = () => f2Guardar(true);
+  }
+}
+
 // ── CONFIG ────────────────────────────────────────────────────────────────────
-let supervisorPass = null;
-async function getPass() {
-  if (supervisorPass !== null) return supervisorPass;
+let cachedConfig = null;
+let passNivel = 'supervisor';
+async function getConfig() {
+  if (cachedConfig) return cachedConfig;
   try {
     const r = await fetch(API + '?action=get_config');
     const d = await r.json();
-    supervisorPass = d.ok ? d.pass : '1234';
-  } catch(e) { supervisorPass = '1234'; }
-  return supervisorPass;
+    cachedConfig = {passSupervisor: d.passSupervisor||d.pass||'1234', passAdmin: d.passAdmin||'admin1234'};
+  } catch(e) { cachedConfig = {passSupervisor:'1234', passAdmin:'admin1234'}; }
+  return cachedConfig;
 }
 
 // ── MODIFICAR RECEPCIÓN (F1) ──────────────────────────────────────────────────
@@ -807,35 +873,9 @@ async function f1mGuardar() {
 let pendingGuardar = null; // función guardada para ejecutar tras confirmación
 
 async function f2GuardarConControl() {
-  if (!f2Rec) return;
-  const tl  = Number(f2Rec.unid);
-  const ap  = Number(f2Estado ? f2Estado.acum : 0);
-  const ue  = gv('f2-unid');
-  const an  = ap + ue;
-  const diff= an - tl;
-  const pct = tl > 0 ? Math.abs(diff) / tl * 100 : 0;
-  const esFinal = (an === tl);
-
-  // Sin diferencia → guardar directo
-  if (esFinal || pct === 0) { f2Guardar(); return; }
-
-  const signo  = diff > 0 ? 'sobrantes' : 'faltantes';
-  const detalle= `Diferencia: ${pct.toFixed(2)}% (${Math.abs(diff)} unidades ${signo})`;
-
-  if (pct <= 0.5) {
-    // Confirmación simple
-    document.getElementById('modal-titulo').textContent  = '¿Cerrar lote con diferencia?';
-    document.getElementById('modal-detalle').textContent = detalle;
-    document.getElementById('modal-confirmar').style.display = 'flex';
-    pendingGuardar = () => f2Guardar(true);
-  } else {
-    // Requiere contraseña
-    document.getElementById('pass-detalle').textContent = detalle;
-    document.getElementById('pass-input').value = '';
-    document.getElementById('pass-error').style.display = 'none';
-    document.getElementById('modal-pass').style.display = 'flex';
-    pendingGuardar = () => f2Guardar(true);
-  }
+  // This handles exact match (esFinal) or over-limit (blocked by btn)
+  // Under-limit with force close is handled by f2ForzarCierre
+  f2Guardar();
 }
 
 function modalCancelar()  { document.getElementById('modal-confirmar').style.display='none'; pendingGuardar=null; }
@@ -843,16 +883,17 @@ function modalConfirmar() { document.getElementById('modal-confirmar').style.dis
 function passCancelar()   { document.getElementById('modal-pass').style.display='none'; pendingGuardar=null; }
 
 async function passConfirmar() {
-  const input = document.getElementById('pass-input').value;
-  const pass  = await getPass();
-  if (input !== pass) {
+  const input  = document.getElementById('pass-input').value;
+  const config = await getConfig();
+  const expected = passNivel === 'admin' ? config.passAdmin : config.passSupervisor;
+  if (input !== expected) {
     document.getElementById('pass-error').style.display = 'block'; return;
   }
   document.getElementById('modal-pass').style.display = 'none';
   if (pendingGuardar) pendingGuardar();
 }
 
-initHeaders().then(()=>{ renderLista(); getPass(); }).catch(e=>console.error(e));
+initHeaders().then(()=>{ renderLista(); getConfig(); }).catch(e=>console.error(e));
 </script>
 </body>
 </html>
