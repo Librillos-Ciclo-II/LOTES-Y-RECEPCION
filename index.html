@@ -372,7 +372,8 @@ async function buscarRecepcion(fgo, fecha){
   const found = rows.find(r=>r[1]===fgo && String(r[2]).slice(0,10)===fecha);
   if(!found) return null;
   return {id:found[0], fgo:found[1], fecha:String(found[2]).slice(0,10),
-    unid:Number(found[3]), tambores:found[4], comentarios:found[5]};
+    unid:Number(found[3]), kgs:found[4], kg_unid:found[5],
+    tambores:found[6], comentarios:found[7]};
 }
 
 async function buscarLotesAbiertos(fgo, fecha){
@@ -551,7 +552,8 @@ async function f2Buscar(){
   const recRows  = await getRecepciones(true);
   const recFound = recRows.find(r=>r[1]===fgo && String(r[2]).slice(0,10)===fecha);
   f2Rec = recFound ? {id:recFound[0], fgo:recFound[1], fecha:String(recFound[2]).slice(0,10),
-    unid:Number(recFound[3]), tambores:recFound[4], comentarios:recFound[5]} : null;
+    unid:Number(recFound[3]), kgs:recFound[4], kg_unid:recFound[5],
+    tambores:recFound[6], comentarios:recFound[7]} : null;
   const filasLote = allLotes.filter(r=>r[1]===fgo && String(r[2]).slice(0,10)===fecha);
   const yaCerrado = filasLote.some(r=>String(r[5])==='1'||r[5]===true||r[5]==='TRUE');
   if(yaCerrado && f2Rec){
@@ -580,6 +582,8 @@ async function f2Buscar(){
     <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px">
       <span style="color:#555">Total del lote</span><strong>${f2Rec.unid} unidades</strong>
     </div>`;
+  if(f2Rec.kgs) fhtml+=`<div style="font-size:12px;color:#666">Kgs recibidos: <strong>${String(f2Rec.kgs).replace('.',',')} kg</strong></div>`;
+  if(f2Rec.kg_unid) fhtml+=`<div style="font-size:12px;color:#666">Kg. promedio por unidad: <strong>${String(f2Rec.kg_unid).replace('.',',')} kg/un</strong></div>`;
   if(f2Rec.tambores) fhtml+=`<div style="font-size:12px;color:#666">Tambores: ${f2Rec.tambores}</div>`;
   if(f2Rec.comentarios) fhtml+=`<div style="font-size:12px;color:#666;margin-top:2px">Obs recepción: ${f2Rec.comentarios}</div>`;
   fhtml+='</div>';
