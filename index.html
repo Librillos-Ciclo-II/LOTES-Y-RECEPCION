@@ -302,7 +302,7 @@ input:focus,select:focus{outline:none;border-color:#0078d4}
 </div>
 
 <script>
-const API = 'https://script.google.com/macros/s/AKfycbwRO_xsmIOTFtxUNwzCC6O_-317PE62VREOskaIPWs1Wi5sEQQNSf6FIH8FfkCNeVY6/exec';
+const API = 'https://script.google.com/macros/s/AKfycbzemzflPEpQ96kIzQ33fX74NtDUxtH5wxaBM-ylEdc3SNVxpnOmC_1xz35vcf0tdprl/exec';
 const CATS = ['AAA','AA','A','B','C','D'];
 const HDR_REC  = ['ID','Frigorifico','Fecha','Unidades','Tambores','Comentarios','Timestamp'];
 const HDR_LOT  = ['ID_Recepcion','Frigorifico','Fecha_Ingreso','Fecha_Clasif','Num_Parcial',
@@ -331,41 +331,80 @@ async function apiGet(sheet){
   return d.ok ? d.values : [];
 }
 
+async function apiGetAll(){
+  // Una sola llamada que trae RECEPCIONES + LOTES + CONFIG
+  try {
+    const r = await fetch(API+'?action=get_all');
+    const d = await r.json();
+    return d.ok ? d : null;
+  } catch(e) { console.warn('apiGetAll error:', e); return null; }
+}
+
+let _headersChecked = false;
 async function initHeaders(){
-  // Check if RECEPCIONES has headers, if not add them
-  const rows = await apiGet('RECEPCIONES');
-  if(!rows.length || rows[0][0] !== 'ID'){
-    await apiPost('RECEPCIONES', HDR_REC);
+  if(_headersChecked) return;
+  let rows = [], rows2 = [];
+
+  // Intentar get_all (v2) — si falla, fallback a llamadas individuales (v1)
+  const d = await apiGetAll();
+  if(d) {
+    rows  = d.recepciones || [];
+    rows2 = d.lotes       || [];
+    if(d.config) cachedConfig = d.config;
+  } else {
+    // Fallback: llamadas individuales (compatible con Apps Script v1)
+    console.warn('get_all no disponible, usando fallback individual');
+    const [r1, r2] = await Promise.all([apiGet('RECEPCIONES'), apiGet('LOTES')]);
+    rows  = r1 || [];
+    rows2 = r2 || [];
+    // Config por separado
+    try {
+      const rc = await fetch(API+'?action=get_config');
+      const dc = await rc.json();
+      if(dc.ok) cachedConfig = {passSupervisor: dc.passSupervisor||dc.pass||'1234', passAdmin: dc.passAdmin||'admin1234'};
+    } catch(e){ /* usa defaults */ }
   }
-  const rows2 = await apiGet('LOTES');
-  if(!rows2.length || rows2[0][0] !== 'ID_Recepcion'){
-    await apiPost('LOTES', HDR_LOT);
-  }
+
+  // Verificar headers (solo si es tabla nueva/vacía)
+  const fixes = [];
+  if(!rows.length  || rows[0][0]  !== 'ID')             fixes.push(apiPost('RECEPCIONES', HDR_REC));
+  if(!rows2.length || rows2[0][0] !== 'ID_Recepcion')   fixes.push(apiPost('LOTES', HDR_LOT));
+  if(fixes.length) await Promise.all(fixes);
+  // Poblar cache
+  cacheRec = rows.length  && rows[0][0]==='ID'           ? rows.slice(1).filter(r=>r[0])  : rows.filter(r=>r[0]);
+  cacheLot = rows2.length && rows2[0][0]==='ID_Recepcion'? rows2.slice(1).filter(r=>r[0]) : rows2.filter(r=>r[0]);
+  cacheTsRec = Date.now();
+  cacheTsLot = Date.now();
+  _headersChecked = true;
 }
 
 // ── CACHE local para búsquedas rápidas ───────────────────────────────────────
 let cacheRec = null;
 let cacheLot = null;
-let cacheTs  = 0;
-const CACHE_TTL = 30000; // 30 segundos
+let cacheTsRec = 0;
+let cacheTsLot = 0;
+const CACHE_TTL = 60000; // 60s — reduce llamadas a la API // 30 segundos
 
 async function getRecepciones(force=false){
-  if(!force && cacheRec && Date.now()-cacheTs < CACHE_TTL) return cacheRec;
+  if(!force && cacheRec && Date.now()-cacheTsRec < CACHE_TTL) return cacheRec;
   const rows = await apiGet('RECEPCIONES');
   cacheRec = rows.slice(1).filter(r=>r[0]);
-  cacheTs = Date.now();
+  cacheTsRec = Date.now();
   return cacheRec;
 }
 
 async function getLotes(force=false){
-  if(!force && cacheLot && Date.now()-cacheTs < CACHE_TTL) return cacheLot;
+  if(!force && cacheLot && Date.now()-cacheTsLot < CACHE_TTL) return cacheLot;
   const rows = await apiGet('LOTES');
   cacheLot = rows.slice(1).filter(r=>r[0]);
-  cacheTs = Date.now();
+  cacheTsLot = Date.now();
   return cacheLot;
 }
 
-function invalidateCache(){ cacheRec=null; cacheLot=null; }
+function invalidateCache(which='all'){
+  if(which==='rec'||which==='all'){ cacheRec=null; cacheTsRec=0; }
+  if(which==='lot'||which==='all'){ cacheLot=null; cacheTsLot=0; }
+}
 
 async function buscarRecepcion(fgo, fecha){
   const rows = await getRecepciones();
@@ -401,8 +440,7 @@ async function renderLotesRecientes(){
   const card=document.getElementById('f2-resumen-card');
   const el=document.getElementById('f2-resumen-items');
   if(!card) return; card.style.display='block';
-  invalidateCache();
-  const rows=await getLotes(true);
+  const rows=await getLotes();
   if(!rows||!rows.length){el.innerHTML='<p style="font-size:12px;color:#999">Sin lotes aún</p>';return;}
   const mapa={}; rows.forEach(r=>{const k=r[1]+'||'+String(r[2]).slice(0,10); mapa[k]=r;});
   const lista=Object.values(mapa).reverse().slice(0,10);
@@ -484,7 +522,7 @@ async function f1Guardar(){
   const res = await apiPost('RECEPCIONES', [id,fgo,fecha,unid,kgs,kg_unid,tamb,com,ua1,ts]);
   if(!res.ok){ alert('Error al guardar. Intentá de nuevo.'); setBtnLoading('f1-btn',false,'Registrar ingreso'); return; }
 
-  invalidateCache();
+  invalidateCache('rec');
   document.getElementById('f1-s-det').textContent = fgo+' — '+fmt(fecha)+' · '+unid+' unidades'+(kgs?' · '+kgs+' kgs':'')+(tamb?' · '+tamb+' tambores':'');
   let html = row2('Frigorífico',fgo)+row2('Fecha',fmt(fecha))+row2('Unidades',unid);
   if(tamb)  html+=row2('Tambores',tamb);
@@ -492,7 +530,7 @@ async function f1Guardar(){
   document.getElementById('f1-s-res').innerHTML = '<table style="width:100%;font-size:13px;border-collapse:collapse">'+html+'</table>';
   document.getElementById('f1-form').classList.add('hidden');
   document.getElementById('f1-success').classList.remove('hidden');
-  renderLista();
+  renderLista(true);
 }
 
 function row2(lbl,val){
@@ -511,11 +549,17 @@ function f1Nuevo(){
   document.getElementById('f1-btn').textContent='Registrar ingreso';
 }
 
-async function renderLista(){
+async function renderLista(force=false){
   const el = document.getElementById('f1-lista');
   el.innerHTML='<p style="font-size:12px;color:#999">Cargando...</p>';
-  const rows = await getRecepciones(true);
-  if(!rows.length){el.innerHTML='<p style="font-size:12px;color:#999">Sin registros aún</p>';return;}
+  let rows;
+  try {
+    rows = await getRecepciones(force);
+  } catch(e) {
+    el.innerHTML='<p style="font-size:12px;color:#dc2626">Error de conexión. Recargá la página.</p>';
+    return;
+  }
+  if(!rows||!rows.length){el.innerHTML='<p style="font-size:12px;color:#999">Sin registros aún</p>';return;}
   const recientes = [...rows].reverse().slice(0,8);
   el.innerHTML = recientes.map(r=>`
     <div class="recep-row">
@@ -547,9 +591,13 @@ async function f2Buscar(){
 
   info.innerHTML='<p style="font-size:13px;color:#666;padding:8px 0"><span class="spinner" style="border-color:rgba(0,0,0,.2);border-top-color:#666"></span>Buscando lote...</p>';
 
-  invalidateCache();
-  const allLotes = await getLotes(true);
-  const recRows  = await getRecepciones(true);
+  let allLotes, recRows;
+  try {
+    [allLotes, recRows] = await Promise.all([getLotes(), getRecepciones()]);
+  } catch(e) {
+    info.innerHTML='<div class="card" style="border-color:#fca5a5"><p style="font-size:13px;color:#991b1b;font-weight:600">Error de conexión</p><p style="font-size:12px;color:#666;margin-top:4px">No se pudo conectar al servidor. Verificá tu conexión e intentá de nuevo.</p></div>';
+    return;
+  }
   const recFound = recRows.find(r=>r[1]===fgo && String(r[2]).slice(0,10)===fecha);
   f2Rec = recFound ? {id:recFound[0], fgo:recFound[1], fecha:String(recFound[2]).slice(0,10),
     unid:Number(recFound[3]), kgs:recFound[4], kg_unid:recFound[5],
@@ -796,7 +844,7 @@ function f2ForzarCierre() {
 let cachedConfig = null;
 let passNivel = 'supervisor';
 async function getConfig() {
-  if (cachedConfig) return cachedConfig;
+  if (cachedConfig) return cachedConfig;  // initHeaders ya lo precargó
   try {
     const r = await fetch(API + '?action=get_config');
     const d = await r.json();
@@ -899,7 +947,7 @@ async function f1mGuardar() {
   msg.textContent = 'Recepción actualizada: ' + f1mRec.fgo + ' ' + fmt(f1mRec.fecha) + ' → ' + unid + ' unidades.';
   document.getElementById('f1m-btn').textContent = 'Confirmar modificación';
   document.getElementById('f1m-btn').disabled = false;
-  renderLista();
+  renderLista(true);
 }
 
 // ── CIERRE CON DIFERENCIA ─────────────────────────────────────────────────────
@@ -926,7 +974,10 @@ async function passConfirmar() {
   if (pendingGuardar) pendingGuardar();
 }
 
-initHeaders().then(()=>{ renderLista(); getConfig(); }).catch(e=>console.error(e));
+// UNA sola llamada al inicio trae todo (recepciones + lotes + config)
+initHeaders()
+  .then(() => renderLista())  // cache ya listo, renderLista es instantáneo
+  .catch(e=>console.error(e));
 </script>
 </body>
 </html>
