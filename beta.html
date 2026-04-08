@@ -56,7 +56,7 @@ input:focus,select:focus{outline:none;border-color:#0078d4}
 </head>
 <body style="background:#e0f2fe">
 <div style="background:#0284c7;color:#fff;text-align:center;padding:6px;font-size:13px;font-weight:600;letter-spacing:1px;position:sticky;top:0;z-index:999">
-  ENTORNO BETA V2— los cambios se guardan en el Sheet real
+  ENTORNO BETA V3 — los cambios se guardan en el Sheet real
 </div>
 <div class="app">
 
@@ -533,7 +533,7 @@ async function f1Guardar(){
   document.getElementById('f1-s-res').innerHTML = '<table style="width:100%;font-size:13px;border-collapse:collapse">'+html+'</table>';
   document.getElementById('f1-form').classList.add('hidden');
   document.getElementById('f1-success').classList.remove('hidden');
-  renderLista();
+  renderLista(true);
 }
 
 function row2(lbl,val){
@@ -552,12 +552,12 @@ function f1Nuevo(){
   document.getElementById('f1-btn').textContent='Registrar ingreso';
 }
 
-async function renderLista(){
+async function renderLista(force=false){
   const el = document.getElementById('f1-lista');
   el.innerHTML='<p style="font-size:12px;color:#999">Cargando...</p>';
   let rows;
   try {
-    rows = await getRecepciones(true);
+    rows = await getRecepciones(force);
   } catch(e) {
     el.innerHTML='<p style="font-size:12px;color:#dc2626">Error de conexión. Recargá la página.</p>';
     return;
@@ -950,7 +950,7 @@ async function f1mGuardar() {
   msg.textContent = 'Recepción actualizada: ' + f1mRec.fgo + ' ' + fmt(f1mRec.fecha) + ' → ' + unid + ' unidades.';
   document.getElementById('f1m-btn').textContent = 'Confirmar modificación';
   document.getElementById('f1m-btn').disabled = false;
-  renderLista();
+  renderLista(true);
 }
 
 // ── CIERRE CON DIFERENCIA ─────────────────────────────────────────────────────
