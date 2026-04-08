@@ -84,9 +84,19 @@ input:focus,select:focus{outline:none;border-color:#0078d4}
           <input type="date" id="f1-fecha" onchange="f1Check()">
         </div>
       </div>
-      <div style="margin-bottom:12px">
-        <label class="label">Cantidad de unidades <span class="req">*</span></label>
-        <input type="number" id="f1-unid" min="1" step="1" placeholder="ej. 800" oninput="f1Check()" onkeypress="return event.charCode>=48&&event.charCode<=57">
+      <div class="row2" style="margin-bottom:12px">
+        <div>
+          <label class="label">Cantidad de unidades <span class="req">*</span></label>
+          <input type="number" id="f1-unid" min="1" step="1" placeholder="ej. 800" oninput="f1Check();f1KgCalc()" onkeypress="return event.charCode>=48&&event.charCode<=57">
+        </div>
+        <div>
+          <label class="label">Kgs (opcional)</label>
+          <input type="text" id="f1-kgs" placeholder="ej. 12450,5" oninput="f1KgCalc()">
+        </div>
+      </div>
+      <div style="margin-bottom:12px;padding:8px 12px;background:#f9f9f9;border-radius:8px;display:none" id="f1-kg-unid-wrap">
+        <span style="font-size:12px;color:#666">Kg. por unidad promedio: </span>
+        <strong style="font-size:13px" id="f1-kg-unid">—</strong>
       </div>
       <div style="margin-bottom:12px">
         <label class="label">Cantidad de tambores (opcional)</label>
@@ -422,6 +432,21 @@ function setBtnLoading(id, loading, txt){
 // ── FORMULARIO 1 ─────────────────────────────────────────────────────────────
 document.getElementById('f1-fecha').value = today();
 
+function f1KgCalc(){
+  const kgsRaw = document.getElementById('f1-kgs').value.replace(',','.');
+  const kgs    = parseFloat(kgsRaw) || 0;
+  const unid   = gv('f1-unid');
+  const wrap   = document.getElementById('f1-kg-unid-wrap');
+  const label  = document.getElementById('f1-kg-unid');
+  if(kgs > 0 && unid > 0){
+    wrap.style.display = 'block';
+    label.textContent  = (kgs / unid).toFixed(3) + ' kg/un';
+  } else {
+    wrap.style.display = 'none';
+    label.textContent  = '—';
+  }
+}
+
 function f1Check(){
   const ok = document.getElementById('f1-fgo').value &&
              document.getElementById('f1-fecha').value &&
@@ -451,12 +476,15 @@ async function f1Guardar(){
   }
   setBtnLoading('f1-btn', true, 'Guardando...');
 
+  const kgsRaw  = document.getElementById('f1-kgs').value.replace(',','.');
+  const kgs     = parseFloat(kgsRaw) || '';
+  const kg_unid = (kgs && unid) ? parseFloat((kgs/unid).toFixed(4)) : '';
   const ua1=navigator.userAgent.slice(0,200);
-  const res = await apiPost('RECEPCIONES', [id,fgo,fecha,unid,tamb,com,ua1,ts]);
+  const res = await apiPost('RECEPCIONES', [id,fgo,fecha,unid,kgs,kg_unid,tamb,com,ua1,ts]);
   if(!res.ok){ alert('Error al guardar. Intentá de nuevo.'); setBtnLoading('f1-btn',false,'Registrar ingreso'); return; }
 
   invalidateCache();
-  document.getElementById('f1-s-det').textContent = fgo+' — '+fmt(fecha)+' · '+unid+' unidades'+(tamb?' · '+tamb+' tambores':'');
+  document.getElementById('f1-s-det').textContent = fgo+' — '+fmt(fecha)+' · '+unid+' unidades'+(kgs?' · '+kgs+' kgs':'')+(tamb?' · '+tamb+' tambores':'');
   let html = row2('Frigorífico',fgo)+row2('Fecha',fmt(fecha))+row2('Unidades',unid);
   if(tamb)  html+=row2('Tambores',tamb);
   if(com)   html+=row2('Comentarios',com);
@@ -475,7 +503,8 @@ function f1Nuevo(){
   document.getElementById('f1-success').classList.add('hidden');
   document.getElementById('f1-fgo').value='';
   document.getElementById('f1-fecha').value=today();
-  ['f1-unid','f1-tambores','f1-comentarios'].forEach(id=>document.getElementById(id).value='');
+  ['f1-unid','f1-kgs','f1-tambores','f1-comentarios'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('f1-kg-unid-wrap').style.display='none';
   document.getElementById('f1-msg').className='msg';
   document.getElementById('f1-btn').disabled=true;
   document.getElementById('f1-btn').textContent='Registrar ingreso';
