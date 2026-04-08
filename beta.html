@@ -54,7 +54,10 @@ input:focus,select:focus{outline:none;border-color:#0078d4}
 @keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
-<body>
+<body style="background:#e0f2fe">
+<div style="background:#0284c7;color:#fff;text-align:center;padding:6px;font-size:13px;font-weight:600;letter-spacing:1px;position:sticky;top:0;z-index:999">
+  ENTORNO BETA — los cambios se guardan en el Sheet real
+</div>
 <div class="app">
 
 <div class="nav">
@@ -302,7 +305,7 @@ input:focus,select:focus{outline:none;border-color:#0078d4}
 </div>
 
 <script>
-const API = 'https://script.google.com/macros/s/AKfycbwRO_xsmIOTFtxUNwzCC6O_-317PE62VREOskaIPWs1Wi5sEQQNSf6FIH8FfkCNeVY6/exec';
+const API = 'https://script.google.com/macros/s/AKfycbyUriV9ehnNUCpIbZZkRVfXEMBTKjLRYhOfAD4hSa-kKF3XJc5vQdClxU1dOSDfLM_A-317PE62VREOskaIPWs1Wi5sEQQNSf6FIH8FfkCNeVY6/exec';
 const CATS = ['AAA','AA','A','B','C','D'];
 const HDR_REC  = ['ID','Frigorifico','Fecha','Unidades','Tambores','Comentarios','Timestamp'];
 const HDR_LOT  = ['ID_Recepcion','Frigorifico','Fecha_Ingreso','Fecha_Clasif','Num_Parcial',
@@ -331,18 +334,31 @@ async function apiGet(sheet){
   return d.ok ? d.values : [];
 }
 
+async function apiGetAll(){
+  // Una sola llamada que trae RECEPCIONES + LOTES + CONFIG
+  const r = await fetch(API+'?action=get_all');
+  const d = await r.json();
+  return d.ok ? d : null;
+}
+
 let _headersChecked = false;
 async function initHeaders(){
   if(_headersChecked) return;
-  // Ambas solapas en paralelo
-  const [rows, rows2] = await Promise.all([apiGet('RECEPCIONES'), apiGet('LOTES')]);
+  // UNA sola llamada que trae todo — elimina cold start duplicado
+  const d = await apiGetAll();
+  if(!d) return;
+  const rows  = d.recepciones || [];
+  const rows2 = d.lotes       || [];
+  // Config cache
+  if(d.config) cachedConfig = d.config;
+  // Verificar headers (solo si es tabla nueva/vacía)
   const fixes = [];
-  if(!rows.length || rows[0][0] !== 'ID')       fixes.push(apiPost('RECEPCIONES', HDR_REC));
-  if(!rows2.length || rows2[0][0] !== 'ID_Recepcion') fixes.push(apiPost('LOTES', HDR_LOT));
+  if(!rows.length  || rows[0][0]  !== 'ID')             fixes.push(apiPost('RECEPCIONES', HDR_REC));
+  if(!rows2.length || rows2[0][0] !== 'ID_Recepcion')   fixes.push(apiPost('LOTES', HDR_LOT));
   if(fixes.length) await Promise.all(fixes);
-  // Poblar cache con los datos que ya trajimos
-  cacheRec = rows.slice(1).filter(r=>r[0]);
-  cacheLot = rows2.slice(1).filter(r=>r[0]);
+  // Poblar cache
+  cacheRec = rows.length  && rows[0][0]==='ID'           ? rows.slice(1).filter(r=>r[0])  : rows.filter(r=>r[0]);
+  cacheLot = rows2.length && rows2[0][0]==='ID_Recepcion'? rows2.slice(1).filter(r=>r[0]) : rows2.filter(r=>r[0]);
   cacheTsRec = Date.now();
   cacheTsLot = Date.now();
   _headersChecked = true;
@@ -555,9 +571,9 @@ async function f2Buscar(){
 
   info.innerHTML='<p style="font-size:13px;color:#666;padding:8px 0"><span class="spinner" style="border-color:rgba(0,0,0,.2);border-top-color:#666"></span>Buscando lote...</p>';
 
-  invalidateCache();
-  // Ambas llamadas en paralelo — reducir latencia a la mitad
-  const [allLotes, recRows] = await Promise.all([getLotes(true), getRecepciones(true)]);
+  // Solo hacer refresh si el cache está vencido o fue invalidado
+  // No invalidar aquí — el usuario apenas eligió fgo+fecha, nada cambió
+  const [allLotes, recRows] = await Promise.all([getLotes(), getRecepciones()]);
   const recFound = recRows.find(r=>r[1]===fgo && String(r[2]).slice(0,10)===fecha);
   f2Rec = recFound ? {id:recFound[0], fgo:recFound[1], fecha:String(recFound[2]).slice(0,10),
     unid:Number(recFound[3]), kgs:recFound[4], kg_unid:recFound[5],
@@ -804,7 +820,7 @@ function f2ForzarCierre() {
 let cachedConfig = null;
 let passNivel = 'supervisor';
 async function getConfig() {
-  if (cachedConfig) return cachedConfig;
+  if (cachedConfig) return cachedConfig;  // initHeaders ya lo precargó
   try {
     const r = await fetch(API + '?action=get_config');
     const d = await r.json();
@@ -934,9 +950,9 @@ async function passConfirmar() {
   if (pendingGuardar) pendingGuardar();
 }
 
-// Precargar todo en paralelo al inicio — el usuario no espera nada
+// UNA sola llamada al inicio trae todo (recepciones + lotes + config)
 initHeaders()
-  .then(() => Promise.all([renderLista(), getConfig()]))
+  .then(() => renderLista())  // cache ya listo, renderLista es instantáneo
   .catch(e=>console.error(e));
 </script>
 </body>
