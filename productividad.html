@@ -227,6 +227,19 @@
     border-radius: 4px;
   }
 
+  .actividad-chip {
+    display: inline-block;
+    background: var(--accent-light);
+    color: #8a6d10;
+    font-size: 0.85rem;
+    font-weight: 700;
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1.5px solid var(--accent);
+    width: 100%;
+    text-align: center;
+  }
+
   .hidden { display: none !important; }
 
   .resumen-dia {
@@ -296,15 +309,10 @@
       </select>
     </div>
 
-    <div id="areaInfo" class="hidden" style="margin-bottom: 14px;">
-      <span class="badge-area" id="areaLabel"></span>
-    </div>
-
-    <div class="field">
-      <label>Actividad *</label>
-      <select id="actividad" required>
-        <option value="">— Seleccionar —</option>
-      </select>
+    <div id="actividadInfo" class="hidden" style="margin-bottom: 14px;">
+      <label style="display:block;font-size:0.8rem;font-weight:600;color:var(--text-muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:0.3px;">Actividad</label>
+      <div class="actividad-chip" id="actividadLabel"></div>
+      <input type="hidden" id="actividad" value="">
     </div>
 
     <div class="field" id="unidadesField">
@@ -351,7 +359,7 @@
 //  CONFIG
 // ============================================================
 // ⚠️ REEMPLAZAR con la URL del nuevo Apps Script de RRHH después del deploy
-const API = 'https://script.google.com/macros/s/AKfycby-dqfimGTJ1rrz4haDXvhUW4zdGZKsnU4mq12X-xi1CRKW3iTblSgSV8zHQIJaFH4X/exec';
+const API = 'https://script.google.com/macros/s/PEGAR_ACA_EL_ID_DEL_DEPLOY_RRHH/exec';
 const CACHE_TTL = 30000;
 
 let operarios = [];
@@ -449,22 +457,21 @@ async function init() {
       selOp.appendChild(o);
     });
 
-    // Parse PARAMETROS: [Actividad, Tipo, Tarifa_Base, Umbral_Plus, Plus_Por_Unidad]
-    parametros = params.slice(1).filter(r => r[0]).map(r => ({
-      actividad: String(r[0]).trim(),
-      tipo: String(r[1]).trim().toUpperCase(),
-      tarifaBase: parseFloat(r[2]) || 0,
-      umbralPlus: parseFloat(r[3]) || 0,
-      plusPorUnidad: parseFloat(r[4]) || 0
-    }));
-
-    // Populate actividades dropdown
-    const selAct = document.getElementById('actividad');
-    parametros.forEach(p => {
-      const o = document.createElement('option');
-      o.value = p.actividad;
-      o.textContent = p.actividad;
-      selAct.appendChild(o);
+    // Parse PARAMETROS: [Actividad, Tipo, Tarifa_Base, Umbral_Plus, Plus_Por_Unidad, Escalas_JSON]
+    parametros = params.slice(1).filter(r => r[0]).map(r => {
+      const p = {
+        actividad: String(r[0]).trim(),
+        tipo: String(r[1]).trim().toUpperCase(),
+        tarifaBase: parseFloat(r[2]) || 0,
+        umbralPlus: parseFloat(r[3]) || 0,
+        plusPorUnidad: parseFloat(r[4]) || 0,
+        escalas: null
+      };
+      // Parse escalas JSON if present (col F)
+      if (r[5]) {
+        try { p.escalas = JSON.parse(r[5]); } catch(e) {}
+      }
+      return p;
     });
 
     // Parse RRHH: [ID, Fecha, Legajo, Operario, Actividad, Unidades, Importe, UserAgent, Timestamp]
@@ -485,41 +492,73 @@ async function init() {
 // ============================================================
 //  EVENT HANDLERS
 // ============================================================
+// Map area names to actividad names in PARAMETROS
+function areaToActividad(area) {
+  if (!area) return '';
+  const a = area.toUpperCase().trim();
+  // Direct matches
+  const directMap = {
+    'CLASIFICADO': 'CLASIFICADO',
+    'RESALADO': 'RESALADO',
+    'DESPELLEJADO': 'DESPELLEJADO',
+    'APILADO': 'APILADO',
+    'LIMPIEZA': 'JORNAL FIJO',
+    'CAMARA DE FRIO': 'JORNAL FIJO',
+    'ADMINISTRACION': 'JORNAL FIJO',
+    'SUPERVISOR': 'JORNAL FIJO SUPERVISOR',
+    'GENERAL': 'JORNAL FIJO',
+    'EMPAQUE': 'EMPAQUE'
+  };
+  if (directMap[a]) return directMap[a];
+  // Compound areas like "CLASIFICADO/EMPAQUE", "APILADO/LAVADO", "RESALADO/OTRAS"
+  // Use the first part
+  const first = a.split('/')[0].trim();
+  if (directMap[first]) return directMap[first];
+  return 'JORNAL FIJO';
+}
+
 document.getElementById('operario').addEventListener('change', function() {
   const op = operarios.find(o => o.legajo === this.value);
-  const areaInfo = document.getElementById('areaInfo');
-  if (op && op.area) {
-    document.getElementById('areaLabel').textContent = 'Área: ' + op.area;
-    areaInfo.classList.remove('hidden');
-  } else {
-    areaInfo.classList.add('hidden');
-  }
-  checkDuplicate();
-  recalcImporte();
-  validateForm();
-});
-
-document.getElementById('actividad').addEventListener('change', function() {
-  const param = parametros.find(p => p.actividad === this.value);
+  const actInfo = document.getElementById('actividadInfo');
+  const actLabel = document.getElementById('actividadLabel');
+  const actInput = document.getElementById('actividad');
   const unidadesField = document.getElementById('unidadesField');
   const unidadesInput = document.getElementById('unidades');
   const unidadesLabel = document.getElementById('unidadesLabel');
 
-  if (param) {
-    if (param.tipo === 'FIJO') {
-      // Fixed daily rate — no units needed
-      unidadesField.classList.add('hidden');
-      unidadesInput.value = '1';
-    } else {
-      unidadesField.classList.remove('hidden');
-      unidadesInput.value = '';
-      if (param.tipo === 'BASE_PLUS') {
-        unidadesLabel.textContent = 'Unidades (base + plus si supera ' + param.umbralPlus + ')';
+  if (op) {
+    // Set actividad from area
+    const actividad = areaToActividad(op.area);
+    actInput.value = actividad;
+    actLabel.textContent = actividad;
+    actInfo.classList.remove('hidden');
+
+    // Update unidades field based on actividad type
+    const param = parametros.find(p => p.actividad === actividad);
+    if (param) {
+      if (param.tipo === 'FIJO') {
+        unidadesField.classList.add('hidden');
+        unidadesInput.value = '1';
       } else {
-        unidadesLabel.textContent = 'Unidades *';
+        unidadesField.classList.remove('hidden');
+        unidadesInput.value = '';
+        if (param.tipo === 'BASE_PLUS') {
+          unidadesLabel.textContent = 'Unidades (base + plus si supera ' + param.umbralPlus + ')';
+        } else if (param.tipo === 'ESCALONADO') {
+          unidadesLabel.textContent = 'Unidades (tarifa escalonada)';
+        } else {
+          unidadesLabel.textContent = 'Unidades *';
+        }
       }
     }
+  } else {
+    actInfo.classList.add('hidden');
+    actInput.value = '';
+    unidadesField.classList.remove('hidden');
+    unidadesInput.value = '';
+    unidadesLabel.textContent = 'Unidades *';
   }
+
   checkDuplicate();
   recalcImporte();
   validateForm();
@@ -568,6 +607,22 @@ function calcImporte(actividadName, unidades) {
 
   if (param.tipo === 'FIJO') {
     return { total: param.tarifaBase, detail: 'Jornal fijo por día' };
+  }
+
+  if (param.tipo === 'ESCALONADO' && param.escalas) {
+    // Tarifa plana por tramo: TODAS las unidades se pagan al precio del tramo donde cae el total
+    // Escalas: [{hasta, tarifa}, ...] sorted ascending, last has hasta=null (∞)
+    let tarifa = 0;
+    let tramoLabel = '';
+    for (const esc of param.escalas) {
+      tarifa = esc.tarifa;
+      if (esc.hasta === null || u <= esc.hasta) {
+        tramoLabel = esc.hasta ? ('1-' + esc.hasta) : (param.escalas[param.escalas.length - 2].hasta + 1 + '+');
+        break;
+      }
+    }
+    const total = u * tarifa;
+    return { total, detail: u + 'u × $' + tarifa.toLocaleString('es-AR') + '/u (tramo ' + tramoLabel + ')' };
   }
 
   return { total: 0, detail: '' };
@@ -661,8 +716,10 @@ async function guardar() {
       // Update local data
       registrosRRHH.push(row);
 
-      // Reset activity-related fields but keep fecha and operario
+      // Reset form for next entry (keep fecha)
+      document.getElementById('operario').value = '';
       document.getElementById('actividad').value = '';
+      document.getElementById('actividadInfo').classList.add('hidden');
       document.getElementById('unidades').value = '';
       document.getElementById('unidadesField').classList.remove('hidden');
       document.getElementById('unidadesLabel').textContent = 'Unidades *';
