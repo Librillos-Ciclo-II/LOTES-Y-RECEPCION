@@ -4,6 +4,44 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Santa Faz — RRHH</title>
+<!--
+  ============================================================
+  Santa Faz — RRHH  |  Destajo & Jornales
+  Repo: librillos-ciclo-ii/LOTES-Y-RECEPCION
+  ============================================================
+
+  v1.0  2026-04-09  Versión inicial
+    - Formulario de registro diario de producción
+    - Operario, Fecha, Actividad (fija por operario), Unidades
+    - Cálculo automático de importe según PARAMETROS
+    - Tipos de cálculo: POR_UNIDAD, BASE_PLUS, FIJO
+    - Detección de duplicados (operario+fecha+actividad)
+    - Resumen del día con totales por operario
+    - Tabla de registros recientes (últimos 20)
+    - Conexión a Google Sheets vía Apps Script (GET only)
+
+  v1.1  2026-04-09  Actividad dinámica + Despellejado escalonado
+    - Actividad ya no es campo fijo: ahora es dropdown filtrado
+      por las actividades habilitadas de cada operario
+    - OPERARIOS tiene columnas Act_1..Act_4 (multi-área)
+    - Un operario puede registrar distintas actividades el mismo
+      día, pero no repetir la misma actividad+fecha
+    - Si el operario tiene una sola actividad, se autoselecciona
+    - Nuevo tipo de cálculo ESCALONADO para DESPELLEJADO:
+      1-50u → $250/u | 51-100u → $300/u | 101-150u → $350/u | 151+ → $400/u
+      (tarifa plana por tramo, todas las unidades al precio del tramo)
+    - Escalas se guardan como JSON en col F de PARAMETROS
+    - Fix: actionPost en Apps Script fallaba con sheet vacía
+      (getRange con 0 filas) — ahora chequea getLastRow() > 1
+    - Reset post-guardado limpia operario + actividad completo
+
+  v1.2  2026-04-09  Fix lectura actividades operario
+    - Limitado parseo de actividades a cols D-G (índices 3-6)
+    - Antes leía hasta el final de la fila e incluía Email,
+      CUIL y Dirección como actividades en el dropdown
+
+  ============================================================
+-->
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
 
@@ -430,7 +468,8 @@ async function init() {
     // Activities are in columns D onwards (index 3+)
     operarios = ops.slice(1).filter(r => r[0] || r[1]).map(r => {
       const actividades = [];
-      for (let i = 3; i < r.length; i++) {
+      // Act_1 a Act_4 = cols D-G = indices 3,4,5,6 (no leer más allá)
+      for (let i = 3; i <= 6 && i < r.length; i++) {
         const v = String(r[i] || '').trim().toUpperCase();
         if (v && v !== '\xa0' && v !== 'UNDEFINED' && v !== 'NULL') {
           actividades.push(v);
