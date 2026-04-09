@@ -415,21 +415,66 @@ function renderRecItem(r){
           <span class="carga-fecha">${fmt(c.fechaClasif)} · ${c.unidCarga} un · ${c.totalKgs.toFixed(1)} kg</span>
         </div>
         <div class="cat-row">${catPills}</div>
-        ${c.obs ? '<div style="font-size:11px;color:var(--muted);margin-top:3px">'+c.obs+'</div>' : ''}
+        ${c.obs ? '<div style="font-size:11px;color:var(--muted);margin-top:3px">Obs: '+c.obs+'</div>' : ''}
       </div>`;
     }).join('');
 
-    // Totals across all cargas
+    // Build consolidated totals by category (always, for summary table)
+    const totByCat = {};
+    CATS.forEach(cat => { totByCat[cat] = {unid:0, kgs:0}; });
+    r.cargas.forEach(c => c.cats.forEach(ct => { totByCat[ct.cat].unid += ct.unid; totByCat[ct.cat].kgs += ct.kgs; }));
+    const grandUnid = CATS.reduce((s,cat) => s + totByCat[cat].unid, 0);
+    const grandKgs  = CATS.reduce((s,cat) => s + totByCat[cat].kgs, 0);
+
+    // Multi-carga: show consolidated pills
     if(r.cargas.length > 1){
-      const totByCat = {};
-      CATS.forEach(cat => { totByCat[cat] = {unid:0, kgs:0}; });
-      r.cargas.forEach(c => c.cats.forEach(ct => { totByCat[ct.cat].unid += ct.unid; totByCat[ct.cat].kgs += ct.kgs; }));
       const totPills = CATS.filter(cat=>totByCat[cat].unid>0).map(cat =>
         `<span class="cat-pill ${CAT_CLS[cat]}">${cat}: ${totByCat[cat].unid}un · ${totByCat[cat].kgs.toFixed(1)}kg</span>`
       ).join('');
       detailHtml += `<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
         <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:4px;text-transform:uppercase">Total acumulado</div>
         <div class="cat-row">${totPills}</div>
+      </div>`;
+    }
+
+    // Summary table with %, kg/unit (for any lot with cargas)
+    const activeCats = CATS.filter(cat => totByCat[cat].unid > 0);
+    if(activeCats.length){
+      let trows = activeCats.map(cat => {
+        const u = totByCat[cat].unid;
+        const k = totByCat[cat].kgs;
+        const pctU = grandUnid > 0 ? (u/grandUnid*100).toFixed(1) : '0.0';
+        const kgUn = u > 0 ? (k/u).toFixed(3) : '—';
+        return `<tr>
+          <td><span class="cat-pill ${CAT_CLS[cat]}" style="font-size:11px">${cat}</span></td>
+          <td style="text-align:right;font-family:'JetBrains Mono',monospace">${u}</td>
+          <td style="text-align:right;font-family:'JetBrains Mono',monospace">${pctU}%</td>
+          <td style="text-align:right;font-family:'JetBrains Mono',monospace">${k.toFixed(1)}</td>
+          <td style="text-align:right;font-family:'JetBrains Mono',monospace;font-weight:600">${kgUn}</td>
+        </tr>`;
+      }).join('');
+      // Grand total row
+      const grandKgUn = grandUnid > 0 ? (grandKgs/grandUnid).toFixed(3) : '—';
+      trows += `<tr style="border-top:2px solid var(--border);font-weight:700">
+        <td style="padding-top:6px">Total</td>
+        <td style="text-align:right;font-family:'JetBrains Mono',monospace;padding-top:6px">${grandUnid}</td>
+        <td style="text-align:right;font-family:'JetBrains Mono',monospace;padding-top:6px">100%</td>
+        <td style="text-align:right;font-family:'JetBrains Mono',monospace;padding-top:6px">${grandKgs.toFixed(1)}</td>
+        <td style="text-align:right;font-family:'JetBrains Mono',monospace;padding-top:6px">${grandKgUn}</td>
+      </tr>`;
+
+      detailHtml += `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+        <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase">Rendimiento por categoría</div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="color:var(--muted)">
+            <th style="text-align:left;padding:3px 4px;font-weight:500;font-size:10px">Cat.</th>
+            <th style="text-align:right;padding:3px 4px;font-weight:500;font-size:10px">Unid.</th>
+            <th style="text-align:right;padding:3px 4px;font-weight:500;font-size:10px">%</th>
+            <th style="text-align:right;padding:3px 4px;font-weight:500;font-size:10px">Kgs</th>
+            <th style="text-align:right;padding:3px 4px;font-weight:500;font-size:10px">Kg/un</th>
+          </tr></thead>
+          <tbody>${trows}</tbody>
+        </table>
       </div>`;
     }
   } else {
