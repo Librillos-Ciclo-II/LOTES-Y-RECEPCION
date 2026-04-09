@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Santa Faz — RRHH</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg: #f5f5f0;
+    --card: #ffffff;
+    --primary: #2d5a27;
+    --primary-light: #e8f0e6;
+    --accent: #c5a030;
+    --accent-light: #fff8e1;
+    --text: #1a1a1a;
+    --text-muted: #6b6b6b;
+    --border: #ddd;
+    --danger: #c0392b;
+    --danger-light: #fceaea;
+    --info: #2980b9;
+    --info-light: #eaf2f8;
+    --radius: 10px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .header {
+    background: var(--primary);
+    color: white;
+    padding: 16px 20px;
+    text-align: center;
+    position: sticky; top: 0; z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+  .header h1 { font-size: 1.15rem; font-weight: 600; letter-spacing: 0.5px; }
+  .header small { font-size: 0.75rem; opacity: 0.8; display: block; margin-top: 2px; }
+
+  .container { max-width: 520px; margin: 0 auto; padding: 16px; }
+
+  .card {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  .card h2 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--primary);
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--primary-light);
+  }
+
+  .field { margin-bottom: 14px; }
+  .field label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 5px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .field select, .field input, .field textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 0.95rem;
+    transition: border-color 0.2s;
+    background: white;
+  }
+  .field select:focus, .field input:focus, .field textarea:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-light);
+  }
+  .field textarea { resize: vertical; min-height: 60px; }
+
+  .field-row { display: flex; gap: 12px; }
+  .field-row .field { flex: 1; }
+
+  .info-chip {
+    display: inline-block;
+    background: var(--primary-light);
+    color: var(--primary);
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 20px;
+    margin-top: 4px;
+  }
+
+  .importe-display {
+    background: var(--accent-light);
+    border: 2px solid var(--accent);
+    border-radius: 8px;
+    padding: 14px;
+    text-align: center;
+    margin: 16px 0;
+  }
+  .importe-display .label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .importe-display .value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--accent);
+    margin-top: 4px;
+  }
+  .importe-display .detail {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  .btn {
+    width: 100%;
+    padding: 13px;
+    border: none;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-primary { background: var(--primary); color: white; }
+  .btn-primary:hover { background: #234a1f; }
+  .btn-primary:disabled { background: #aaa; cursor: not-allowed; }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--primary);
+    border: 1.5px solid var(--primary);
+    margin-top: 8px;
+  }
+  .btn-secondary:hover { background: var(--primary-light); }
+
+  .toast {
+    position: fixed;
+    top: 70px; left: 50%; transform: translateX(-50%);
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 0.85rem; font-weight: 600;
+    z-index: 200;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    animation: slideIn 0.3s ease;
+    max-width: 90%;
+    text-align: center;
+  }
+  .toast.success { background: var(--primary); color: white; }
+  .toast.error { background: var(--danger); color: white; }
+  .toast.info { background: var(--info); color: white; }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+    to { opacity: 1; transform: translateX(-50%) translateY(0); }
+  }
+
+  .recent-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+    margin-top: 10px;
+  }
+  .recent-table th {
+    background: var(--primary-light);
+    color: var(--primary);
+    font-weight: 600;
+    text-align: left;
+    padding: 8px 6px;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .recent-table td {
+    padding: 7px 6px;
+    border-bottom: 1px solid #eee;
+    vertical-align: top;
+  }
+  .recent-table tr:last-child td { border-bottom: none; }
+
+  .spinner {
+    display: inline-block;
+    width: 16px; height: 16px;
+    border: 2px solid #ddd;
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .loading-overlay {
+    position: fixed; inset: 0;
+    background: rgba(255,255,255,0.85);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 300; font-weight: 600; color: var(--primary);
+  }
+
+  .badge-area {
+    display: inline-block;
+    background: var(--info-light);
+    color: var(--info);
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 4px;
+  }
+
+  .hidden { display: none !important; }
+
+  .resumen-dia {
+    margin-top: 16px;
+    padding: 12px;
+    background: var(--primary-light);
+    border-radius: 8px;
+    font-size: 0.82rem;
+  }
+  .resumen-dia .total-line {
+    display: flex; justify-content: space-between;
+    padding: 3px 0;
+    border-bottom: 1px solid rgba(45,90,39,0.15);
+  }
+  .resumen-dia .total-line:last-child { border-bottom: none; font-weight: 700; }
+  .resumen-dia .total-line .val { color: var(--primary); font-weight: 600; }
+
+  .dup-warning {
+    background: var(--danger-light);
+    color: var(--danger);
+    padding: 10px;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-weight: 500;
+    margin: 10px 0;
+    display: flex; align-items: center; gap: 6px;
+  }
+
+  .nav-link {
+    display: block;
+    text-align: center;
+    margin-top: 12px;
+    font-size: 0.82rem;
+    color: var(--primary);
+    text-decoration: none;
+    font-weight: 600;
+  }
+  .nav-link:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Santa Faz — Destajo & Jornales</h1>
+  <small>Registro diario de producción</small>
+</div>
+
+<div id="loadingOverlay" class="loading-overlay">
+  <div><span class="spinner"></span> Cargando datos...</div>
+</div>
+
+<div class="container">
+
+  <!-- FORMULARIO PRINCIPAL -->
+  <div class="card">
+    <h2>Registro de producción</h2>
+
+    <div class="field">
+      <label>Fecha *</label>
+      <input type="date" id="fecha" required>
+    </div>
+
+    <div class="field">
+      <label>Operario *</label>
+      <select id="operario" required>
+        <option value="">— Seleccionar —</option>
+      </select>
+    </div>
+
+    <div id="areaInfo" class="hidden" style="margin-bottom: 14px;">
+      <span class="badge-area" id="areaLabel"></span>
+    </div>
+
+    <div class="field">
+      <label>Actividad *</label>
+      <select id="actividad" required>
+        <option value="">— Seleccionar —</option>
+      </select>
+    </div>
+
+    <div class="field" id="unidadesField">
+      <label id="unidadesLabel">Unidades *</label>
+      <input type="number" id="unidades" min="0" step="1" placeholder="Cantidad">
+    </div>
+
+    <div id="dupWarning" class="dup-warning hidden">
+      ⚠️ Ya existe un registro para este operario + actividad en esta fecha.
+    </div>
+
+    <div class="importe-display">
+      <div class="label">Importe calculado</div>
+      <div class="value" id="importeValue">$ 0</div>
+      <div class="detail" id="importeDetail"></div>
+    </div>
+
+    <button class="btn btn-primary" id="btnGuardar" onclick="guardar()" disabled>
+      Registrar
+    </button>
+  </div>
+
+  <!-- RESUMEN DEL DIA -->
+  <div class="card" id="resumenCard" class="hidden">
+    <h2>Resumen del día — <span id="resumenFecha"></span></h2>
+    <div id="resumenBody">
+      <p style="color:var(--text-muted); font-size:0.85rem;">Seleccioná una fecha para ver el resumen.</p>
+    </div>
+  </div>
+
+  <!-- REGISTROS RECIENTES -->
+  <div class="card">
+    <h2>Registros recientes</h2>
+    <div id="recientes">
+      <p style="color:var(--text-muted); font-size:0.85rem;">Cargando...</p>
+    </div>
+  </div>
+
+  <a href="./" class="nav-link">← Volver a Lotes y Recepción</a>
+</div>
+
+<script>
+// ============================================================
+//  CONFIG
+// ============================================================
+// ⚠️ REEMPLAZAR con la URL del nuevo Apps Script de RRHH después del deploy
+const API = 'https://script.google.com/macros/s/AKfycby-dqfimGTJ1rrz4haDXvhUW4zdGZKsnU4mq12X-xi1CRKW3iTblSgSV8zHQIJaFH4X/exec';
+const CACHE_TTL = 30000;
+
+let operarios = [];
+let parametros = [];
+let registrosRRHH = [];
+let cache = {};
+
+// ============================================================
+//  HELPERS
+// ============================================================
+function fmt(v) {
+  if (!v) return '';
+  const d = typeof v === 'string' ? v.slice(0,10) : v;
+  const [y,m,dd] = d.split('-');
+  return `${dd}/${m}/${y}`;
+}
+
+function fmtMoney(n) {
+  return '$ ' + Math.round(n).toLocaleString('es-AR');
+}
+
+function today() {
+  const d = new Date();
+  return d.getFullYear() + '-' +
+    String(d.getMonth()+1).padStart(2,'0') + '-' +
+    String(d.getDate()).padStart(2,'0');
+}
+
+function showToast(msg, type='success') {
+  const t = document.createElement('div');
+  t.className = 'toast ' + type;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+function invalidateCache() { cache = {}; }
+
+// ============================================================
+//  API CALLS (GET only — same pattern as Lotes)
+// ============================================================
+async function fetchSheet(sheet, force=false) {
+  const key = 'sheet_' + sheet;
+  if (!force && cache[key] && (Date.now() - cache[key].ts < CACHE_TTL)) {
+    return cache[key].data;
+  }
+  const url = API + '?action=get&sheet=' + encodeURIComponent(sheet) + '&_=' + Date.now();
+  const r = await fetch(url);
+  const j = await r.json();
+  if (j.ok) {
+    cache[key] = { data: j.data, ts: Date.now() };
+    return j.data;
+  }
+  throw new Error(j.error || 'Error al leer ' + sheet);
+}
+
+async function postRow(sheet, row) {
+  const data = JSON.stringify({ sheet, row });
+  const url = API + '?action=post&data=' + encodeURIComponent(data) + '&_=' + Date.now();
+  const r = await fetch(url);
+  return await r.json();
+}
+
+// ============================================================
+//  INIT
+// ============================================================
+async function init() {
+  try {
+    // Set default date to today
+    document.getElementById('fecha').value = today();
+
+    // Load all three sheets in parallel
+    const [ops, params, rrhh] = await Promise.all([
+      fetchSheet('OPERARIOS', true),
+      fetchSheet('PARAMETROS', true),
+      fetchSheet('RRHH', true)
+    ]);
+
+    // Parse OPERARIOS: [Legajo, Nombre, Area, Calificacion]
+    operarios = ops.slice(1).filter(r => r[0]).map(r => ({
+      legajo: String(r[0]).trim(),
+      nombre: String(r[1] || '').trim(),
+      area: String(r[2] || '').trim(),
+      calificacion: String(r[3] || '').trim()
+    }));
+    operarios.sort((a,b) => a.nombre.localeCompare(b.nombre));
+
+    // Populate operarios dropdown
+    const selOp = document.getElementById('operario');
+    operarios.forEach(op => {
+      const o = document.createElement('option');
+      o.value = op.legajo;
+      o.textContent = op.nombre;
+      o.dataset.area = op.area;
+      selOp.appendChild(o);
+    });
+
+    // Parse PARAMETROS: [Actividad, Tipo, Tarifa_Base, Umbral_Plus, Plus_Por_Unidad]
+    parametros = params.slice(1).filter(r => r[0]).map(r => ({
+      actividad: String(r[0]).trim(),
+      tipo: String(r[1]).trim().toUpperCase(),
+      tarifaBase: parseFloat(r[2]) || 0,
+      umbralPlus: parseFloat(r[3]) || 0,
+      plusPorUnidad: parseFloat(r[4]) || 0
+    }));
+
+    // Populate actividades dropdown
+    const selAct = document.getElementById('actividad');
+    parametros.forEach(p => {
+      const o = document.createElement('option');
+      o.value = p.actividad;
+      o.textContent = p.actividad;
+      selAct.appendChild(o);
+    });
+
+    // Parse RRHH: [ID, Fecha, Legajo, Operario, Actividad, Unidades, Importe, UserAgent, Timestamp]
+    registrosRRHH = rrhh.slice(1).filter(r => r[0]);
+
+    renderRecientes();
+    updateResumen();
+
+    document.getElementById('loadingOverlay').classList.add('hidden');
+  } catch(e) {
+    console.error(e);
+    document.getElementById('loadingOverlay').innerHTML =
+      '<div style="text-align:center;padding:20px;"><p style="color:#c0392b;font-weight:600;">Error al cargar datos</p><p style="font-size:0.85rem;margin-top:8px;">' +
+      e.message + '</p><button onclick="location.reload()" class="btn btn-primary" style="width:auto;margin-top:12px;padding:10px 24px;">Reintentar</button></div>';
+  }
+}
+
+// ============================================================
+//  EVENT HANDLERS
+// ============================================================
+document.getElementById('operario').addEventListener('change', function() {
+  const op = operarios.find(o => o.legajo === this.value);
+  const areaInfo = document.getElementById('areaInfo');
+  if (op && op.area) {
+    document.getElementById('areaLabel').textContent = 'Área: ' + op.area;
+    areaInfo.classList.remove('hidden');
+  } else {
+    areaInfo.classList.add('hidden');
+  }
+  checkDuplicate();
+  recalcImporte();
+  validateForm();
+});
+
+document.getElementById('actividad').addEventListener('change', function() {
+  const param = parametros.find(p => p.actividad === this.value);
+  const unidadesField = document.getElementById('unidadesField');
+  const unidadesInput = document.getElementById('unidades');
+  const unidadesLabel = document.getElementById('unidadesLabel');
+
+  if (param) {
+    if (param.tipo === 'FIJO') {
+      // Fixed daily rate — no units needed
+      unidadesField.classList.add('hidden');
+      unidadesInput.value = '1';
+    } else {
+      unidadesField.classList.remove('hidden');
+      unidadesInput.value = '';
+      if (param.tipo === 'BASE_PLUS') {
+        unidadesLabel.textContent = 'Unidades (base + plus si supera ' + param.umbralPlus + ')';
+      } else {
+        unidadesLabel.textContent = 'Unidades *';
+      }
+    }
+  }
+  checkDuplicate();
+  recalcImporte();
+  validateForm();
+});
+
+document.getElementById('unidades').addEventListener('input', function() {
+  recalcImporte();
+  validateForm();
+});
+
+document.getElementById('fecha').addEventListener('change', function() {
+  checkDuplicate();
+  updateResumen();
+  validateForm();
+});
+
+// ============================================================
+//  IMPORTE CALCULATION
+// ============================================================
+function calcImporte(actividadName, unidades) {
+  const param = parametros.find(p => p.actividad === actividadName);
+  if (!param) return { total: 0, detail: '' };
+
+  const u = parseInt(unidades) || 0;
+
+  if (param.tipo === 'POR_UNIDAD') {
+    const total = u * param.tarifaBase;
+    return { total, detail: u + ' × $' + param.tarifaBase.toLocaleString('es-AR') + '/u' };
+  }
+
+  if (param.tipo === 'BASE_PLUS') {
+    const base = param.tarifaBase;
+    let plus = 0;
+    if (u > param.umbralPlus) {
+      plus = u * param.plusPorUnidad;
+    }
+    const total = base + plus;
+    let detail = 'Base $' + base.toLocaleString('es-AR');
+    if (plus > 0) {
+      detail += ' + Plus $' + plus.toLocaleString('es-AR') + ' (' + u + 'u × $' + param.plusPorUnidad + ')';
+    } else if (u > 0) {
+      detail += ' (sin plus, ≤' + param.umbralPlus + 'u)';
+    }
+    return { total, detail };
+  }
+
+  if (param.tipo === 'FIJO') {
+    return { total: param.tarifaBase, detail: 'Jornal fijo por día' };
+  }
+
+  return { total: 0, detail: '' };
+}
+
+function recalcImporte() {
+  const act = document.getElementById('actividad').value;
+  const uni = document.getElementById('unidades').value;
+  const result = calcImporte(act, uni);
+  document.getElementById('importeValue').textContent = fmtMoney(result.total);
+  document.getElementById('importeDetail').textContent = result.detail;
+}
+
+// ============================================================
+//  DUPLICATE CHECK
+// ============================================================
+function checkDuplicate() {
+  const fecha = document.getElementById('fecha').value;
+  const legajo = document.getElementById('operario').value;
+  const actividad = document.getElementById('actividad').value;
+  const warn = document.getElementById('dupWarning');
+
+  if (!fecha || !legajo || !actividad) {
+    warn.classList.add('hidden');
+    return false;
+  }
+
+  const id = legajo + '||' + fecha + '||' + actividad;
+  const exists = registrosRRHH.some(r => String(r[0]) === id);
+  warn.classList.toggle('hidden', !exists);
+  return exists;
+}
+
+// ============================================================
+//  FORM VALIDATION
+// ============================================================
+function validateForm() {
+  const fecha = document.getElementById('fecha').value;
+  const legajo = document.getElementById('operario').value;
+  const actividad = document.getElementById('actividad').value;
+  const unidades = document.getElementById('unidades').value;
+  const param = parametros.find(p => p.actividad === actividad);
+
+  let valid = fecha && legajo && actividad;
+
+  if (param && param.tipo !== 'FIJO') {
+    valid = valid && unidades && parseInt(unidades) > 0;
+  }
+
+  document.getElementById('btnGuardar').disabled = !valid;
+}
+
+// ============================================================
+//  GUARDAR
+// ============================================================
+async function guardar() {
+  const btn = document.getElementById('btnGuardar');
+  btn.disabled = true;
+  btn.textContent = 'Guardando...';
+
+  try {
+    const fecha = document.getElementById('fecha').value;
+    const legajo = document.getElementById('operario').value;
+    const actividad = document.getElementById('actividad').value;
+    const unidades = document.getElementById('unidades').value || '1';
+    const op = operarios.find(o => o.legajo === legajo);
+    const result = calcImporte(actividad, unidades);
+
+    const id = legajo + '||' + fecha + '||' + actividad;
+
+    // Check duplicate
+    if (checkDuplicate()) {
+      if (!confirm('Ya existe un registro para ' + op.nombre + ' en ' + actividad + ' el ' + fmt(fecha) + '.\n\n¿Querés sobreescribir?')) {
+        btn.disabled = false;
+        btn.textContent = 'Registrar';
+        return;
+      }
+    }
+
+    const ua = navigator.userAgent.substring(0, 120);
+    const ts = new Date().toISOString();
+
+    const row = [id, fecha, legajo, op.nombre, actividad, parseInt(unidades) || 1, Math.round(result.total), ua, ts];
+
+    invalidateCache();
+    const resp = await postRow('RRHH', row);
+
+    if (resp.ok) {
+      showToast('Registrado: ' + op.nombre + ' — ' + actividad);
+
+      // Update local data
+      registrosRRHH.push(row);
+
+      // Reset activity-related fields but keep fecha and operario
+      document.getElementById('actividad').value = '';
+      document.getElementById('unidades').value = '';
+      document.getElementById('unidadesField').classList.remove('hidden');
+      document.getElementById('unidadesLabel').textContent = 'Unidades *';
+      document.getElementById('dupWarning').classList.add('hidden');
+      recalcImporte();
+      renderRecientes();
+      updateResumen();
+      validateForm();
+    } else {
+      throw new Error(resp.error || 'Error al guardar');
+    }
+  } catch(e) {
+    console.error(e);
+    showToast('Error: ' + e.message, 'error');
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Registrar';
+}
+
+// ============================================================
+//  RESUMEN DEL DIA
+// ============================================================
+function updateResumen() {
+  const fecha = document.getElementById('fecha').value;
+  const body = document.getElementById('resumenBody');
+  const fechaLabel = document.getElementById('resumenFecha');
+
+  if (!fecha) {
+    body.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Seleccioná una fecha.</p>';
+    return;
+  }
+
+  fechaLabel.textContent = fmt(fecha);
+
+  const regs = registrosRRHH.filter(r => String(r[1]).slice(0,10) === fecha);
+
+  if (regs.length === 0) {
+    body.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Sin registros para esta fecha.</p>';
+    return;
+  }
+
+  // Group by operario
+  const byOp = {};
+  let totalDia = 0;
+  regs.forEach(r => {
+    const nombre = r[3];
+    if (!byOp[nombre]) byOp[nombre] = [];
+    const imp = parseFloat(r[6]) || 0;
+    byOp[nombre].push({ actividad: r[4], unidades: r[5], importe: imp });
+    totalDia += imp;
+  });
+
+  let html = '<div class="resumen-dia">';
+  Object.keys(byOp).sort().forEach(nombre => {
+    const items = byOp[nombre];
+    const subTotal = items.reduce((s,i) => s + i.importe, 0);
+    html += '<div class="total-line"><span><strong>' + nombre + '</strong></span><span class="val">' + fmtMoney(subTotal) + '</span></div>';
+    items.forEach(i => {
+      html += '<div class="total-line" style="padding-left:12px;font-size:0.78rem;color:var(--text-muted)"><span>' + i.actividad + ' (' + i.unidades + 'u)</span><span>' + fmtMoney(i.importe) + '</span></div>';
+    });
+  });
+  html += '<div class="total-line" style="margin-top:6px;padding-top:6px;border-top:2px solid var(--primary)"><span>TOTAL DÍA</span><span class="val" style="font-size:1.05rem">' + fmtMoney(totalDia) + '</span></div>';
+  html += '</div>';
+
+  body.innerHTML = html;
+}
+
+// ============================================================
+//  RECIENTES
+// ============================================================
+function renderRecientes() {
+  const container = document.getElementById('recientes');
+
+  // Last 20 entries, most recent first
+  const recent = registrosRRHH.slice(-20).reverse();
+
+  if (recent.length === 0) {
+    container.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Sin registros aún.</p>';
+    return;
+  }
+
+  let html = '<table class="recent-table"><thead><tr><th>Fecha</th><th>Operario</th><th>Actividad</th><th>U</th><th>Importe</th></tr></thead><tbody>';
+  recent.forEach(r => {
+    html += '<tr>' +
+      '<td>' + fmt(String(r[1]).slice(0,10)) + '</td>' +
+      '<td>' + (r[3] || '').split(' ').slice(0,2).join(' ') + '</td>' +
+      '<td style="font-size:0.72rem">' + (r[4] || '') + '</td>' +
+      '<td>' + (r[5] || '') + '</td>' +
+      '<td style="white-space:nowrap">' + fmtMoney(parseFloat(r[6]) || 0) + '</td>' +
+      '</tr>';
+  });
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+// ============================================================
+//  BOOT
+// ============================================================
+init();
+</script>
+</body>
+</html>
