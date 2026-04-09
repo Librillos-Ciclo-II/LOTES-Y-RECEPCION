@@ -40,6 +40,22 @@
     - Antes leía hasta el final de la fila e incluía Email,
       CUIL y Dirección como actividades en el dropdown
 
+  v1.3  2026-04-09  Exclusión mutua FIJO vs destajo por fecha
+    - Si un operario tiene JORNAL FIJO registrado en una fecha,
+      no puede agregar actividades de destajo ese día (y viceversa)
+    - Nuevo div de alerta #fijoConflict con mensaje descriptivo
+    - checkDuplicate() reemplazado por checkConflicts() que
+      valida tanto duplicados como conflictos FIJO/destajo
+    - validateForm() llama internamente a checkConflicts()
+    - Botón Registrar se deshabilita si hay conflicto FIJO
+    - guardar() bloquea envío si hay conflicto FIJO activo
+
+  v1.3  2026-04-09  Fix operarios sin legajo no podían registrar
+    - Operarios sin legajo (ej: DIBLE AGUSTINA, CHAYLE NEREA)
+      tenían value="" en el dropdown → validación los rechazaba
+    - Ahora usa nombre como identificador fallback cuando legajo
+      está vacío, permitiendo registrar normalmente
+
   ============================================================
 -->
 <style>
@@ -350,6 +366,10 @@
       ⚠️ Ya existe un registro para este operario + actividad en esta fecha.
     </div>
 
+    <div id="fijoConflict" class="dup-warning hidden">
+      🚫 <span id="fijoConflictMsg"></span>
+    </div>
+
     <div class="importe-display">
       <div class="label">Importe calculado</div>
       <div class="value" id="importeValue">$ 0</div>
@@ -475,11 +495,10 @@ async function init() {
           actividades.push(v);
         }
       }
-      return {
-        legajo: String(r[0] || '').trim(),
-        nombre: String(r[1] || '').trim(),
-        actividades: actividades
-      };
+      const nombre = String(r[1] || '').trim();
+      // Si no tiene legajo, usar nombre como identificador único
+      const legajo = String(r[0] || '').trim() || nombre;
+      return { legajo, nombre, actividades };
     }).filter(o => o.nombre);
     operarios.sort((a,b) => a.nombre.localeCompare(b.nombre));
 
@@ -556,7 +575,6 @@ document.getElementById('operario').addEventListener('change', function() {
     selAct.innerHTML = '<option value="">— Primero seleccioná operario —</option>';
   }
 
-  checkDuplicate();
   recalcImporte();
   validateForm();
 });
@@ -588,7 +606,6 @@ document.getElementById('actividad').addEventListener('change', function() {
     unidadesLabel.textContent = 'Unidades *';
   }
 
-  checkDuplicate();
   recalcImporte();
   validateForm();
 });
@@ -599,7 +616,6 @@ document.getElementById('unidades').addEventListener('input', function() {
 });
 
 document.getElementById('fecha').addEventListener('change', function() {
-  checkDuplicate();
   updateResumen();
   validateForm();
 });
@@ -666,27 +682,61 @@ function recalcImporte() {
 }
 
 // ============================================================
-//  DUPLICATE CHECK
+//  DUPLICATE & FIJO CONFLICT CHECK (v1.3)
+//  - No repetir operario+fecha+actividad
+//  - FIJO y destajo son mutuamente excluyentes por fecha:
+//    Si ya tiene FIJO, no puede agregar destajo y viceversa
 // ============================================================
-function checkDuplicate() {
+function getTipoActividad(actName) {
+  const p = parametros.find(p => p.actividad === actName);
+  return p ? p.tipo : '';
+}
+
+function checkConflicts() {
   const fecha = document.getElementById('fecha').value;
   const legajo = document.getElementById('operario').value;
   const actividad = document.getElementById('actividad').value;
-  const warn = document.getElementById('dupWarning');
+  const warnDup = document.getElementById('dupWarning');
+  const warnFijo = document.getElementById('fijoConflict');
+  const fijoMsg = document.getElementById('fijoConflictMsg');
 
-  if (!fecha || !legajo || !actividad) {
-    warn.classList.add('hidden');
-    return false;
+  warnDup.classList.add('hidden');
+  warnFijo.classList.add('hidden');
+
+  if (!fecha || !legajo || !actividad) return { dup: false, fijoConflict: false };
+
+  // Check exact duplicate
+  const id = legajo + '||' + fecha + '||' + actividad;
+  const dup = registrosRRHH.some(r => String(r[0]) === id);
+  warnDup.classList.toggle('hidden', !dup);
+
+  // Check FIJO vs destajo conflict
+  const tipoNuevo = getTipoActividad(actividad);
+  const regsHoy = registrosRRHH.filter(r =>
+    String(r[2]) === legajo && String(r[1]).slice(0,10) === fecha
+  );
+
+  let fijoConflict = false;
+  if (regsHoy.length > 0 && !dup) {
+    const tiposExistentes = regsHoy.map(r => getTipoActividad(String(r[4])));
+    const hayFijoExistente = tiposExistentes.includes('FIJO');
+    const hayDestajoExistente = tiposExistentes.some(t => t !== 'FIJO');
+
+    if (tipoNuevo === 'FIJO' && hayDestajoExistente) {
+      fijoConflict = true;
+      fijoMsg.textContent = 'Este operario ya tiene destajo registrado en esta fecha. No se puede combinar con jornal fijo.';
+    } else if (tipoNuevo !== 'FIJO' && hayFijoExistente) {
+      fijoConflict = true;
+      fijoMsg.textContent = 'Este operario ya tiene jornal fijo en esta fecha. No se puede combinar con destajo.';
+    }
+    warnFijo.classList.toggle('hidden', !fijoConflict);
   }
 
-  const id = legajo + '||' + fecha + '||' + actividad;
-  const exists = registrosRRHH.some(r => String(r[0]) === id);
-  warn.classList.toggle('hidden', !exists);
-  return exists;
+  return { dup, fijoConflict };
 }
 
 // ============================================================
-//  FORM VALIDATION
+//  FORM VALIDATION (v1.3 — includes FIJO conflict block)
 // ============================================================
 function validateForm() {
   const fecha = document.getElementById('fecha').value;
@@ -700,6 +750,10 @@ function validateForm() {
   if (param && param.tipo !== 'FIJO') {
     valid = valid && unidades && parseInt(unidades) > 0;
   }
+
+  // Block if FIJO conflict detected
+  const conflicts = checkConflicts();
+  if (conflicts.fijoConflict) valid = false;
 
   document.getElementById('btnGuardar').disabled = !valid;
 }
@@ -722,8 +776,14 @@ async function guardar() {
 
     const id = legajo + '||' + fecha + '||' + actividad;
 
-    // Check duplicate
-    if (checkDuplicate()) {
+    // Check conflicts (v1.3)
+    const conflicts = checkConflicts();
+    if (conflicts.fijoConflict) {
+      btn.disabled = false;
+      btn.textContent = 'Registrar';
+      return;
+    }
+    if (conflicts.dup) {
       if (!confirm('Ya existe un registro para ' + op.nombre + ' en ' + actividad + ' el ' + fmt(fecha) + '.\n\n¿Querés sobreescribir?')) {
         btn.disabled = false;
         btn.textContent = 'Registrar';
