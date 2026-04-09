@@ -227,19 +227,6 @@
     border-radius: 4px;
   }
 
-  .actividad-chip {
-    display: inline-block;
-    background: var(--accent-light);
-    color: #8a6d10;
-    font-size: 0.85rem;
-    font-weight: 700;
-    padding: 8px 14px;
-    border-radius: 8px;
-    border: 1.5px solid var(--accent);
-    width: 100%;
-    text-align: center;
-  }
-
   .hidden { display: none !important; }
 
   .resumen-dia {
@@ -309,10 +296,11 @@
       </select>
     </div>
 
-    <div id="actividadInfo" class="hidden" style="margin-bottom: 14px;">
-      <label style="display:block;font-size:0.8rem;font-weight:600;color:var(--text-muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:0.3px;">Actividad</label>
-      <div class="actividad-chip" id="actividadLabel"></div>
-      <input type="hidden" id="actividad" value="">
+    <div class="field" id="actividadField" class="hidden">
+      <label>Actividad *</label>
+      <select id="actividad" required>
+        <option value="">— Primero seleccioná operario —</option>
+      </select>
     </div>
 
     <div class="field" id="unidadesField">
@@ -359,7 +347,7 @@
 //  CONFIG
 // ============================================================
 // ⚠️ REEMPLAZAR con la URL del nuevo Apps Script de RRHH después del deploy
-const API = 'https://script.google.com/macros/s/AKfycbwEKONuxRgXciF_UP1WUNvNgmiQ-OlTME1CtZbbz1JkJYkUPrg8EZQWJPR-gYI1e8qz/exec';
+const API = 'https://script.google.com/macros/s/AKfycbw_IWZxCVF3oBg1APcLMEWbHBqOR3MJpKNoue1m8opAlIR8Nh3x1mO3EuzeLjSFDUYr/exec';
 const CACHE_TTL = 30000;
 
 let operarios = [];
@@ -438,13 +426,22 @@ async function init() {
       fetchSheet('RRHH', true)
     ]);
 
-    // Parse OPERARIOS: [Legajo, Nombre, Area, Calificacion]
-    operarios = ops.slice(1).filter(r => r[0]).map(r => ({
-      legajo: String(r[0]).trim(),
-      nombre: String(r[1] || '').trim(),
-      area: String(r[2] || '').trim(),
-      calificacion: String(r[3] || '').trim()
-    }));
+    // Parse OPERARIOS: [Legajo, Nombre, Modalidad, Act1, Act2, Act3, ...]
+    // Activities are in columns D onwards (index 3+)
+    operarios = ops.slice(1).filter(r => r[0] || r[1]).map(r => {
+      const actividades = [];
+      for (let i = 3; i < r.length; i++) {
+        const v = String(r[i] || '').trim().toUpperCase();
+        if (v && v !== '\xa0' && v !== 'UNDEFINED' && v !== 'NULL') {
+          actividades.push(v);
+        }
+      }
+      return {
+        legajo: String(r[0] || '').trim(),
+        nombre: String(r[1] || '').trim(),
+        actividades: actividades
+      };
+    }).filter(o => o.nombre);
     operarios.sort((a,b) => a.nombre.localeCompare(b.nombre));
 
     // Populate operarios dropdown
@@ -492,68 +489,61 @@ async function init() {
 // ============================================================
 //  EVENT HANDLERS
 // ============================================================
-// Map area names to actividad names in PARAMETROS
-function areaToActividad(area) {
-  if (!area) return '';
-  const a = area.toUpperCase().trim();
-  // Direct matches
-  const directMap = {
-    'CLASIFICADO': 'CLASIFICADO',
-    'RESALADO': 'RESALADO',
-    'DESPELLEJADO': 'DESPELLEJADO',
-    'APILADO': 'APILADO',
-    'LIMPIEZA': 'JORNAL FIJO',
-    'CAMARA DE FRIO': 'JORNAL FIJO',
-    'ADMINISTRACION': 'JORNAL FIJO',
-    'SUPERVISOR': 'JORNAL FIJO SUPERVISOR',
-    'GENERAL': 'JORNAL FIJO',
-    'EMPAQUE': 'EMPAQUE'
-  };
-  if (directMap[a]) return directMap[a];
-  // Compound areas like "CLASIFICADO/EMPAQUE", "APILADO/LAVADO", "RESALADO/OTRAS"
-  // Use the first part
-  const first = a.split('/')[0].trim();
-  if (directMap[first]) return directMap[first];
-  return 'JORNAL FIJO';
-}
-
 document.getElementById('operario').addEventListener('change', function() {
   const op = operarios.find(o => o.legajo === this.value);
-  const actInfo = document.getElementById('actividadInfo');
-  const actLabel = document.getElementById('actividadLabel');
-  const actInput = document.getElementById('actividad');
+  const selAct = document.getElementById('actividad');
   const unidadesField = document.getElementById('unidadesField');
   const unidadesInput = document.getElementById('unidades');
   const unidadesLabel = document.getElementById('unidadesLabel');
 
-  if (op) {
-    // Set actividad from area
-    const actividad = areaToActividad(op.area);
-    actInput.value = actividad;
-    actLabel.textContent = actividad;
-    actInfo.classList.remove('hidden');
+  // Reset actividad dropdown
+  selAct.innerHTML = '<option value="">— Seleccionar actividad —</option>';
+  unidadesInput.value = '';
 
-    // Update unidades field based on actividad type
-    const param = parametros.find(p => p.actividad === actividad);
-    if (param) {
-      if (param.tipo === 'FIJO') {
-        unidadesField.classList.add('hidden');
-        unidadesInput.value = '1';
+  if (op && op.actividades.length > 0) {
+    // Populate with this operario's allowed activities
+    op.actividades.forEach(act => {
+      const o = document.createElement('option');
+      o.value = act;
+      o.textContent = act;
+      selAct.appendChild(o);
+    });
+    // Auto-select if only one activity
+    if (op.actividades.length === 1) {
+      selAct.value = op.actividades[0];
+      selAct.dispatchEvent(new Event('change'));
+    }
+  } else {
+    selAct.innerHTML = '<option value="">— Primero seleccioná operario —</option>';
+  }
+
+  checkDuplicate();
+  recalcImporte();
+  validateForm();
+});
+
+document.getElementById('actividad').addEventListener('change', function() {
+  const param = parametros.find(p => p.actividad === this.value);
+  const unidadesField = document.getElementById('unidadesField');
+  const unidadesInput = document.getElementById('unidades');
+  const unidadesLabel = document.getElementById('unidadesLabel');
+
+  if (param) {
+    if (param.tipo === 'FIJO') {
+      unidadesField.classList.add('hidden');
+      unidadesInput.value = '1';
+    } else {
+      unidadesField.classList.remove('hidden');
+      unidadesInput.value = '';
+      if (param.tipo === 'BASE_PLUS') {
+        unidadesLabel.textContent = 'Unidades (base + plus si supera ' + param.umbralPlus + ')';
+      } else if (param.tipo === 'ESCALONADO') {
+        unidadesLabel.textContent = 'Unidades (tarifa escalonada)';
       } else {
-        unidadesField.classList.remove('hidden');
-        unidadesInput.value = '';
-        if (param.tipo === 'BASE_PLUS') {
-          unidadesLabel.textContent = 'Unidades (base + plus si supera ' + param.umbralPlus + ')';
-        } else if (param.tipo === 'ESCALONADO') {
-          unidadesLabel.textContent = 'Unidades (tarifa escalonada)';
-        } else {
-          unidadesLabel.textContent = 'Unidades *';
-        }
+        unidadesLabel.textContent = 'Unidades *';
       }
     }
   } else {
-    actInfo.classList.add('hidden');
-    actInput.value = '';
     unidadesField.classList.remove('hidden');
     unidadesInput.value = '';
     unidadesLabel.textContent = 'Unidades *';
@@ -718,8 +708,7 @@ async function guardar() {
 
       // Reset form for next entry (keep fecha)
       document.getElementById('operario').value = '';
-      document.getElementById('actividad').value = '';
-      document.getElementById('actividadInfo').classList.add('hidden');
+      document.getElementById('actividad').innerHTML = '<option value="">— Primero seleccioná operario —</option>';
       document.getElementById('unidades').value = '';
       document.getElementById('unidadesField').classList.remove('hidden');
       document.getElementById('unidadesLabel').textContent = 'Unidades *';
