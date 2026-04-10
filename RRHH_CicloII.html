@@ -41,6 +41,61 @@
       referencia el estado del primer contrato encontrado (se asume
       que todos los contratos de la misma persona comparten estado)
 
+  v1.2  2026-04-10  Guardado paralelo + reload post-save
+    - Guardado paralelo con Promise.all() en vez de loop
+      secuencial. Antes enviaba los registros uno por uno
+      esperando cada respuesta, ahora los manda todos a la
+      vez. Reduce significativamente el tiempo de guardado.
+    - Tras guardar exitosamente, recarga la página completa
+      (location.reload) para dejar el formulario limpio y
+      listo para cargar otra fecha.
+    - Removido el link "Volver a Lotes y Recepción" (era
+      circular, apuntaba a una URL distinta).
+
+  v1.3  2026-04-10  Multi-planta + FIJO_QUINCENAL + postBatch
+    - Nuevo dropdown de Planta al inicio del form. Se carga
+      con las plantas distintas encontradas en EMPLEADOS_JORNAL
+      (CICLO II, DELTA, ALBA, RECREO, CCP).
+    - Título cambiado a "RRHH — Asistencia Jornaleros" ya que
+      el form ahora cubre todas las plantas, no solo Ciclo II.
+    - Los empleados se filtran dinámicamente al seleccionar
+      planta. Cada planta tiene su propio listado.
+    - Nuevo tipo de pago FIJO_QUINCENAL para ALBA: los empleados
+      cobran un monto fijo por quincena ($250k MT / $500k ATG),
+      no un jornal diario. El sistema prorratea dividiendo el
+      monto quincenal por DIAS_HABILES_QUINCENA (13 por defecto).
+    - El campo de Horas Extras solo se muestra para empleados
+      que tengan valor_hora_extra > 0 (en la práctica, solo
+      Ciclo II). Para las demás plantas el input ni aparece.
+    - Badge "Prorrateo quincenal" en la meta-info de empleados
+      ALBA para que el supervisor sepa que es un pago especial.
+    - Guardado con postBatch() en una sola llamada al Apps
+      Script usando actionPostBatch (Code.gs v1.6). Mucho más
+      rápido que Promise.all con N requests separados.
+    - Solapa destino cambió de CICLOII a ASISTENCIA (renombrada
+      en Code.gs v1.7, con migración automática).
+    - Nuevo formato de ID: Legajo||Fecha||Company||Planta
+      (permite que el mismo legajo en distintas plantas no se
+      pise entre sí).
+    - Nuevas columnas en la fila guardada: Planta y Tipo_Pago
+      (replicados del maestro para auditoría).
+
+  v1.4  2026-04-10  Prorrateo FIJO_QUINCENAL dinámico por almanaque
+    - Reemplazada la constante DIAS_HABILES_QUINCENA por la
+      función diasHabilesQuincena(fechaISO) que calcula los
+      días hábiles reales (lunes a viernes) de la quincena que
+      contiene esa fecha, mirando el almanaque real.
+    - Para Q1 cuenta lunes-viernes del día 1 al 15.
+    - Para Q2 cuenta lunes-viernes del 16 al último día del mes.
+    - buildEmpleadosDePlanta() ahora recibe la fecha como
+      parámetro y calcula el prorrateo diario según el mes/año.
+    - El event handler de fecha rebuildea la lista de empleados
+      si hay planta seleccionada (porque el prorrateo cambia).
+    - La nota de "Prorrateo quincenal" ahora muestra el divisor
+      real: "Prorrateo quincenal (÷11 días)" o lo que aplique.
+    - No contempla feriados nacionales (se descuentan manualmente
+      si fuera necesario).
+
   ============================================================
 -->
 <style>
@@ -116,7 +171,7 @@
     text-transform: uppercase;
     letter-spacing: 0.3px;
   }
-  .field input[type="date"] {
+  .field input[type="date"], .field select {
     width: 100%;
     padding: 10px 12px;
     border: 1.5px solid var(--border);
@@ -125,7 +180,7 @@
     font-size: 0.95rem;
     background: white;
   }
-  .field input[type="date"]:focus {
+  .field input[type="date"]:focus, .field select:focus {
     outline: none;
     border-color: var(--primary);
     box-shadow: 0 0 0 3px var(--primary-light);
@@ -394,8 +449,8 @@
 <body>
 
 <div class="header">
-  <h1>Ciclo II — Asistencia Jornaleros</h1>
-  <small>Registro diario</small>
+  <h1>RRHH — Asistencia Jornaleros</h1>
+  <small>Registro diario por planta</small>
 </div>
 
 <div id="loadingOverlay" class="loading-overlay">
@@ -405,6 +460,12 @@
 <div class="container">
 
   <div class="card">
+    <div class="field">
+      <label>Planta *</label>
+      <select id="planta" required>
+        <option value="">— Seleccionar planta —</option>
+      </select>
+    </div>
     <div class="field">
       <label>Fecha de asistencia *</label>
       <input type="date" id="fecha" required>
@@ -419,7 +480,6 @@
     <div class="detail" id="totalDetail">0 presentes · 0 ausentes</div>
   </div>
 
-  <a href="./" class="nav-link">← Volver a Lotes y Recepción</a>
 </div>
 
 <div class="bottom-bar">
@@ -434,14 +494,36 @@
 // ============================================================
 //  CONFIG
 // ============================================================
-const API = 'https://script.google.com/macros/s/AKfycbyctjlH0VL581pmXS3It3_bZTsDqbMlNhkO36l3hBlpQy9AKzv5BcyKe3JLEenJ6g_l/exec';
+const API = 'https://script.google.com/macros/s/AKfycbzud3BqEJzJPVy4ehTnfOH_m_DfQv05Arx1aEhEgYEUz1V0cKZb0rwSU1ZjR8ZbIECN/exec';
 
-let empleados = [];
-let registrosDia = {};  // {id: row} registros ya existentes del día
+let todosLosEmpleados = [];  // todos los empleados de todas las plantas
+let empleados = [];           // filtrados por planta seleccionada
+let plantasDisponibles = [];
+let registrosDia = {};        // {id: row} registros ya existentes del día+planta
 
 // ============================================================
 //  HELPERS
 // ============================================================
+
+// Calcula días hábiles reales (lunes-viernes) de la quincena que contiene la fecha.
+// Q1: días 1-15, Q2: días 16-fin de mes. Cuenta solo lunes a viernes.
+// Nota: no contempla feriados. Si hay que descontarlos, se hace manualmente.
+function diasHabilesQuincena(fechaISO) {
+  if (!fechaISO) return 10;
+  const [y, m, d] = fechaISO.split('-').map(Number);
+  const dia = d;
+  const ultimoDia = new Date(y, m, 0).getDate();  // último día del mes
+  const desde = dia <= 15 ? 1 : 16;
+  const hasta = dia <= 15 ? 15 : ultimoDia;
+
+  let count = 0;
+  for (let i = desde; i <= hasta; i++) {
+    const dow = new Date(y, m - 1, i).getDay();  // 0=dom, 6=sab
+    if (dow !== 0 && dow !== 6) count++;
+  }
+  return count;
+}
+
 function fmt(v) {
   if (!v) return '';
   const d = typeof v === 'string' ? v.slice(0,10) : v;
@@ -486,55 +568,56 @@ async function postRow(sheet, row) {
   return await r.json();
 }
 
+// v1.3: guardado batch — una sola llamada para N filas, mucho más rápido
+async function postBatch(sheet, rows) {
+  const data = JSON.stringify({ sheet, rows });
+  const url = API + '?action=post_batch&data=' + encodeURIComponent(data) + '&_=' + Date.now();
+  const r = await fetch(url);
+  return await r.json();
+}
+
 // ============================================================
-//  INIT
+//  INIT (v1.3 — carga todas las plantas)
 // ============================================================
 async function init() {
   try {
     document.getElementById('fecha').value = today();
 
-    const [empData, cicloData] = await Promise.all([
+    const [empData, asisData] = await Promise.all([
       fetchSheet('EMPLEADOS_JORNAL'),
-      fetchSheet('CICLOII')
+      fetchSheet('ASISTENCIA')
     ]);
 
-    // Parse EMPLEADOS_JORNAL: [Legajo, Nombre, Planta, Company, Jornal, ValorHE, Activo]
-    // v1.1: Unificamos por nombre. Un empleado puede tener "contratos" en varias companies.
-    // El form muestra 1 fila por persona pero al guardar genera 1 registro por company.
-    const rawRows = empData.slice(1).filter(r => r[1] && String(r[6]||'').toUpperCase() === 'SI')
-      .filter(r => String(r[2]||'').toUpperCase().includes('CICLO'));
-
-    const mapPorNombre = {};
-    rawRows.forEach(r => {
-      const nombre = String(r[1]||'').trim();
-      const key = nombre.toUpperCase();
-      if (!mapPorNombre[key]) {
-        mapPorNombre[key] = {
-          nombre: nombre,
-          contratos: []  // lista de {legajo, company, jornal, valorHE}
-        };
-      }
-      mapPorNombre[key].contratos.push({
+    // Parse EMPLEADOS_JORNAL:
+    // [Legajo, Nombre, Planta, Company, Tipo_Pago, Jornal, ValorHE, Activo]
+    todosLosEmpleados = empData.slice(1).filter(r => r[1] && String(r[7]||'').toUpperCase() === 'SI')
+      .map(r => ({
         legajo: String(r[0]||'').trim(),
+        nombre: String(r[1]||'').trim(),
+        planta: String(r[2]||'').trim().toUpperCase(),
         company: String(r[3]||'').trim().toUpperCase(),
-        jornal: parseFloat(r[4]) || 0,
-        valorHE: parseFloat(r[5]) || 0
-      });
+        tipoPago: String(r[4]||'DIARIO').trim().toUpperCase(),
+        jornal: parseFloat(r[5]) || 0,
+        valorHE: parseFloat(r[6]) || 0
+      }));
+
+    // Lista de plantas únicas para el dropdown
+    plantasDisponibles = [...new Set(todosLosEmpleados.map(e => e.planta))].sort();
+    const selPlanta = document.getElementById('planta');
+    plantasDisponibles.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p;
+      opt.textContent = p;
+      selPlanta.appendChild(opt);
     });
 
-    empleados = Object.values(mapPorNombre).map(emp => {
-      // Cálculos agregados para mostrar en la UI
-      emp.jornalTotal = emp.contratos.reduce((s, c) => s + c.jornal, 0);
-      emp.valorHETotal = emp.contratos.reduce((s, c) => s + c.valorHE, 0);
-      emp.companies = emp.contratos.map(c => c.company).join(' + ');
-      emp.key = emp.nombre.toUpperCase().replace(/[^A-Z0-9]/g, '_');
-      return emp;
-    });
-    empleados.sort((a, b) => a.nombre.localeCompare(b.nombre));
+    // Cache completo de ASISTENCIA para filtrado dinámico por fecha+planta
+    todosLosRegistros = asisData.slice(1).filter(r => r[0]);
 
-    loadRegistrosDelDia(cicloData);
-    render();
     document.getElementById('loadingOverlay').classList.add('hidden');
+    // No renderizar hasta que el usuario elija planta
+    document.getElementById('companiesContainer').innerHTML =
+      '<div class="card" style="text-align:center;color:var(--text-muted);padding:30px;">Seleccioná una planta para ver los empleados</div>';
   } catch(e) {
     console.error(e);
     document.getElementById('loadingOverlay').innerHTML =
@@ -543,20 +626,60 @@ async function init() {
   }
 }
 
-// Full CICLOII data cache - all rows, we'll filter by date as needed
-let todosLosRegistros = [];
+// Agrupa empleados por nombre para la planta seleccionada
+// (ej: Raimondi en CICLO II MT + ATG → 1 fila con 2 contratos)
+// v1.4: recibe fecha para calcular prorrateo de FIJO_QUINCENAL según
+// los días hábiles reales de la quincena que contiene esa fecha.
+function buildEmpleadosDePlanta(planta, fecha) {
+  const rawRows = todosLosEmpleados.filter(e => e.planta === planta);
+  const mapPorNombre = {};
+  rawRows.forEach(e => {
+    const key = e.nombre.toUpperCase();
+    if (!mapPorNombre[key]) {
+      mapPorNombre[key] = {
+        nombre: e.nombre,
+        planta: e.planta,
+        contratos: []
+      };
+    }
+    mapPorNombre[key].contratos.push({
+      legajo: e.legajo,
+      company: e.company,
+      tipoPago: e.tipoPago,
+      jornal: e.jornal,
+      valorHE: e.valorHE
+    });
+  });
 
-function loadRegistrosDelDia(cicloData) {
-  todosLosRegistros = cicloData.slice(1).filter(r => r[0]);
-  filterByDate();
+  const lista = Object.values(mapPorNombre).map(emp => {
+    // v1.4: cálculo de valor diario basado en la fecha (no constante)
+    // Para FIJO_QUINCENAL, el valor "por día" es monto_quincenal / días_hábiles_reales
+    const dh = diasHabilesQuincena(fecha);
+    emp.jornalTotalDiario = emp.contratos.reduce((s, c) => {
+      return s + (c.tipoPago === 'FIJO_QUINCENAL' ? c.jornal / dh : c.jornal);
+    }, 0);
+    emp.valorHETotal = emp.contratos.reduce((s, c) => s + c.valorHE, 0);
+    emp.permiteHE = emp.contratos.some(c => c.valorHE > 0);
+    emp.esFijoQuincenal = emp.contratos.every(c => c.tipoPago === 'FIJO_QUINCENAL');
+    emp.diasHabilesRef = dh;  // para mostrar en la UI
+    emp.key = emp.nombre.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+    return emp;
+  });
+  lista.sort((a, b) => a.nombre.localeCompare(b.nombre));
+  return lista;
 }
 
-function filterByDate() {
+// Full ASISTENCIA data cache - all rows, filtered by fecha+planta
+let todosLosRegistros = [];
+
+function filterByDateAndPlanta() {
   const fecha = document.getElementById('fecha').value;
+  const planta = document.getElementById('planta').value;
   registrosDia = {};
   todosLosRegistros.forEach(r => {
     const rfecha = String(r[1]||'').slice(0,10);
-    if (rfecha === fecha) {
+    const rplanta = String(r[4]||'').trim().toUpperCase();  // col E = Planta
+    if (rfecha === fecha && rplanta === planta) {
       registrosDia[String(r[0])] = r;
     }
   });
@@ -583,10 +706,10 @@ function render() {
   section.appendChild(header);
 
   empleados.forEach(emp => {
-    // Check si hay algún registro ya cargado (por cualquiera de sus companies)
+    // Check si hay algún registro ya cargado (por cualquiera de sus contratos)
     const fecha = document.getElementById('fecha').value;
     const existings = emp.contratos.map(c => {
-      const id = c.legajo + '||' + fecha + '||' + c.company;
+      const id = c.legajo + '||' + fecha + '||' + c.company + '||' + emp.planta;
       return registrosDia[id];
     });
     const hayCargado = existings.some(e => e);
@@ -596,18 +719,26 @@ function render() {
     row.id = 'row_' + emp.key;
     row.dataset.key = emp.key;
 
-    // UI: mostramos el jornal TOTAL (suma de ambas companies) porque al
-    // supervisor le importa cuánto cobra la persona, no cómo se divide
-    const jornalStr = emp.jornalTotal ? fmtMoney(emp.jornalTotal) : 'Sin jornal';
+    // UI: mostramos el jornal DIARIO total (para FIJO_QUINCENAL es prorrateo)
+    const jornalStr = emp.jornalTotalDiario ? fmtMoney(emp.jornalTotalDiario) : 'Sin jornal';
     const heStr = emp.valorHETotal ? fmtMoney(emp.valorHETotal) + '/HE' : '';
+    const fijoNote = emp.esFijoQuincenal ? ' · <em style="color:var(--accent)">Prorrateo quincenal (÷' + emp.diasHabilesRef + ' días)</em>' : '';
     const badgeLoaded = hayCargado ? '<span class="badge-loaded">Ya cargado</span>' : '';
-    const legajos = emp.contratos.map(c => c.legajo || '—').join('/');
+    const legajos = [...new Set(emp.contratos.map(c => c.legajo || '—'))].join('/');
+
+    // HE input solo visible si el empleado permite HE (solo Ciclo II actualmente)
+    const heFieldHTML = emp.permiteHE ? `
+      <div class="extras-item extras-presente hidden">
+        <label for="he_${emp.key}">Hs extras:</label>
+        <input type="number" id="he_${emp.key}" min="0" step="0.5" value="0" onchange="recalcImporte('${emp.key}')">
+      </div>
+    ` : '';
 
     row.innerHTML = `
       <div class="emp-top">
         <div class="emp-info">
           <div class="emp-name">${emp.nombre}${badgeLoaded}</div>
-          <div class="emp-meta">Leg ${legajos} · ${jornalStr}${heStr ? ' · ' + heStr : ''}</div>
+          <div class="emp-meta">Leg ${legajos} · ${jornalStr}${heStr ? ' · ' + heStr : ''}${fijoNote}</div>
         </div>
         <div class="status-toggle">
           <button type="button" class="status-btn btn-p" onclick="setStatus('${emp.key}', 'P')">PRES</button>
@@ -615,10 +746,7 @@ function render() {
         </div>
       </div>
       <div class="emp-extras">
-        <div class="extras-item extras-presente hidden">
-          <label for="he_${emp.key}">Hs extras:</label>
-          <input type="number" id="he_${emp.key}" min="0" step="0.5" value="0" onchange="recalcImporte('${emp.key}')">
-        </div>
+        ${heFieldHTML}
         <div class="extras-item extras-ausente hidden">
           <input type="checkbox" id="cm_${emp.key}">
           <label for="cm_${emp.key}">Certificado médico</label>
@@ -629,23 +757,27 @@ function render() {
 
     section.appendChild(row);
 
-    // Restaurar estado si ya hay registros cargados.
-    // Tomamos el primer contrato que tenga un registro (asumimos que todos
-    // los contratos de la misma persona comparten estado: presente o ausente)
+    // Restaurar estado si ya hay registros cargados
     const firstExisting = existings.find(e => e);
     if (firstExisting) {
-      const presente = String(firstExisting[5]||'').toUpperCase() === 'SI';
-      const ausente = String(firstExisting[6]||'').toUpperCase() === 'SI';
-      const certMed = String(firstExisting[7]||'').toUpperCase() === 'SI';
-      const he = parseFloat(firstExisting[8]) || 0;
+      // Col indexes en ASISTENCIA v1.7:
+      // 7=Presente, 8=Ausente, 9=CertMed, 10=HorasExtras
+      const presente = String(firstExisting[7]||'').toUpperCase() === 'SI';
+      const ausente = String(firstExisting[8]||'').toUpperCase() === 'SI';
+      const certMed = String(firstExisting[9]||'').toUpperCase() === 'SI';
+      const he = parseFloat(firstExisting[10]) || 0;
 
       if (presente) {
         setStatusSilent(emp.key, 'P');
-        document.getElementById('he_' + emp.key).value = he;
+        if (emp.permiteHE) {
+          const heInput = document.getElementById('he_' + emp.key);
+          if (heInput) heInput.value = he;
+        }
         recalcImporte(emp.key);
       } else if (ausente) {
         setStatusSilent(emp.key, 'A');
-        document.getElementById('cm_' + emp.key).checked = certMed;
+        const cmInput = document.getElementById('cm_' + emp.key);
+        if (cmInput) cmInput.checked = certMed;
       }
     }
   });
@@ -736,17 +868,24 @@ function checkSelectAllState() {
 }
 
 // ============================================================
-//  CALC IMPORTE (v1.1 — suma todos los contratos del empleado)
+//  CALC IMPORTE (v1.3 — usa jornalTotalDiario, HE opcional)
 // ============================================================
+function getHE(key, emp) {
+  // HE solo disponible si el empleado tiene valorHE > 0 (solo Ciclo II)
+  if (!emp.permiteHE) return 0;
+  const inp = document.getElementById('he_' + key);
+  return inp ? (parseFloat(inp.value) || 0) : 0;
+}
+
 function recalcImporte(key) {
   const emp = empleados.find(e => e.key === key);
   if (!emp) return;
   const row = document.getElementById('row_' + key);
   if (!row || !row.classList.contains('presente')) return;
 
-  const he = parseFloat(document.getElementById('he_' + key).value) || 0;
-  // Jornal total + HE total (sumado entre todas las companies)
-  const total = emp.jornalTotal + (he * emp.valorHETotal);
+  const he = getHE(key, emp);
+  // jornalTotalDiario ya contempla el prorrateo para FIJO_QUINCENAL
+  const total = emp.jornalTotalDiario + (he * emp.valorHETotal);
 
   const impTag = row.querySelector('.importe-tag');
   impTag.textContent = fmtMoney(total);
@@ -763,8 +902,8 @@ function updateTotales() {
     if (!row) return;
     if (row.classList.contains('presente')) {
       pres++;
-      const he = parseFloat(document.getElementById('he_' + emp.key).value) || 0;
-      total += emp.jornalTotal + (he * emp.valorHETotal);
+      const he = getHE(emp.key, emp);
+      total += emp.jornalTotalDiario + (he * emp.valorHETotal);
     } else if (row.classList.contains('ausente')) {
       aus++;
     }
@@ -775,12 +914,14 @@ function updateTotales() {
 }
 
 // ============================================================
-//  GUARDAR (v1.1 — 1 fila por contrato/company en CICLOII)
+//  GUARDAR (v1.3 — multi-planta, FIJO_QUINCENAL, postBatch, ASISTENCIA)
 // ============================================================
 async function guardar() {
   const btn = document.getElementById('btnGuardar');
   const fecha = document.getElementById('fecha').value;
+  const planta = document.getElementById('planta').value;
   if (!fecha) { showToast('Falta la fecha', 'error'); return; }
+  if (!planta) { showToast('Falta seleccionar la planta', 'error'); return; }
 
   const rowsToSave = [];
   empleados.forEach(emp => {
@@ -790,24 +931,37 @@ async function guardar() {
     const ausente = row.classList.contains('ausente');
     if (!presente && !ausente) return;  // sin marcar, saltar
 
-    const he = presente ? (parseFloat(document.getElementById('he_' + emp.key).value) || 0) : 0;
-    const certMed = ausente ? document.getElementById('cm_' + emp.key).checked : false;
+    const he = presente ? getHE(emp.key, emp) : 0;
+    const certMed = ausente ? (document.getElementById('cm_' + emp.key)?.checked || false) : false;
     const ua = navigator.userAgent.substring(0, 120);
     const ts = new Date().toISOString();
 
-    // Emitir 1 fila por contrato (una por company donde el empleado tiene tarifa)
+    // Emitir 1 fila por contrato (una por company)
+    const dh = diasHabilesQuincena(fecha);  // v1.4: dinámico según fecha
     emp.contratos.forEach(contrato => {
-      const jornalCobrado = presente ? contrato.jornal : 0;
+      // Jornal cobrado: DIARIO usa valor directo; FIJO_QUINCENAL prorratea
+      let jornalCobrado = 0;
+      if (presente) {
+        jornalCobrado = contrato.tipoPago === 'FIJO_QUINCENAL'
+          ? contrato.jornal / dh
+          : contrato.jornal;
+      }
       const importeHE = he * contrato.valorHE;
       const total = jornalCobrado + importeHE;
-      const id = contrato.legajo + '||' + fecha + '||' + contrato.company;
 
+      // Nuevo formato de ID v1.7: Legajo||Fecha||Company||Planta
+      const id = contrato.legajo + '||' + fecha + '||' + contrato.company + '||' + planta;
+
+      // Columnas ASISTENCIA v1.7:
+      // [ID, Fecha, Legajo, Nombre, Planta, Company, Tipo_Pago, Presente, Ausente,
+      //  Cert_Medico, Horas_Extras, Jornal, Importe_HE, Importe_Total, UA, Timestamp]
       rowsToSave.push([
-        id, fecha, contrato.legajo, emp.nombre, contrato.company,
+        id, fecha, contrato.legajo, emp.nombre, planta, contrato.company, contrato.tipoPago,
         presente ? 'SI' : 'NO',
         ausente ? 'SI' : 'NO',
         certMed ? 'SI' : 'NO',
-        he, jornalCobrado, importeHE, total, ua, ts
+        he, Math.round(jornalCobrado * 100) / 100, Math.round(importeHE * 100) / 100, Math.round(total * 100) / 100,
+        ua, ts
       ]);
     });
   });
@@ -821,32 +975,48 @@ async function guardar() {
   btn.textContent = 'Guardando ' + rowsToSave.length + ' registros...';
 
   try {
-    let ok = 0, errors = 0;
-    for (const row of rowsToSave) {
-      const resp = await postRow('CICLOII', row);
-      if (resp.ok) ok++; else errors++;
-    }
-    if (errors === 0) {
-      showToast('✓ ' + ok + ' registros guardados');
-      const cicloData = await fetchSheet('CICLOII');
-      loadRegistrosDelDia(cicloData);
-      render();
+    // v1.3: una sola llamada batch al Apps Script (actionPostBatch)
+    const resp = await postBatch('ASISTENCIA', rowsToSave);
+    if (resp && resp.ok) {
+      const updatedStr = resp.updated > 0 ? ' (' + resp.updated + ' actualizado' + (resp.updated !== 1 ? 's' : '') + ')' : '';
+      showToast('✓ ' + resp.total + ' registro' + (resp.total !== 1 ? 's' : '') + ' guardados' + updatedStr);
+      setTimeout(() => location.reload(), 1200);
     } else {
-      showToast('Guardados: ' + ok + ' / Errores: ' + errors, 'error');
+      throw new Error(resp?.error || 'Error desconocido');
     }
   } catch(e) {
     showToast('Error: ' + e.message, 'error');
+    btn.disabled = false;
+    btn.textContent = 'Guardar asistencia del día';
   }
-
-  btn.disabled = false;
-  btn.textContent = 'Guardar asistencia del día';
 }
 
 // ============================================================
 //  EVENT HANDLERS
 // ============================================================
 document.getElementById('fecha').addEventListener('change', function() {
-  filterByDate();
+  // v1.4: al cambiar fecha hay que recalcular el prorrateo de FIJO_QUINCENAL
+  // porque los días hábiles de la quincena pueden cambiar
+  const planta = document.getElementById('planta').value;
+  if (planta) {
+    empleados = buildEmpleadosDePlanta(planta, this.value);
+  }
+  filterByDateAndPlanta();
+  if (empleados.length > 0) render();
+});
+
+document.getElementById('planta').addEventListener('change', function() {
+  const planta = this.value;
+  const fecha = document.getElementById('fecha').value;
+  if (!planta) {
+    empleados = [];
+    document.getElementById('companiesContainer').innerHTML =
+      '<div class="card" style="text-align:center;color:var(--text-muted);padding:30px;">Seleccioná una planta para ver los empleados</div>';
+    updateTotales();
+    return;
+  }
+  empleados = buildEmpleadosDePlanta(planta, fecha);
+  filterByDateAndPlanta();
   render();
 });
 
