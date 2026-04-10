@@ -26,6 +26,21 @@
     - Sobreescribe si ya existe (mismo ID)
     - Muestra totales por company y total general al final
 
+  v1.1  2026-04-10  Vista unificada por persona
+    - Un empleado = una fila, independiente de en cuántas companies
+      tenga contrato. El split MT/ATG se maneja en el backend.
+    - Al cargar EMPLEADOS_JORNAL se agrupa por nombre y se arma un
+      array `contratos` con las tarifas de cada company
+    - El jornal y valor HE mostrados son la SUMA de todos los
+      contratos del empleado (lo que la persona cobra en total)
+    - Al guardar, se emiten internamente N registros (uno por cada
+      contrato/company) con ID Legajo||Fecha||Company preservando
+      la estructura de la solapa CICLOII sin cambios
+    - Checkbox "Todos presentes" único (global, no por company)
+    - Al restaurar el estado de un día ya cargado, toma como
+      referencia el estado del primer contrato encontrado (se asume
+      que todos los contratos de la misma persona comparten estado)
+
   ============================================================
 -->
 <style>
@@ -131,6 +146,7 @@
   }
   .company-header.mt { background: var(--mt-light); color: var(--mt-color); }
   .company-header.atg { background: var(--atg-light); color: var(--atg-color); }
+  .company-header.unified { background: var(--primary-light); color: var(--primary); }
 
   .select-all {
     display: flex; align-items: center; gap: 8px;
@@ -483,20 +499,40 @@ async function init() {
     ]);
 
     // Parse EMPLEADOS_JORNAL: [Legajo, Nombre, Planta, Company, Jornal, ValorHE, Activo]
-    empleados = empData.slice(1).filter(r => r[1] && String(r[6]||'').toUpperCase() === 'SI')
-      .filter(r => String(r[2]||'').toUpperCase().includes('CICLO'))
-      .map(r => ({
+    // v1.1: Unificamos por nombre. Un empleado puede tener "contratos" en varias companies.
+    // El form muestra 1 fila por persona pero al guardar genera 1 registro por company.
+    const rawRows = empData.slice(1).filter(r => r[1] && String(r[6]||'').toUpperCase() === 'SI')
+      .filter(r => String(r[2]||'').toUpperCase().includes('CICLO'));
+
+    const mapPorNombre = {};
+    rawRows.forEach(r => {
+      const nombre = String(r[1]||'').trim();
+      const key = nombre.toUpperCase();
+      if (!mapPorNombre[key]) {
+        mapPorNombre[key] = {
+          nombre: nombre,
+          contratos: []  // lista de {legajo, company, jornal, valorHE}
+        };
+      }
+      mapPorNombre[key].contratos.push({
         legajo: String(r[0]||'').trim(),
-        nombre: String(r[1]||'').trim(),
-        planta: String(r[2]||'').trim(),
         company: String(r[3]||'').trim().toUpperCase(),
         jornal: parseFloat(r[4]) || 0,
         valorHE: parseFloat(r[5]) || 0
-      }));
+      });
+    });
 
-    // Cache registros existentes del día actual para pre-cargar el form
+    empleados = Object.values(mapPorNombre).map(emp => {
+      // Cálculos agregados para mostrar en la UI
+      emp.jornalTotal = emp.contratos.reduce((s, c) => s + c.jornal, 0);
+      emp.valorHETotal = emp.contratos.reduce((s, c) => s + c.valorHE, 0);
+      emp.companies = emp.contratos.map(c => c.company).join(' + ');
+      emp.key = emp.nombre.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+      return emp;
+    });
+    empleados.sort((a, b) => a.nombre.localeCompare(b.nombre));
+
     loadRegistrosDelDia(cicloData);
-
     render();
     document.getElementById('loadingOverlay').classList.add('hidden');
   } catch(e) {
@@ -527,110 +563,108 @@ function filterByDate() {
 }
 
 // ============================================================
-//  RENDER
+//  RENDER (v1.1 — vista unificada, 1 fila por persona)
 // ============================================================
 function render() {
   const container = document.getElementById('companiesContainer');
   container.innerHTML = '';
 
-  const byCompany = { MT: [], ATG: [] };
-  empleados.forEach(e => {
-    if (byCompany[e.company]) byCompany[e.company].push(e);
-  });
+  // Una sola card con todos los empleados
+  const section = document.createElement('div');
+  section.className = 'card';
 
-  ['MT', 'ATG'].forEach(company => {
-    const emps = byCompany[company];
-    if (emps.length === 0) return;
+  const header = document.createElement('div');
+  header.className = 'company-header unified';
+  header.innerHTML = `<span>Empleados jornaleros</span>`;
+  const selAllLabel = document.createElement('label');
+  selAllLabel.className = 'select-all';
+  selAllLabel.innerHTML = `<input type="checkbox" id="selAll" onchange="toggleAll(this.checked)"> Todos presentes`;
+  header.appendChild(selAllLabel);
+  section.appendChild(header);
 
-    const section = document.createElement('div');
-    section.className = 'card company-section';
-
-    const header = document.createElement('div');
-    header.className = 'company-header ' + company.toLowerCase();
-    header.innerHTML = `<span>${company}</span>`;
-
-    const selAllLabel = document.createElement('label');
-    selAllLabel.className = 'select-all';
-    selAllLabel.innerHTML = `<input type="checkbox" id="selAll_${company}" onchange="toggleAll('${company}', this.checked)"> Todos presentes`;
-    header.appendChild(selAllLabel);
-    section.appendChild(header);
-
-    emps.forEach(emp => {
-      const id = emp.legajo + '||' + document.getElementById('fecha').value + '||' + company;
-      const existing = registrosDia[id];
-
-      const row = document.createElement('div');
-      row.className = 'employee-row';
-      row.id = 'row_' + company + '_' + emp.legajo;
-      row.dataset.legajo = emp.legajo;
-      row.dataset.company = company;
-
-      // Build row HTML
-      const jornalStr = emp.jornal ? fmtMoney(emp.jornal) : 'Sin jornal';
-      const heStr = emp.valorHE ? fmtMoney(emp.valorHE) + '/HE' : '';
-      const badgeLoaded = existing ? '<span class="badge-loaded">Ya cargado</span>' : '';
-
-      row.innerHTML = `
-        <div class="emp-top">
-          <div class="emp-info">
-            <div class="emp-name">${emp.nombre}${badgeLoaded}</div>
-            <div class="emp-meta">Leg ${emp.legajo || '—'} · ${jornalStr} ${heStr ? '· ' + heStr : ''}</div>
-          </div>
-          <div class="status-toggle">
-            <button type="button" class="status-btn btn-p" onclick="setStatus('${company}', '${emp.legajo}', 'P')">PRES</button>
-            <button type="button" class="status-btn btn-a" onclick="setStatus('${company}', '${emp.legajo}', 'A')">AUS</button>
-          </div>
-        </div>
-        <div class="emp-extras">
-          <div class="extras-item extras-presente hidden">
-            <label for="he_${company}_${emp.legajo}">Hs extras:</label>
-            <input type="number" id="he_${company}_${emp.legajo}" min="0" step="0.5" value="0" onchange="recalcImporte('${company}', '${emp.legajo}')">
-          </div>
-          <div class="extras-item extras-ausente hidden">
-            <input type="checkbox" id="cm_${company}_${emp.legajo}">
-            <label for="cm_${company}_${emp.legajo}">Certificado médico</label>
-          </div>
-          <div class="importe-tag" id="imp_${company}_${emp.legajo}" style="display:none">$ 0</div>
-        </div>
-      `;
-
-      section.appendChild(row);
-
-      // Restore state if registro already exists for today
-      if (existing) {
-        // Col indexes: 5=Presente, 6=Ausente, 7=CertMed, 8=HE
-        const presente = String(existing[5]||'').toUpperCase() === 'SI';
-        const ausente = String(existing[6]||'').toUpperCase() === 'SI';
-        const certMed = String(existing[7]||'').toUpperCase() === 'SI';
-        const he = parseFloat(existing[8]) || 0;
-
-        if (presente) {
-          setStatusSilent(company, emp.legajo, 'P');
-          document.getElementById('he_' + company + '_' + emp.legajo).value = he;
-        } else if (ausente) {
-          setStatusSilent(company, emp.legajo, 'A');
-          document.getElementById('cm_' + company + '_' + emp.legajo).checked = certMed;
-        }
-      }
+  empleados.forEach(emp => {
+    // Check si hay algún registro ya cargado (por cualquiera de sus companies)
+    const fecha = document.getElementById('fecha').value;
+    const existings = emp.contratos.map(c => {
+      const id = c.legajo + '||' + fecha + '||' + c.company;
+      return registrosDia[id];
     });
+    const hayCargado = existings.some(e => e);
 
-    container.appendChild(section);
+    const row = document.createElement('div');
+    row.className = 'employee-row';
+    row.id = 'row_' + emp.key;
+    row.dataset.key = emp.key;
+
+    // UI: mostramos el jornal TOTAL (suma de ambas companies) porque al
+    // supervisor le importa cuánto cobra la persona, no cómo se divide
+    const jornalStr = emp.jornalTotal ? fmtMoney(emp.jornalTotal) : 'Sin jornal';
+    const heStr = emp.valorHETotal ? fmtMoney(emp.valorHETotal) + '/HE' : '';
+    const badgeLoaded = hayCargado ? '<span class="badge-loaded">Ya cargado</span>' : '';
+    const legajos = emp.contratos.map(c => c.legajo || '—').join('/');
+
+    row.innerHTML = `
+      <div class="emp-top">
+        <div class="emp-info">
+          <div class="emp-name">${emp.nombre}${badgeLoaded}</div>
+          <div class="emp-meta">Leg ${legajos} · ${jornalStr}${heStr ? ' · ' + heStr : ''}</div>
+        </div>
+        <div class="status-toggle">
+          <button type="button" class="status-btn btn-p" onclick="setStatus('${emp.key}', 'P')">PRES</button>
+          <button type="button" class="status-btn btn-a" onclick="setStatus('${emp.key}', 'A')">AUS</button>
+        </div>
+      </div>
+      <div class="emp-extras">
+        <div class="extras-item extras-presente hidden">
+          <label for="he_${emp.key}">Hs extras:</label>
+          <input type="number" id="he_${emp.key}" min="0" step="0.5" value="0" onchange="recalcImporte('${emp.key}')">
+        </div>
+        <div class="extras-item extras-ausente hidden">
+          <input type="checkbox" id="cm_${emp.key}">
+          <label for="cm_${emp.key}">Certificado médico</label>
+        </div>
+        <div class="importe-tag" id="imp_${emp.key}" style="display:none">$ 0</div>
+      </div>
+    `;
+
+    section.appendChild(row);
+
+    // Restaurar estado si ya hay registros cargados.
+    // Tomamos el primer contrato que tenga un registro (asumimos que todos
+    // los contratos de la misma persona comparten estado: presente o ausente)
+    const firstExisting = existings.find(e => e);
+    if (firstExisting) {
+      const presente = String(firstExisting[5]||'').toUpperCase() === 'SI';
+      const ausente = String(firstExisting[6]||'').toUpperCase() === 'SI';
+      const certMed = String(firstExisting[7]||'').toUpperCase() === 'SI';
+      const he = parseFloat(firstExisting[8]) || 0;
+
+      if (presente) {
+        setStatusSilent(emp.key, 'P');
+        document.getElementById('he_' + emp.key).value = he;
+        recalcImporte(emp.key);
+      } else if (ausente) {
+        setStatusSilent(emp.key, 'A');
+        document.getElementById('cm_' + emp.key).checked = certMed;
+      }
+    }
   });
 
+  container.appendChild(section);
   updateTotales();
 }
 
 // ============================================================
 //  STATUS TOGGLE
 // ============================================================
-function setStatus(company, legajo, status) {
-  setStatusSilent(company, legajo, status);
+function setStatus(key, status) {
+  setStatusSilent(key, status);
   updateTotales();
-  checkSelectAllState(company);
+  checkSelectAllState();
 }
 
-function setStatusSilent(company, legajo, status) {
-  const row = document.getElementById('row_' + company + '_' + legajo);
+function setStatusSilent(key, status) {
+  const row = document.getElementById('row_' + key);
   if (!row) return;
 
   const btnP = row.querySelector('.btn-p');
@@ -639,12 +673,11 @@ function setStatusSilent(company, legajo, status) {
   const extrasA = row.querySelector('.extras-ausente');
   const impTag = row.querySelector('.importe-tag');
 
-  // Toggle off if already active
   const isCurrentlyP = row.classList.contains('presente');
   const isCurrentlyA = row.classList.contains('ausente');
 
+  // Toggle off if already active
   if (status === 'P' && isCurrentlyP) {
-    // Unset
     row.classList.remove('presente');
     btnP.classList.remove('active-p');
     extrasP.classList.add('hidden');
@@ -659,7 +692,7 @@ function setStatusSilent(company, legajo, status) {
     return;
   }
 
-  // Clear both states
+  // Clear both and apply new
   row.classList.remove('presente', 'ausente');
   btnP.classList.remove('active-p');
   btnA.classList.remove('active-a');
@@ -670,7 +703,7 @@ function setStatusSilent(company, legajo, status) {
     row.classList.add('presente');
     btnP.classList.add('active-p');
     extrasP.classList.remove('hidden');
-    recalcImporte(company, legajo);
+    recalcImporte(key);
   } else if (status === 'A') {
     row.classList.add('ausente');
     btnA.classList.add('active-a');
@@ -679,43 +712,41 @@ function setStatusSilent(company, legajo, status) {
   }
 }
 
-function toggleAll(company, checked) {
-  empleados.filter(e => e.company === company).forEach(e => {
-    if (checked) {
-      setStatusSilent(company, e.legajo, 'P');
-    } else {
-      const row = document.getElementById('row_' + company + '_' + e.legajo);
-      if (row && row.classList.contains('presente')) {
-        setStatusSilent(company, e.legajo, 'P'); // toggle off
-      }
+function toggleAll(checked) {
+  empleados.forEach(emp => {
+    const row = document.getElementById('row_' + emp.key);
+    if (!row) return;
+    const isP = row.classList.contains('presente');
+    if (checked && !isP) {
+      setStatusSilent(emp.key, 'P');
+    } else if (!checked && isP) {
+      setStatusSilent(emp.key, 'P'); // toggle off
     }
   });
   updateTotales();
 }
 
-function checkSelectAllState(company) {
-  const emps = empleados.filter(e => e.company === company);
-  const allP = emps.every(e => {
-    const row = document.getElementById('row_' + company + '_' + e.legajo);
+function checkSelectAllState() {
+  const allP = empleados.every(emp => {
+    const row = document.getElementById('row_' + emp.key);
     return row && row.classList.contains('presente');
   });
-  const selAll = document.getElementById('selAll_' + company);
+  const selAll = document.getElementById('selAll');
   if (selAll) selAll.checked = allP;
 }
 
 // ============================================================
-//  CALC IMPORTE
+//  CALC IMPORTE (v1.1 — suma todos los contratos del empleado)
 // ============================================================
-function recalcImporte(company, legajo) {
-  const emp = empleados.find(e => e.company === company && e.legajo === legajo);
+function recalcImporte(key) {
+  const emp = empleados.find(e => e.key === key);
   if (!emp) return;
-  const row = document.getElementById('row_' + company + '_' + legajo);
+  const row = document.getElementById('row_' + key);
   if (!row || !row.classList.contains('presente')) return;
 
-  const heInput = document.getElementById('he_' + company + '_' + legajo);
-  const he = parseFloat(heInput.value) || 0;
-  const importeHE = he * emp.valorHE;
-  const total = emp.jornal + importeHE;
+  const he = parseFloat(document.getElementById('he_' + key).value) || 0;
+  // Jornal total + HE total (sumado entre todas las companies)
+  const total = emp.jornalTotal + (he * emp.valorHETotal);
 
   const impTag = row.querySelector('.importe-tag');
   impTag.textContent = fmtMoney(total);
@@ -728,13 +759,12 @@ function updateTotales() {
   let total = 0, pres = 0, aus = 0;
 
   empleados.forEach(emp => {
-    const row = document.getElementById('row_' + emp.company + '_' + emp.legajo);
+    const row = document.getElementById('row_' + emp.key);
     if (!row) return;
     if (row.classList.contains('presente')) {
       pres++;
-      const heInput = document.getElementById('he_' + emp.company + '_' + emp.legajo);
-      const he = parseFloat(heInput.value) || 0;
-      total += emp.jornal + (he * emp.valorHE);
+      const he = parseFloat(document.getElementById('he_' + emp.key).value) || 0;
+      total += emp.jornalTotal + (he * emp.valorHETotal);
     } else if (row.classList.contains('ausente')) {
       aus++;
     }
@@ -745,7 +775,7 @@ function updateTotales() {
 }
 
 // ============================================================
-//  GUARDAR
+//  GUARDAR (v1.1 — 1 fila por contrato/company en CICLOII)
 // ============================================================
 async function guardar() {
   const btn = document.getElementById('btnGuardar');
@@ -754,30 +784,32 @@ async function guardar() {
 
   const rowsToSave = [];
   empleados.forEach(emp => {
-    const row = document.getElementById('row_' + emp.company + '_' + emp.legajo);
+    const row = document.getElementById('row_' + emp.key);
     if (!row) return;
     const presente = row.classList.contains('presente');
     const ausente = row.classList.contains('ausente');
     if (!presente && !ausente) return;  // sin marcar, saltar
 
-    const he = presente ? (parseFloat(document.getElementById('he_' + emp.company + '_' + emp.legajo).value) || 0) : 0;
-    const certMed = ausente ? document.getElementById('cm_' + emp.company + '_' + emp.legajo).checked : false;
-    const importeHE = he * emp.valorHE;
-    const jornalCobrado = presente ? emp.jornal : 0;
-    const total = jornalCobrado + importeHE;
-
-    const id = emp.legajo + '||' + fecha + '||' + emp.company;
+    const he = presente ? (parseFloat(document.getElementById('he_' + emp.key).value) || 0) : 0;
+    const certMed = ausente ? document.getElementById('cm_' + emp.key).checked : false;
     const ua = navigator.userAgent.substring(0, 120);
     const ts = new Date().toISOString();
 
-    // [ID, Fecha, Legajo, Nombre, Company, Presente, Ausente, CertMed, HE, Jornal, Importe_HE, Importe_Total, UA, TS]
-    rowsToSave.push([
-      id, fecha, emp.legajo, emp.nombre, emp.company,
-      presente ? 'SI' : 'NO',
-      ausente ? 'SI' : 'NO',
-      certMed ? 'SI' : 'NO',
-      he, jornalCobrado, importeHE, total, ua, ts
-    ]);
+    // Emitir 1 fila por contrato (una por company donde el empleado tiene tarifa)
+    emp.contratos.forEach(contrato => {
+      const jornalCobrado = presente ? contrato.jornal : 0;
+      const importeHE = he * contrato.valorHE;
+      const total = jornalCobrado + importeHE;
+      const id = contrato.legajo + '||' + fecha + '||' + contrato.company;
+
+      rowsToSave.push([
+        id, fecha, contrato.legajo, emp.nombre, contrato.company,
+        presente ? 'SI' : 'NO',
+        ausente ? 'SI' : 'NO',
+        certMed ? 'SI' : 'NO',
+        he, jornalCobrado, importeHE, total, ua, ts
+      ]);
+    });
   });
 
   if (rowsToSave.length === 0) {
@@ -796,7 +828,6 @@ async function guardar() {
     }
     if (errors === 0) {
       showToast('✓ ' + ok + ' registros guardados');
-      // Refresh cache
       const cicloData = await fetchSheet('CICLOII');
       loadRegistrosDelDia(cicloData);
       render();
