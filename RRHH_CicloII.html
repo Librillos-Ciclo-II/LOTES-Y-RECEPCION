@@ -96,6 +96,16 @@
     - No contempla feriados nacionales (se descuentan manualmente
       si fuera necesario).
 
+  v1.5  2026-04-10  Fix crash en plantas sin HE (DELTA/ALBA/CCP/RECREO)
+    - setStatusSilent() fallaba con "Cannot read properties of null"
+      al clickear PRES o AUS en empleados sin campo de Horas
+      Extras (todas las plantas excepto Ciclo II).
+    - Causa: el div .extras-presente solo se renderiza si el
+      empleado tiene permiteHE=true, por lo que querySelector
+      devolvía null, y al llamar classList.add/remove crasheaba.
+    - Fix: agregados guards "if (extrasP)" e "if (extrasA)"
+      antes de cada operación sobre esos elementos.
+
   ============================================================
 -->
 <style>
@@ -801,7 +811,7 @@ function setStatusSilent(key, status) {
 
   const btnP = row.querySelector('.btn-p');
   const btnA = row.querySelector('.btn-a');
-  const extrasP = row.querySelector('.extras-presente');
+  const extrasP = row.querySelector('.extras-presente');  // puede ser null si !permiteHE
   const extrasA = row.querySelector('.extras-ausente');
   const impTag = row.querySelector('.importe-tag');
 
@@ -812,14 +822,14 @@ function setStatusSilent(key, status) {
   if (status === 'P' && isCurrentlyP) {
     row.classList.remove('presente');
     btnP.classList.remove('active-p');
-    extrasP.classList.add('hidden');
+    if (extrasP) extrasP.classList.add('hidden');
     impTag.style.display = 'none';
     return;
   }
   if (status === 'A' && isCurrentlyA) {
     row.classList.remove('ausente');
     btnA.classList.remove('active-a');
-    extrasA.classList.add('hidden');
+    if (extrasA) extrasA.classList.add('hidden');
     impTag.style.display = 'none';
     return;
   }
@@ -828,18 +838,18 @@ function setStatusSilent(key, status) {
   row.classList.remove('presente', 'ausente');
   btnP.classList.remove('active-p');
   btnA.classList.remove('active-a');
-  extrasP.classList.add('hidden');
-  extrasA.classList.add('hidden');
+  if (extrasP) extrasP.classList.add('hidden');
+  if (extrasA) extrasA.classList.add('hidden');
 
   if (status === 'P') {
     row.classList.add('presente');
     btnP.classList.add('active-p');
-    extrasP.classList.remove('hidden');
+    if (extrasP) extrasP.classList.remove('hidden');
     recalcImporte(key);
   } else if (status === 'A') {
     row.classList.add('ausente');
     btnA.classList.add('active-a');
-    extrasA.classList.remove('hidden');
+    if (extrasA) extrasA.classList.remove('hidden');
     impTag.style.display = 'none';
   }
 }
