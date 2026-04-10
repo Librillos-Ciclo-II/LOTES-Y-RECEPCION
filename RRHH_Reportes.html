@@ -1,0 +1,1016 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RRHH — Reportes</title>
+<!--
+  ============================================================
+  Santa Faz — RRHH Reportes (Dashboard de consulta)
+  Repo: librillos-ciclo-ii/LOTES-Y-RECEPCION
+  ============================================================
+
+  v1.0  2026-04-10  Versión inicial
+    - Dashboard de consulta de datos cargados (solo lectura)
+    - Filtros: Planta, Company, rango de fechas (o quincena
+      rápida), empleado (opcional)
+    - 3 vistas intercambiables:
+      1. ASISTENCIA: lista diaria de jornaleros (de solapa
+         ASISTENCIA) con presente/ausente, HE, importe
+      2. DESTAJO: lista diaria de actividades de destajo
+         (de solapa RRHH) con actividad, unidades, importe
+      3. RESUMEN: consolidado por empleado del período
+         mostrando total jornales + total destajo
+    - Contadores superiores: presentes, ausentes, total
+      jornales, total destajo, total general
+    - Exportación a CSV de cualquier vista
+    - No modifica datos, es 100% consulta
+
+  ============================================================
+-->
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg: #f5f5f0;
+    --card: #ffffff;
+    --primary: #2d5a27;
+    --primary-light: #e8f0e6;
+    --accent: #c5a030;
+    --accent-light: #fff8e1;
+    --mt-color: #2980b9;
+    --mt-light: #eaf2f8;
+    --atg-color: #c5a030;
+    --atg-light: #fff8e1;
+    --text: #1a1a1a;
+    --text-muted: #6b6b6b;
+    --border: #ddd;
+    --danger: #c0392b;
+    --danger-light: #fceaea;
+    --success: #27ae60;
+    --radius: 10px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .header {
+    background: var(--primary);
+    color: white;
+    padding: 16px 20px;
+    text-align: center;
+    position: sticky; top: 0; z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+  .header h1 { font-size: 1.15rem; font-weight: 600; letter-spacing: 0.5px; }
+  .header small { font-size: 0.75rem; opacity: 0.8; display: block; margin-top: 2px; }
+
+  .container { max-width: 1200px; margin: 0 auto; padding: 16px; }
+
+  .card {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 18px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+
+  /* ---- FILTROS ---- */
+  .filters-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .filters-grid label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-bottom: 4px;
+  }
+  .filters-grid input, .filters-grid select {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1.5px solid var(--border);
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 0.88rem;
+    background: white;
+  }
+  .filters-grid input:focus, .filters-grid select:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-light);
+  }
+
+  .quick-periods {
+    display: flex; gap: 6px; flex-wrap: wrap;
+    margin-top: 8px;
+  }
+  .quick-btn {
+    padding: 6px 12px;
+    border: 1.5px solid var(--border);
+    background: white;
+    border-radius: 20px;
+    font-family: inherit;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .quick-btn:hover { background: var(--primary-light); border-color: var(--primary); }
+  .quick-btn.active {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+  }
+
+  /* ---- KPIs ---- */
+  .kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .kpi {
+    background: white;
+    border-radius: 8px;
+    padding: 12px 14px;
+    border-left: 4px solid var(--primary);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  .kpi.mt { border-left-color: var(--mt-color); }
+  .kpi.atg { border-left-color: var(--atg-color); }
+  .kpi.danger { border-left-color: var(--danger); }
+  .kpi .label {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+  .kpi .value {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-top: 3px;
+  }
+  .kpi .sub {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  /* ---- TABS ---- */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 2px solid var(--border);
+    margin-bottom: 16px;
+    overflow-x: auto;
+  }
+  .tab {
+    padding: 10px 18px;
+    border: none;
+    background: transparent;
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+  .tab:hover { color: var(--primary); }
+  .tab.active {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+  }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* ---- TABLA ---- */
+  .table-wrap {
+    background: white;
+    border-radius: 8px;
+    overflow: auto;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    max-height: 70vh;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+  }
+  thead {
+    position: sticky;
+    top: 0;
+    background: var(--primary);
+    color: white;
+    z-index: 5;
+  }
+  th {
+    padding: 10px 12px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    border-right: 1px solid rgba(255,255,255,0.1);
+    white-space: nowrap;
+  }
+  th:last-child { border-right: none; }
+  td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #eee;
+    white-space: nowrap;
+  }
+  tbody tr:hover { background: var(--primary-light); }
+  tbody tr.presente td:first-child { border-left: 3px solid var(--success); }
+  tbody tr.ausente td:first-child { border-left: 3px solid var(--danger); }
+
+  .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .tag-mt { background: var(--mt-light); color: var(--mt-color); }
+  .tag-atg { background: var(--atg-light); color: var(--atg-color); }
+  .tag-pres { background: #d4edda; color: #155724; }
+  .tag-aus { background: var(--danger-light); color: var(--danger); }
+  .tag-fijo { background: var(--accent-light); color: #8a6d10; }
+
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  .empty {
+    padding: 60px 20px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+  }
+
+  .row-buttons {
+    display: flex;
+    gap: 8px;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .count-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+  .count-label strong { color: var(--text); }
+
+  .btn-export {
+    padding: 8px 14px;
+    border: 1.5px solid var(--primary);
+    background: white;
+    color: var(--primary);
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .btn-export:hover { background: var(--primary-light); }
+
+  .loading-overlay {
+    position: fixed; inset: 0;
+    background: rgba(255,255,255,0.9);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 300; font-weight: 600; color: var(--primary);
+  }
+  .spinner {
+    display: inline-block;
+    width: 16px; height: 16px;
+    border: 2px solid #ddd;
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>RRHH — Reportes</h1>
+  <small>Consulta de asistencia y destajo</small>
+</div>
+
+<div id="loadingOverlay" class="loading-overlay">
+  <div><span class="spinner"></span> Cargando datos...</div>
+</div>
+
+<div class="container">
+
+  <!-- FILTROS -->
+  <div class="card">
+    <div class="filters-grid">
+      <div>
+        <label>Planta</label>
+        <select id="filtroPlanta">
+          <option value="">— Todas —</option>
+        </select>
+      </div>
+      <div>
+        <label>Company</label>
+        <select id="filtroCompany">
+          <option value="">— Todas —</option>
+          <option value="MT">MT</option>
+          <option value="ATG">ATG</option>
+        </select>
+      </div>
+      <div>
+        <label>Desde</label>
+        <input type="date" id="filtroDesde">
+      </div>
+      <div>
+        <label>Hasta</label>
+        <input type="date" id="filtroHasta">
+      </div>
+      <div>
+        <label>Empleado</label>
+        <input type="text" id="filtroEmpleado" placeholder="Nombre...">
+      </div>
+    </div>
+    <div class="quick-periods">
+      <button class="quick-btn" onclick="setHoy()">Hoy</button>
+      <button class="quick-btn" onclick="setSemana()">Últimos 7 días</button>
+      <button class="quick-btn" onclick="setQuincena(1)">1ra Quincena actual</button>
+      <button class="quick-btn" onclick="setQuincena(2)">2da Quincena actual</button>
+      <button class="quick-btn" onclick="setMes()">Mes actual</button>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="kpis" id="kpisContainer"></div>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('asistencia')">Asistencia</button>
+    <button class="tab" onclick="switchTab('destajo')">Destajo</button>
+    <button class="tab" onclick="switchTab('resumen')">Resumen por empleado</button>
+  </div>
+
+  <!-- ASISTENCIA -->
+  <div class="tab-content active" id="tab-asistencia">
+    <div class="row-buttons">
+      <div class="count-label"><span id="countAsis">0</span> registros</div>
+      <button class="btn-export" onclick="exportCSV('asistencia')">↓ Exportar CSV</button>
+    </div>
+    <div class="table-wrap">
+      <table id="tablaAsistencia">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Planta</th>
+            <th>Company</th>
+            <th>Legajo</th>
+            <th>Empleado</th>
+            <th>Estado</th>
+            <th>Cert.</th>
+            <th class="num">HE</th>
+            <th class="num">Jornal</th>
+            <th class="num">Imp. HE</th>
+            <th class="num">Total</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- DESTAJO -->
+  <div class="tab-content" id="tab-destajo">
+    <div class="row-buttons">
+      <div class="count-label"><span id="countDest">0</span> registros</div>
+      <button class="btn-export" onclick="exportCSV('destajo')">↓ Exportar CSV</button>
+    </div>
+    <div class="table-wrap">
+      <table id="tablaDestajo">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Legajo</th>
+            <th>Operario</th>
+            <th>Actividad</th>
+            <th class="num">Unidades</th>
+            <th class="num">Importe</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- RESUMEN -->
+  <div class="tab-content" id="tab-resumen">
+    <div class="row-buttons">
+      <div class="count-label"><span id="countRes">0</span> empleados</div>
+      <button class="btn-export" onclick="exportCSV('resumen')">↓ Exportar CSV</button>
+    </div>
+    <div class="table-wrap">
+      <table id="tablaResumen">
+        <thead>
+          <tr>
+            <th>Empleado</th>
+            <th>Planta</th>
+            <th>Company</th>
+            <th class="num">Días pres.</th>
+            <th class="num">Días aus.</th>
+            <th class="num">Total HE</th>
+            <th class="num">Total Jornales</th>
+            <th class="num">Total Destajo</th>
+            <th class="num">Total General</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+//  CONFIG
+// ============================================================
+const API = 'https://script.google.com/macros/s/AKfycbzud3BqEJzJPVy4ehTnfOH_m_DfQv05Arx1aEhEgYEUz1V0cKZb0rwSU1ZjR8ZbIECN/exec';
+
+let datosAsistencia = [];
+let datosDestajo = [];
+let currentTab = 'asistencia';
+
+// ============================================================
+//  HELPERS
+// ============================================================
+function fmt(v) {
+  if (!v) return '';
+  const d = typeof v === 'string' ? v.slice(0,10) : v;
+  const [y,m,dd] = d.split('-');
+  return `${dd}/${m}/${y}`;
+}
+
+function fmtMoney(n) {
+  if (!n) return '—';
+  return '$ ' + Math.round(n).toLocaleString('es-AR');
+}
+
+function fmtNum(n, decimals=1) {
+  if (!n) return '—';
+  return Number(n).toLocaleString('es-AR', { maximumFractionDigits: decimals });
+}
+
+function todayISO() {
+  const d = new Date();
+  return d.getFullYear() + '-' +
+    String(d.getMonth()+1).padStart(2,'0') + '-' +
+    String(d.getDate()).padStart(2,'0');
+}
+
+async function fetchSheet(sheet) {
+  const url = API + '?action=get&sheet=' + encodeURIComponent(sheet) + '&_=' + Date.now();
+  const r = await fetch(url);
+  const j = await r.json();
+  if (j.ok) return j.data;
+  throw new Error(j.error || 'Error al leer ' + sheet);
+}
+
+// ============================================================
+//  INIT
+// ============================================================
+async function init() {
+  try {
+    // Default: últimos 7 días
+    setSemana();
+
+    const [asisData, rrhhData] = await Promise.all([
+      fetchSheet('ASISTENCIA'),
+      fetchSheet('RRHH')
+    ]);
+
+    // Parse ASISTENCIA
+    // [ID, Fecha, Legajo, Nombre, Planta, Company, Tipo_Pago, Presente, Ausente,
+    //  Cert_Medico, Horas_Extras, Jornal, Importe_HE, Importe_Total, UA, Timestamp]
+    datosAsistencia = asisData.slice(1).filter(r => r[0]).map(r => ({
+      id: String(r[0]),
+      fecha: String(r[1]||'').slice(0,10),
+      legajo: String(r[2]||'').trim(),
+      nombre: String(r[3]||'').trim(),
+      planta: String(r[4]||'').trim(),
+      company: String(r[5]||'').trim(),
+      tipoPago: String(r[6]||'').trim(),
+      presente: String(r[7]||'').toUpperCase() === 'SI',
+      ausente: String(r[8]||'').toUpperCase() === 'SI',
+      certMedico: String(r[9]||'').toUpperCase() === 'SI',
+      horasExtras: parseFloat(r[10]) || 0,
+      jornal: parseFloat(r[11]) || 0,
+      importeHE: parseFloat(r[12]) || 0,
+      importeTotal: parseFloat(r[13]) || 0
+    }));
+
+    // Parse RRHH (destajo)
+    // [ID, Fecha, Legajo, Operario, Actividad, Unidades, Importe, UA, Timestamp]
+    datosDestajo = rrhhData.slice(1).filter(r => r[0]).map(r => ({
+      id: String(r[0]),
+      fecha: String(r[1]||'').slice(0,10),
+      legajo: String(r[2]||'').trim(),
+      nombre: String(r[3]||'').trim(),
+      actividad: String(r[4]||'').trim(),
+      unidades: parseInt(r[5]) || 0,
+      importe: parseFloat(r[6]) || 0
+    }));
+
+    // Poblar dropdown de plantas
+    const plantas = [...new Set([
+      ...datosAsistencia.map(r => r.planta),
+      'CICLO II'  // El destajo siempre es Ciclo II
+    ])].filter(p => p).sort();
+    const selPlanta = document.getElementById('filtroPlanta');
+    plantas.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p;
+      opt.textContent = p;
+      selPlanta.appendChild(opt);
+    });
+
+    document.getElementById('loadingOverlay').classList.add('hidden');
+    aplicarFiltros();
+  } catch(e) {
+    console.error(e);
+    document.getElementById('loadingOverlay').innerHTML =
+      '<div style="text-align:center;padding:20px;"><p style="color:#c0392b;font-weight:600;">Error al cargar datos</p><p style="font-size:0.85rem;margin-top:8px;">' +
+      e.message + '</p><button onclick="location.reload()" class="quick-btn" style="margin-top:12px;">Reintentar</button></div>';
+  }
+}
+
+// ============================================================
+//  FILTROS RÁPIDOS
+// ============================================================
+function setHoy() {
+  const h = todayISO();
+  document.getElementById('filtroDesde').value = h;
+  document.getElementById('filtroHasta').value = h;
+  markActive(0);
+  aplicarFiltros();
+}
+
+function setSemana() {
+  const hoy = new Date();
+  const desde = new Date(hoy);
+  desde.setDate(desde.getDate() - 7);
+  document.getElementById('filtroDesde').value = toISO(desde);
+  document.getElementById('filtroHasta').value = toISO(hoy);
+  markActive(1);
+  aplicarFiltros();
+}
+
+function setQuincena(q) {
+  const hoy = new Date();
+  const y = hoy.getFullYear();
+  const m = hoy.getMonth();
+  let desde, hasta;
+  if (q === 1) {
+    desde = new Date(y, m, 1);
+    hasta = new Date(y, m, 15);
+  } else {
+    desde = new Date(y, m, 16);
+    hasta = new Date(y, m + 1, 0);  // último día del mes
+  }
+  document.getElementById('filtroDesde').value = toISO(desde);
+  document.getElementById('filtroHasta').value = toISO(hasta);
+  markActive(q === 1 ? 2 : 3);
+  aplicarFiltros();
+}
+
+function setMes() {
+  const hoy = new Date();
+  const desde = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  const hasta = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+  document.getElementById('filtroDesde').value = toISO(desde);
+  document.getElementById('filtroHasta').value = toISO(hasta);
+  markActive(4);
+  aplicarFiltros();
+}
+
+function toISO(d) {
+  return d.getFullYear() + '-' +
+    String(d.getMonth()+1).padStart(2,'0') + '-' +
+    String(d.getDate()).padStart(2,'0');
+}
+
+function markActive(idx) {
+  document.querySelectorAll('.quick-btn').forEach((b, i) => {
+    b.classList.toggle('active', i === idx);
+  });
+}
+
+// ============================================================
+//  APLICAR FILTROS Y RENDERIZAR
+// ============================================================
+function aplicarFiltros() {
+  const planta = document.getElementById('filtroPlanta').value.toUpperCase();
+  const company = document.getElementById('filtroCompany').value.toUpperCase();
+  const desde = document.getElementById('filtroDesde').value;
+  const hasta = document.getElementById('filtroHasta').value;
+  const empleado = document.getElementById('filtroEmpleado').value.toUpperCase().trim();
+
+  const matchRow = (r, incluyePlanta = true) => {
+    if (incluyePlanta && planta && String(r.planta||'').toUpperCase() !== planta) return false;
+    if (company && String(r.company||'').toUpperCase() !== company) return false;
+    if (desde && r.fecha < desde) return false;
+    if (hasta && r.fecha > hasta) return false;
+    if (empleado && !r.nombre.toUpperCase().includes(empleado)) return false;
+    return true;
+  };
+
+  // Asistencia
+  const asisFiltrada = datosAsistencia.filter(r => matchRow(r));
+
+  // Destajo (no tiene company ni planta estrictamente, asumimos CICLO II + match por nombre)
+  const destFiltrado = datosDestajo.filter(r => {
+    // Para destajo, asumimos que siempre es CICLO II. Si hay filtro de planta,
+    // solo aplica si es CICLO II o está vacío.
+    if (planta && planta !== 'CICLO II') return false;
+    if (desde && r.fecha < desde) return false;
+    if (hasta && r.fecha > hasta) return false;
+    if (empleado && !r.nombre.toUpperCase().includes(empleado)) return false;
+    // Company no filtra destajo (no tiene ese dato)
+    return true;
+  });
+
+  renderKPIs(asisFiltrada, destFiltrado);
+  renderAsistencia(asisFiltrada);
+  renderDestajo(destFiltrado);
+  renderResumen(asisFiltrada, destFiltrado);
+}
+
+// ============================================================
+//  KPIs
+// ============================================================
+function renderKPIs(asis, dest) {
+  const pres = asis.filter(r => r.presente).length;
+  const aus = asis.filter(r => r.ausente).length;
+  const totalJornales = asis.reduce((s, r) => s + r.importeTotal, 0);
+  const totalDestajo = dest.reduce((s, r) => s + r.importe, 0);
+  const totalMT = asis.filter(r => r.company === 'MT').reduce((s, r) => s + r.importeTotal, 0);
+  const totalATG = asis.filter(r => r.company === 'ATG').reduce((s, r) => s + r.importeTotal, 0);
+
+  const container = document.getElementById('kpisContainer');
+  container.innerHTML = `
+    <div class="kpi">
+      <div class="label">Presentes</div>
+      <div class="value">${pres}</div>
+      <div class="sub">registros</div>
+    </div>
+    <div class="kpi danger">
+      <div class="label">Ausentes</div>
+      <div class="value">${aus}</div>
+      <div class="sub">registros</div>
+    </div>
+    <div class="kpi mt">
+      <div class="label">Total MT</div>
+      <div class="value">${fmtMoney(totalMT)}</div>
+      <div class="sub">solo jornales</div>
+    </div>
+    <div class="kpi atg">
+      <div class="label">Total ATG</div>
+      <div class="value">${fmtMoney(totalATG)}</div>
+      <div class="sub">solo jornales</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Total Jornales</div>
+      <div class="value">${fmtMoney(totalJornales)}</div>
+      <div class="sub">MT + ATG</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Total Destajo</div>
+      <div class="value">${fmtMoney(totalDestajo)}</div>
+      <div class="sub">Ciclo II</div>
+    </div>
+    <div class="kpi" style="border-left-color:var(--accent)">
+      <div class="label">Total General</div>
+      <div class="value">${fmtMoney(totalJornales + totalDestajo)}</div>
+      <div class="sub">jornales + destajo</div>
+    </div>
+  `;
+}
+
+// ============================================================
+//  RENDER ASISTENCIA
+// ============================================================
+function renderAsistencia(data) {
+  const tbody = document.querySelector('#tablaAsistencia tbody');
+  document.getElementById('countAsis').textContent = data.length;
+
+  if (data.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="11" class="empty">Sin registros en el período seleccionado</td></tr>';
+    return;
+  }
+
+  // Ordenar por fecha desc, luego por nombre
+  const sorted = [...data].sort((a, b) => {
+    if (a.fecha !== b.fecha) return b.fecha.localeCompare(a.fecha);
+    return a.nombre.localeCompare(b.nombre);
+  });
+
+  tbody.innerHTML = sorted.map(r => {
+    const estadoTag = r.presente
+      ? '<span class="tag tag-pres">PRES</span>'
+      : (r.ausente ? '<span class="tag tag-aus">AUS</span>' : '—');
+    const companyTag = r.company
+      ? `<span class="tag tag-${r.company.toLowerCase()}">${r.company}</span>`
+      : '—';
+    const tipoTag = r.tipoPago === 'FIJO_QUINCENAL'
+      ? ' <span class="tag tag-fijo" title="Fijo quincenal prorrateado">FIJO</span>'
+      : '';
+    const rowClass = r.presente ? 'presente' : (r.ausente ? 'ausente' : '');
+
+    return `
+      <tr class="${rowClass}">
+        <td>${fmt(r.fecha)}</td>
+        <td>${r.planta}${tipoTag}</td>
+        <td>${companyTag}</td>
+        <td>${r.legajo}</td>
+        <td>${r.nombre}</td>
+        <td>${estadoTag}</td>
+        <td>${r.certMedico ? '✓' : '—'}</td>
+        <td class="num">${r.horasExtras || '—'}</td>
+        <td class="num">${fmtMoney(r.jornal)}</td>
+        <td class="num">${fmtMoney(r.importeHE)}</td>
+        <td class="num"><strong>${fmtMoney(r.importeTotal)}</strong></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// ============================================================
+//  RENDER DESTAJO
+// ============================================================
+function renderDestajo(data) {
+  const tbody = document.querySelector('#tablaDestajo tbody');
+  document.getElementById('countDest').textContent = data.length;
+
+  if (data.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">Sin registros de destajo en el período</td></tr>';
+    return;
+  }
+
+  const sorted = [...data].sort((a, b) => {
+    if (a.fecha !== b.fecha) return b.fecha.localeCompare(a.fecha);
+    return a.nombre.localeCompare(b.nombre);
+  });
+
+  tbody.innerHTML = sorted.map(r => `
+    <tr>
+      <td>${fmt(r.fecha)}</td>
+      <td>${r.legajo}</td>
+      <td>${r.nombre}</td>
+      <td>${r.actividad}</td>
+      <td class="num">${r.unidades}</td>
+      <td class="num"><strong>${fmtMoney(r.importe)}</strong></td>
+    </tr>
+  `).join('');
+}
+
+// ============================================================
+//  RENDER RESUMEN
+// ============================================================
+function renderResumen(asis, dest) {
+  const tbody = document.querySelector('#tablaResumen tbody');
+
+  // Consolidar por (legajo, nombre, planta, company)
+  // Para destajo, asumimos planta=CICLO II y company=null (sin company específica)
+  const map = {};
+
+  asis.forEach(r => {
+    const key = `${r.legajo}||${r.nombre.toUpperCase()}||${r.planta}||${r.company}`;
+    if (!map[key]) {
+      map[key] = {
+        legajo: r.legajo, nombre: r.nombre, planta: r.planta, company: r.company,
+        dias_pres: 0, dias_aus: 0, total_he: 0, total_jornales: 0, total_destajo: 0
+      };
+    }
+    if (r.presente) map[key].dias_pres++;
+    else if (r.ausente) map[key].dias_aus++;
+    map[key].total_he += r.horasExtras;
+    map[key].total_jornales += r.importeTotal;
+  });
+
+  // Agregar destajo al/los registros matching por nombre
+  dest.forEach(r => {
+    const nombreUp = r.nombre.toUpperCase();
+    // Buscar si este empleado ya tiene filas en el map (puede estar en MT y/o ATG)
+    const matching = Object.keys(map).filter(k => {
+      const parts = k.split('||');
+      return parts[1] === nombreUp;
+    });
+
+    if (matching.length > 0) {
+      // Asignar el destajo a su primera fila (no duplicar entre companies)
+      map[matching[0]].total_destajo += r.importe;
+    } else {
+      // Si no aparece en asistencia, crear una entrada solo de destajo
+      const key = `${r.legajo}||${nombreUp}||CICLO II||`;
+      if (!map[key]) {
+        map[key] = {
+          legajo: r.legajo, nombre: r.nombre, planta: 'CICLO II', company: '',
+          dias_pres: 0, dias_aus: 0, total_he: 0, total_jornales: 0, total_destajo: 0
+        };
+      }
+      map[key].total_destajo += r.importe;
+    }
+  });
+
+  const rows = Object.values(map);
+  document.getElementById('countRes').textContent = rows.length;
+
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" class="empty">Sin datos en el período</td></tr>';
+    return;
+  }
+
+  rows.sort((a, b) => {
+    if (a.planta !== b.planta) return a.planta.localeCompare(b.planta);
+    return a.nombre.localeCompare(b.nombre);
+  });
+
+  tbody.innerHTML = rows.map(r => {
+    const total = r.total_jornales + r.total_destajo;
+    const companyTag = r.company
+      ? `<span class="tag tag-${r.company.toLowerCase()}">${r.company}</span>`
+      : '—';
+    return `
+      <tr>
+        <td><strong>${r.nombre}</strong><br><span style="color:var(--text-muted);font-size:0.72rem">Leg ${r.legajo}</span></td>
+        <td>${r.planta}</td>
+        <td>${companyTag}</td>
+        <td class="num">${r.dias_pres}</td>
+        <td class="num">${r.dias_aus || '—'}</td>
+        <td class="num">${fmtNum(r.total_he) || '—'}</td>
+        <td class="num">${fmtMoney(r.total_jornales)}</td>
+        <td class="num">${fmtMoney(r.total_destajo)}</td>
+        <td class="num"><strong>${fmtMoney(total)}</strong></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// ============================================================
+//  TABS
+// ============================================================
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('tab-' + tab).classList.add('active');
+}
+
+// ============================================================
+//  EXPORTAR CSV
+// ============================================================
+function exportCSV(tab) {
+  let rows = [], headers = [], filename = '';
+  const desde = document.getElementById('filtroDesde').value || 'inicio';
+  const hasta = document.getElementById('filtroHasta').value || 'fin';
+
+  if (tab === 'asistencia') {
+    headers = ['Fecha','Planta','Company','Tipo_Pago','Legajo','Empleado','Estado','Cert_Medico','HE','Jornal','Importe_HE','Total'];
+    filename = `asistencia_${desde}_${hasta}.csv`;
+    const tbody = document.querySelector('#tablaAsistencia tbody');
+    // Leer de datosAsistencia filtrados
+    rows = getFilteredAsistencia().map(r => [
+      r.fecha, r.planta, r.company, r.tipoPago, r.legajo, r.nombre,
+      r.presente ? 'PRESENTE' : (r.ausente ? 'AUSENTE' : ''),
+      r.certMedico ? 'SI' : 'NO', r.horasExtras, Math.round(r.jornal),
+      Math.round(r.importeHE), Math.round(r.importeTotal)
+    ]);
+  } else if (tab === 'destajo') {
+    headers = ['Fecha','Legajo','Operario','Actividad','Unidades','Importe'];
+    filename = `destajo_${desde}_${hasta}.csv`;
+    rows = getFilteredDestajo().map(r => [
+      r.fecha, r.legajo, r.nombre, r.actividad, r.unidades, Math.round(r.importe)
+    ]);
+  } else if (tab === 'resumen') {
+    headers = ['Empleado','Legajo','Planta','Company','Dias_Presente','Dias_Ausente','Total_HE','Total_Jornales','Total_Destajo','Total_General'];
+    filename = `resumen_${desde}_${hasta}.csv`;
+    // Reconstruir como en renderResumen
+    const asis = getFilteredAsistencia();
+    const dest = getFilteredDestajo();
+    const map = {};
+    asis.forEach(r => {
+      const key = `${r.legajo}||${r.nombre.toUpperCase()}||${r.planta}||${r.company}`;
+      if (!map[key]) map[key] = { ...r, dias_pres: 0, dias_aus: 0, total_he: 0, total_jornales: 0, total_destajo: 0 };
+      if (r.presente) map[key].dias_pres++;
+      else if (r.ausente) map[key].dias_aus++;
+      map[key].total_he += r.horasExtras;
+      map[key].total_jornales += r.importeTotal;
+    });
+    dest.forEach(r => {
+      const nombreUp = r.nombre.toUpperCase();
+      const matching = Object.keys(map).filter(k => k.split('||')[1] === nombreUp);
+      if (matching.length > 0) map[matching[0]].total_destajo += r.importe;
+      else {
+        const key = `${r.legajo}||${nombreUp}||CICLO II||`;
+        if (!map[key]) map[key] = { legajo: r.legajo, nombre: r.nombre, planta: 'CICLO II', company: '', dias_pres: 0, dias_aus: 0, total_he: 0, total_jornales: 0, total_destajo: 0 };
+        map[key].total_destajo += r.importe;
+      }
+    });
+    rows = Object.values(map).map(r => [
+      r.nombre, r.legajo, r.planta, r.company, r.dias_pres, r.dias_aus,
+      r.total_he, Math.round(r.total_jornales), Math.round(r.total_destajo),
+      Math.round(r.total_jornales + r.total_destajo)
+    ]);
+  }
+
+  if (rows.length === 0) {
+    alert('No hay datos para exportar con los filtros actuales');
+    return;
+  }
+
+  const csv = [headers, ...rows].map(r =>
+    r.map(v => {
+      const s = String(v ?? '');
+      return /[,;"\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
+    }).join(';')
+  ).join('\n');
+
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function getFilteredAsistencia() {
+  const planta = document.getElementById('filtroPlanta').value.toUpperCase();
+  const company = document.getElementById('filtroCompany').value.toUpperCase();
+  const desde = document.getElementById('filtroDesde').value;
+  const hasta = document.getElementById('filtroHasta').value;
+  const empleado = document.getElementById('filtroEmpleado').value.toUpperCase().trim();
+  return datosAsistencia.filter(r => {
+    if (planta && String(r.planta||'').toUpperCase() !== planta) return false;
+    if (company && String(r.company||'').toUpperCase() !== company) return false;
+    if (desde && r.fecha < desde) return false;
+    if (hasta && r.fecha > hasta) return false;
+    if (empleado && !r.nombre.toUpperCase().includes(empleado)) return false;
+    return true;
+  });
+}
+
+function getFilteredDestajo() {
+  const planta = document.getElementById('filtroPlanta').value.toUpperCase();
+  const desde = document.getElementById('filtroDesde').value;
+  const hasta = document.getElementById('filtroHasta').value;
+  const empleado = document.getElementById('filtroEmpleado').value.toUpperCase().trim();
+  return datosDestajo.filter(r => {
+    if (planta && planta !== 'CICLO II') return false;
+    if (desde && r.fecha < desde) return false;
+    if (hasta && r.fecha > hasta) return false;
+    if (empleado && !r.nombre.toUpperCase().includes(empleado)) return false;
+    return true;
+  });
+}
+
+// ============================================================
+//  EVENT HANDLERS
+// ============================================================
+['filtroPlanta','filtroCompany','filtroDesde','filtroHasta','filtroEmpleado'].forEach(id => {
+  const el = document.getElementById(id);
+  const ev = id === 'filtroEmpleado' ? 'input' : 'change';
+  el.addEventListener(ev, aplicarFiltros);
+});
+
+// ============================================================
+//  BOOT
+// ============================================================
+init();
+</script>
+</body>
+</html>
