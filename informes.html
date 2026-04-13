@@ -1,11 +1,51 @@
 <!DOCTYPE html>
+<!--
+  ╔══════════════════════════════════════════════════════════════════════════════╗
+  ║  Santa Faz — Informes de Lotes                                             ║
+  ║  Versión: 2.0.0-beta                                                       ║
+  ║  Fecha:   2026-04-13                                                       ║
+  ║  Autor:   IA Full + Claude (Anthropic)                                     ║
+  ║  Repo:    librillos-ciclo-ii.github.io/LOTES-Y-RECEPCION                  ║
+  ╠══════════════════════════════════════════════════════════════════════════════╣
+  ║  CHANGELOG                                                                 ║
+  ║                                                                            ║
+  ║  v2.0.0-beta (2026-04-13)                                                 ║
+  ║  ─────────────────────────────────────────────────────────────────────────  ║
+  ║  [NUEVO] Dashboard de informes con dos solapas: Batch y Análisis           ║
+  ║  [NUEVO] Tab "Batch": vista de recepciones agrupadas por frigorífico       ║
+  ║          con estado de lote inline (cerrado/parcial/sin clasificar)        ║
+  ║  [NUEVO] KPIs superiores: lotes cerrados, en proceso, sin clasificar,     ║
+  ║          total recepciones, unidades pendientes, kgs salados, días prom.   ║
+  ║  [NUEVO] Filtros combinables: frigorífico, rango de fechas, estado,       ║
+  ║          orden cronológico (ascendente/descendente)                        ║
+  ║  [NUEVO] Chip "Pendientes" = parciales + sin clasificar                   ║
+  ║  [NUEVO] Detalle expandible por recepción: cargas parciales, categorías   ║
+  ║          (unidades + kgs), tabla de rendimiento con %, kg/un por cat.      ║
+  ║  [NUEVO] Badge de días de procesamiento con colores semáforo:             ║
+  ║          verde (≤10d) / azul (11-20d) / rojo (>20d)                       ║
+  ║  [NUEVO] Tab "Análisis": gráfico SVG de distribución en campana por       ║
+  ║          categoría con percentiles globales P10-P90 de kg/unidad           ║
+  ║  [NUEVO] Tabla de percentiles globales con interpretación                  ║
+  ║  [NUEVO] Tabla resumen por categoría: unid, %unid, kgs, %kgs, kg/un, P50 ║
+  ║  [NUEVO] Selector de proveedor en Análisis (individual o consolidado)     ║
+  ║  [NUEVO] Carga con get_all (v2) + fallback a llamadas individuales (v1)   ║
+  ║  [NUEVO] Botón Actualizar con spinner visual                              ║
+  ║                                                                            ║
+  ║  DEPENDENCIAS                                                              ║
+  ║  ─────────────────────────────────────────────────────────────────────────  ║
+  ║  - Google Fonts: DM Sans, JetBrains Mono                                  ║
+  ║  - Apps Script: get_all (v2) o get+get_config (v1 fallback)               ║
+  ║  - Google Sheets: SantaFaz_Lotes (RECEPCIONES, LOTES, CONFIG)             ║
+  ║  - Sin librerías externas — SVG puro para gráficos                        ║
+  ╚══════════════════════════════════════════════════════════════════════════════╝
+-->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Santa Faz — Informes</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -18,8 +58,6 @@
 }
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);font-size:15px;-webkit-font-smoothing:antialiased}
 .app{max-width:540px;margin:0 auto;padding:12px 12px 80px}
-
-/* ── Header ── */
 .header{padding:16px 0 12px;display:flex;align-items:center;justify-content:space-between}
 .header h1{font-size:18px;font-weight:700;letter-spacing:-0.3px}
 .header .sub{font-size:12px;color:var(--muted);margin-top:1px}
@@ -28,8 +66,11 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 .refresh-btn svg{transition:transform .6s}
 .refresh-btn.loading svg{animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-
-/* ── KPIs ── */
+.nav{display:grid;grid-template-columns:1fr 1fr;gap:0;margin-bottom:14px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.nav-btn{padding:11px;font-size:14px;font-weight:500;cursor:pointer;background:var(--gray-bg);color:var(--muted);border:none;transition:all .15s}
+.nav-btn.active{background:var(--card);color:var(--text);font-weight:600}
+.nav-btn:first-child{border-right:1px solid var(--border)}
+.hidden{display:none}
 .kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
 .kpi{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;position:relative;overflow:hidden}
 .kpi::before{content:'';position:absolute;top:0;left:0;width:3px;height:100%;border-radius:3px 0 0 3px}
@@ -39,10 +80,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 .kpi-lbl{font-size:11px;color:var(--muted);margin-top:3px;text-transform:uppercase;letter-spacing:0.5px}
 .kpi-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px}
 .kpi-sm{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;text-align:center}
-.kpi-sm .kpi-val{font-size:16px}
-.kpi-sm .kpi-lbl{font-size:10px}
-
-/* ── Filters ── */
+.kpi-sm .kpi-val{font-size:16px}.kpi-sm .kpi-lbl{font-size:10px}
 .filters{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px}
 .filters-title{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px}
 .filter-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
@@ -52,8 +90,6 @@ select:focus,input:focus{outline:none;border-color:var(--accent)}
 .chip{padding:7px 0;font-size:12px;font-weight:600;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer;text-align:center;transition:all .15s;color:var(--muted)}
 .chip.active{border-color:var(--accent);background:#f0f7ff;color:var(--accent)}
 .chip:active{transform:scale(.97)}
-
-/* ── Frigorífico groups ── */
 .fgo-group{margin-bottom:12px}
 .fgo-header{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:13px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;transition:background .15s}
 .fgo-header:active{background:#fafaf9}
@@ -65,12 +101,8 @@ select:focus,input:focus{outline:none;border-color:var(--accent)}
 .fgo-header.open .fgo-chevron{transform:rotate(180deg)}
 .fgo-body{overflow:hidden;max-height:0;transition:max-height .35s ease}
 .fgo-body.open{max-height:9999px}
-
-/* ── Recepción rows ── */
 .rec-item{background:var(--card);border:1px solid var(--border);border-left:3px solid var(--gray);margin:6px 0 0 0;border-radius:0 var(--radius) var(--radius) 0;overflow:hidden}
-.rec-item.cerrado{border-left-color:var(--green)}
-.rec-item.parcial{border-left-color:var(--amber)}
-.rec-item.sin-clasificar{border-left-color:var(--gray)}
+.rec-item.cerrado{border-left-color:var(--green)}.rec-item.parcial{border-left-color:var(--amber)}.rec-item.sin{border-left-color:var(--gray)}
 .rec-head{padding:12px 14px;cursor:pointer;user-select:none}
 .rec-head:active{background:#fafaf9}
 .rec-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
@@ -79,15 +111,17 @@ select:focus,input:focus{outline:none;border-color:var(--accent)}
 .st-cerrado{background:var(--green-bg);color:var(--green);border:1px solid var(--green-bd)}
 .st-parcial{background:var(--amber-bg);color:#92400e;border:1px solid var(--amber-bd)}
 .st-sin{background:var(--gray-bg);color:var(--gray);border:1px solid var(--gray-bd)}
-.rec-meta{font-size:12px;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap}
+.rec-meta{font-size:12px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .rec-meta strong{color:var(--text)}
 .rec-progress{margin:6px 0 2px;height:5px;background:#eee;border-radius:3px;overflow:hidden}
 .rec-progress-fill{height:100%;border-radius:3px;transition:width .3s}
 .rec-progress-txt{font-size:11px;color:var(--muted);display:flex;justify-content:space-between;margin-top:2px}
-
-/* ── Detalle expandible ── */
+.dias-badge{display:inline-flex;align-items:center;gap:3px;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;padding:3px 10px;border-radius:6px}
+.dias-badge.rapido{background:#dcfce7;color:#15803d;border:1px solid #86efac}
+.dias-badge.normal{background:#e0e7ff;color:#3730a3;border:1px solid #a5b4fc}
+.dias-badge.lento{background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5}
 .rec-detail{max-height:0;overflow:hidden;transition:max-height .3s ease}
-.rec-detail.open{max-height:2000px}
+.rec-detail.open{max-height:3000px}
 .rec-detail-inner{padding:0 14px 14px;border-top:1px solid var(--border)}
 .carga-item{padding:8px 0;border-bottom:1px solid #f5f4f0;font-size:13px}
 .carga-item:last-child{border-bottom:none}
@@ -99,418 +133,363 @@ select:focus,input:focus{outline:none;border-color:var(--accent)}
 .cAAA{background:#EEEDFE;color:#3C3489}.cAA{background:#E1F5EE;color:#085041}
 .cA{background:#E6F1FB;color:#0C447C}.cB{background:#FAEEDA;color:#633806}
 .cC{background:#FAECE7;color:#712B13}.cD{background:#F1EFE8;color:#444441}
-.dias-badge{font-size:11px;color:var(--muted);background:var(--gray-bg);padding:2px 6px;border-radius:4px;font-family:'JetBrains Mono',monospace}
-
-/* ── Loading / empty ── */
 .loading-wrap{text-align:center;padding:40px 20px;color:var(--muted)}
 .spinner{display:inline-block;width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;margin-bottom:10px}
 .empty{text-align:center;padding:30px;color:var(--muted);font-size:13px}
-
-/* ── Beta banner ── */
 .beta-bar{background:var(--accent);color:#fff;text-align:center;padding:6px;font-size:12px;font-weight:600;letter-spacing:1px;position:sticky;top:0;z-index:999}
+.chart-wrap{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:14px;overflow-x:auto}
+.chart-title{font-size:14px;font-weight:700;margin-bottom:4px}
+.chart-sub{font-size:12px;color:var(--muted);margin-bottom:12px}
+.legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;font-size:11px;color:var(--muted)}
+.legend-item{display:flex;align-items:center;gap:4px}
+.legend-dot{width:10px;height:3px;border-radius:2px}
+.an-kpis{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px}
+.an-kpi{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:10px;text-align:center}
+.an-kpi .kpi-val{font-size:18px}
+.pct-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
+.pct-table th{text-align:left;font-size:10px;color:var(--muted);font-weight:500;padding:4px 6px;text-transform:uppercase;border-bottom:1px solid var(--border)}
+.pct-table td{padding:5px 6px;border-bottom:1px solid #f5f4f0;font-family:'JetBrains Mono',monospace;font-size:12px}
+.pct-table tr:last-child td{border-bottom:none}
 </style>
 </head>
 <body>
 <div class="beta-bar">INFORMES BETA — solo lectura</div>
 <div class="app">
-
 <div class="header">
-  <div>
-    <h1>Informes</h1>
-    <div class="sub">Recepciones y estado de lotes</div>
-  </div>
-  <button class="refresh-btn" id="btn-refresh" onclick="loadData(true)">
+  <div><h1>Informes</h1><div class="sub">Recepciones, lotes y análisis</div></div>
+  <button class="refresh-btn" id="btn-refresh" onclick="loadData()">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
     <span id="refresh-txt">Actualizar</span>
   </button>
 </div>
-
-<!-- KPIs -->
-<div class="kpis" id="kpis">
-  <div class="kpi green"><div class="kpi-val" id="k-cerrados">—</div><div class="kpi-lbl">Lotes cerrados</div></div>
-  <div class="kpi amber"><div class="kpi-val" id="k-parciales">—</div><div class="kpi-lbl">En proceso</div></div>
-  <div class="kpi gray"><div class="kpi-val" id="k-sinclasif">—</div><div class="kpi-lbl">Sin clasificar</div></div>
-  <div class="kpi blue"><div class="kpi-val" id="k-total">—</div><div class="kpi-lbl">Recepciones</div></div>
-</div>
-<div class="kpi-row" id="kpis2">
-  <div class="kpi-sm"><div class="kpi-val" id="k-unidpend">—</div><div class="kpi-lbl">Un. pendientes</div></div>
-  <div class="kpi-sm"><div class="kpi-val" id="k-kgstotal">—</div><div class="kpi-lbl">Kgs salados</div></div>
-  <div class="kpi-sm"><div class="kpi-val" id="k-dias">—</div><div class="kpi-lbl">Días prom.</div></div>
+<div class="nav">
+  <button class="nav-btn active" id="nav1" onclick="showTab(1)">Batch</button>
+  <button class="nav-btn" id="nav2" onclick="showTab(2)">Análisis</button>
 </div>
 
-<!-- Filters -->
-<div class="filters">
-  <div class="filters-title">Filtros</div>
-  <div class="filter-row" style="margin-bottom:10px">
-    <select id="fl-fgo" onchange="renderAll()">
-      <option value="">Todos los frigoríficos</option>
-      <option>DELTA</option><option>RECREO</option><option>ALBA</option>
-      <option>SANTA INES</option><option>C.PARANA</option><option>SUIPACHA</option>
-    </select>
-    <select id="fl-orden" onchange="renderAll()">
-      <option value="desc">Más recientes</option>
-      <option value="asc">Más antiguos</option>
-    </select>
+<!-- ══════ TAB 1 ══════ -->
+<div id="tab1">
+  <div class="kpis">
+    <div class="kpi green"><div class="kpi-val" id="k-cerrados">—</div><div class="kpi-lbl">Lotes cerrados</div></div>
+    <div class="kpi amber"><div class="kpi-val" id="k-parciales">—</div><div class="kpi-lbl">En proceso</div></div>
+    <div class="kpi gray"><div class="kpi-val" id="k-sinclasif">—</div><div class="kpi-lbl">Sin clasificar</div></div>
+    <div class="kpi blue"><div class="kpi-val" id="k-total">—</div><div class="kpi-lbl">Recepciones</div></div>
   </div>
-  <div class="filter-row" style="margin-bottom:10px">
-    <input type="date" id="fl-desde" onchange="renderAll()" placeholder="Desde">
-    <input type="date" id="fl-hasta" onchange="renderAll()" placeholder="Hasta">
+  <div class="kpi-row">
+    <div class="kpi-sm"><div class="kpi-val" id="k-unidpend">—</div><div class="kpi-lbl">Un. pendientes</div></div>
+    <div class="kpi-sm"><div class="kpi-val" id="k-kgstotal">—</div><div class="kpi-lbl">Kgs salados</div></div>
+    <div class="kpi-sm"><div class="kpi-val" id="k-dias">—</div><div class="kpi-lbl">Días prom.</div></div>
   </div>
-  <div class="filter-row3">
-    <button class="chip active" id="ch-todos" onclick="setEstado('')">Todos</button>
-    <button class="chip" id="ch-cerrado" onclick="setEstado('cerrado')">Cerrados</button>
-    <button class="chip" id="ch-parcial" onclick="setEstado('parcial')">Parciales</button>
+  <div class="filters">
+    <div class="filters-title">Filtros</div>
+    <div class="filter-row" style="margin-bottom:10px">
+      <select id="fl-fgo" onchange="renderTab1()"><option value="">Todos los frigoríficos</option><option>DELTA</option><option>RECREO</option><option>ALBA</option><option>SANTA INES</option><option>C.PARANA</option><option>SUIPACHA</option></select>
+      <select id="fl-orden" onchange="renderTab1()"><option value="desc">Más recientes</option><option value="asc">Más antiguos</option></select>
+    </div>
+    <div class="filter-row" style="margin-bottom:10px">
+      <input type="date" id="fl-desde" onchange="renderTab1()">
+      <input type="date" id="fl-hasta" onchange="renderTab1()">
+    </div>
+    <div class="filter-row3">
+      <button class="chip active" id="ch-todos" onclick="setEstado('')">Todos</button>
+      <button class="chip" id="ch-cerrado" onclick="setEstado('cerrado')">Cerrados</button>
+      <button class="chip" id="ch-parcial" onclick="setEstado('parcial')">Parciales</button>
+    </div>
+    <div class="filter-row3" style="margin-top:6px">
+      <button class="chip" id="ch-sin" onclick="setEstado('sin')">Sin clasif.</button>
+      <button class="chip" id="ch-pendiente" onclick="setEstado('pendiente')">Pendientes</button>
+      <div></div>
+    </div>
   </div>
-  <div class="filter-row3" style="margin-top:6px">
-    <button class="chip" id="ch-sin" onclick="setEstado('sin')">Sin clasif.</button>
-    <button class="chip" id="ch-pendiente" onclick="setEstado('pendiente')">Pendientes</button>
-    <div></div>
-  </div>
+  <div id="content"><div class="loading-wrap"><div class="spinner"></div><div>Cargando datos...</div></div></div>
 </div>
 
-<!-- Content -->
-<div id="content">
-  <div class="loading-wrap"><div class="spinner"></div><div>Cargando datos...</div></div>
+<!-- ══════ TAB 2 ══════ -->
+<div id="tab2" class="hidden">
+  <div class="filters" style="margin-bottom:14px">
+    <div class="filters-title">Proveedor</div>
+    <select id="an-fgo" onchange="renderTab2()"><option value="">Consolidado (todos)</option><option>DELTA</option><option>RECREO</option><option>ALBA</option><option>SANTA INES</option><option>C.PARANA</option><option>SUIPACHA</option></select>
+  </div>
+  <div id="an-kpis-wrap"></div>
+  <div id="an-chart"></div>
+  <div id="an-percentiles"></div>
+  <div id="an-table"></div>
+</div>
 </div>
 
-</div>
 <script>
-const API = 'https://script.google.com/macros/s/AKfycbzemzflPEpQ96kIzQ33fX74NtDUxtH5wxaBM-ylEdc3SNVxpnOmC_1xz35vcf0tdprl/exec';
-const CATS = ['AAA','AA','A','B','C','D'];
-const CAT_CLS = {AAA:'cAAA',AA:'cAA',A:'cA',B:'cB',C:'cC',D:'cD'};
+// ══════════════════════════════════════════════════════════════════════════════
+// Santa Faz — Informes v2.0.0-beta
+// ══════════════════════════════════════════════════════════════════════════════
 
-let recepciones = [];
-let lotes = [];
-let filtroEstado = '';
+// ── Configuración ────────────────────────────────────────────────────────────
+// API: Apps Script de producción (soporta get_all v2 + fallback v1)
+const API='https://script.google.com/macros/s/AKfycbzemzflPEpQ96kIzQ33fX74NtDUxtH5wxaBM-ylEdc3SNVxpnOmC_1xz35vcf0tdprl/exec';
+const CATS=['AAA','AA','A','B','C','D'];                         // Categorías de clasificación
+const CAT_CLS={AAA:'cAAA',AA:'cAA',A:'cA',B:'cB',C:'cC',D:'cD'}; // Clases CSS por categoría
+const CAT_COLORS={AAA:'#3266ad',AA:'#1D9E75',A:'#7F77DD',B:'#BA7517',C:'#D85A30',D:'#D4537E'}; // Colores SVG
 
-function fmt(v){if(!v)return '';const s=String(v).slice(0,10);const p=s.split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:s;}
+// ── Estado global ────────────────────────────────────────────────────────────
+let recepciones=[],lotes=[],filtroEstado='',currentTab=1;
+// ── Utilidades ───────────────────────────────────────────────────────────────
+// fmt: convierte ISO (2026-04-08) a DD/MM/AAAA para mostrar
+// num: parsea cualquier valor a número, 0 si falla
+function fmt(v){if(!v)return'';const s=String(v).slice(0,10),p=s.split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:s;}
 function num(v){return Number(v)||0;}
 
-// ── Data loading ──
-async function loadData(force=false){
-  const btn = document.getElementById('btn-refresh');
-  btn.classList.add('loading');
-  document.getElementById('refresh-txt').textContent = 'Cargando...';
+// ── Navegación entre solapas (Batch / Análisis) ─────────────────────────────
 
-  try {
-    // Try get_all first, fallback to individual calls
-    let data = null;
-    try {
-      const r = await fetch(API+'?action=get_all');
-      const d = await r.json();
-      if(d.ok) data = d;
-    } catch(e){}
-
-    if(data) {
-      const rr = data.recepciones || [];
-      const ll = data.lotes || [];
-      recepciones = rr.length && rr[0][0]==='ID' ? rr.slice(1).filter(r=>r[0]) : rr.filter(r=>r[0]);
-      lotes = ll.length && ll[0][0]==='ID_Recepcion' ? ll.slice(1).filter(r=>r[0]) : ll.filter(r=>r[0]);
-    } else {
-      // Fallback individual
-      const [r1, r2] = await Promise.all([
-        fetch(API+'?action=get&sheet=RECEPCIONES').then(r=>r.json()),
-        fetch(API+'?action=get&sheet=LOTES').then(r=>r.json())
-      ]);
-      const rr = r1.ok ? r1.values : [];
-      const ll = r2.ok ? r2.values : [];
-      recepciones = rr.slice(1).filter(r=>r[0]);
-      lotes = ll.slice(1).filter(r=>r[0]);
-    }
-    renderAll();
-  } catch(e) {
-    document.getElementById('content').innerHTML = '<div class="empty" style="color:var(--red)">Error de conexión. Verificá tu red e intentá de nuevo.</div>';
-  }
-
-  btn.classList.remove('loading');
-  document.getElementById('refresh-txt').textContent = 'Actualizar';
+function showTab(n){
+  currentTab=n;
+  document.getElementById('tab1').classList.toggle('hidden',n!==1);
+  document.getElementById('tab2').classList.toggle('hidden',n!==2);
+  document.getElementById('nav1').classList.toggle('active',n===1);
+  document.getElementById('nav2').classList.toggle('active',n===2);
+  if(n===2)renderTab2();
 }
 
-// ── Build enriched data ──
+// ── Carga de datos desde Apps Script ─────────────────────────────────────────
+// Intenta get_all (v2, una sola llamada). Si falla → fallback a get individual
+// por solapa (compatible con Apps Script v1). Spinner visual en botón Actualizar.
+async function loadData(){
+  const btn=document.getElementById('btn-refresh');
+  btn.classList.add('loading');document.getElementById('refresh-txt').textContent='Cargando...';
+  try{
+    let data=null;
+    try{const r=await fetch(API+'?action=get_all');const d=await r.json();if(d.ok)data=d;}catch(e){}
+    if(data){
+      const rr=data.recepciones||[],ll=data.lotes||[];
+      recepciones=rr.length&&rr[0][0]==='ID'?rr.slice(1).filter(r=>r[0]):rr.filter(r=>r[0]);
+      lotes=ll.length&&ll[0][0]==='ID_Recepcion'?ll.slice(1).filter(r=>r[0]):ll.filter(r=>r[0]);
+    }else{
+      const[r1,r2]=await Promise.all([fetch(API+'?action=get&sheet=RECEPCIONES').then(r=>r.json()),fetch(API+'?action=get&sheet=LOTES').then(r=>r.json())]);
+      recepciones=(r1.ok?r1.values:[]).slice(1).filter(r=>r[0]);
+      lotes=(r2.ok?r2.values:[]).slice(1).filter(r=>r[0]);
+    }
+    renderTab1();if(currentTab===2)renderTab2();
+  }catch(e){document.getElementById('content').innerHTML='<div class="empty" style="color:var(--red)">Error de conexión.</div>';}
+  btn.classList.remove('loading');document.getElementById('refresh-txt').textContent='Actualizar';
+}
+
+// ── Enriquecimiento de datos ─────────────────────────────────────────────────
+// Por cada recepción: busca sus lotes, determina estado (cerrado/parcial/sin),
+// calcula días de procesamiento (fecha ingreso → última clasificación),
+// y arma el detalle de cargas con categorías.
 function buildData(){
-  // For each recepción, find its lotes and determine status
-  return recepciones.map(r => {
-    const id = r[0];
-    const fgo = r[1];
-    const fecha = String(r[2]).slice(0,10);
-    const unid = num(r[3]);
-    const kgs = r[4] || '';
-    const kg_unid = r[5] || '';
-    const tambores = r[6] || '';
-    const comentarios = r[7] || '';
-
-    const misLotes = lotes.filter(l => l[0] === id);
-    const cerrado = misLotes.some(l => String(l[5])==='1' || l[5]===true || l[5]==='TRUE');
-    const tieneCargas = misLotes.length > 0;
-    const acum = misLotes.reduce((s,l)=> s + num(l[6]), 0);
-    const totalKgs = misLotes.reduce((s,l)=> s + num(l[21]), 0);
-
-    // Status
-    let estado = 'sin'; // sin clasificar
-    if(cerrado) estado = 'cerrado';
-    else if(tieneCargas) estado = 'parcial';
-
-    // Days to close (only for cerrado)
-    let dias = null;
-    if(cerrado) {
-      const fechasCl = misLotes.map(l => String(l[3]).slice(0,10)).filter(f=>f&&f!=='undefined').sort();
-      if(fechasCl.length) {
-        dias = Math.round((new Date(fechasCl[fechasCl.length-1]) - new Date(fecha)) / (1000*86400));
-      }
-    }
-
-    // Cargas detail
-    const cargas = misLotes.map(l => ({
-      numParcial: num(l[4]),
-      fechaClasif: String(l[3]).slice(0,10),
-      unidCarga: num(l[6]),
-      esFinal: String(l[5])==='1' || l[5]===true || l[5]==='TRUE',
-      cats: CATS.map((c,i) => ({cat:c, unid:num(l[9+i]), kgs:num(l[15+i])})),
-      totalKgs: num(l[21]),
-      obs: l[22] || ''
-    }));
-
-    return {id, fgo, fecha, unid, kgs, kg_unid, tambores, comentarios, estado, acum, totalKgs, dias, cargas, cerrado};
+  return recepciones.map(r=>{
+    const id=r[0],fgo=r[1],fecha=String(r[2]).slice(0,10),unid=num(r[3]);
+    const kgs=r[4]||'',kg_unid=r[5]||'',tambores=r[6]||'',comentarios=r[7]||'';
+    const misLotes=lotes.filter(l=>l[0]===id);
+    const cerrado=misLotes.some(l=>String(l[5])==='1'||l[5]===true||l[5]==='TRUE');
+    const tieneCargas=misLotes.length>0;
+    const acum=misLotes.reduce((s,l)=>s+num(l[6]),0);
+    const totalKgs=misLotes.reduce((s,l)=>s+num(l[21]),0);
+    let estado='sin';if(cerrado)estado='cerrado';else if(tieneCargas)estado='parcial';
+    let dias=null;
+    if(cerrado){const fc=misLotes.map(l=>String(l[3]).slice(0,10)).filter(f=>f&&f!=='undefined').sort();if(fc.length)dias=Math.round((new Date(fc[fc.length-1])-new Date(fecha))/(1000*86400));}
+    const cargas=misLotes.map(l=>({numParcial:num(l[4]),fechaClasif:String(l[3]).slice(0,10),unidCarga:num(l[6]),esFinal:String(l[5])==='1'||l[5]===true||l[5]==='TRUE',cats:CATS.map((c,i)=>({cat:c,unid:num(l[9+i]),kgs:num(l[15+i])})),totalKgs:num(l[21]),obs:l[22]||''}));
+    return{id,fgo,fecha,unid,kgs,kg_unid,tambores,comentarios,estado,acum,totalKgs,dias,cargas,cerrado};
   });
 }
 
-// ── Filters ──
-function setEstado(val){
-  filtroEstado = val;
-  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-  if(val === '') document.getElementById('ch-todos').classList.add('active');
-  else if(val === 'cerrado') document.getElementById('ch-cerrado').classList.add('active');
-  else if(val === 'parcial') document.getElementById('ch-parcial').classList.add('active');
-  else if(val === 'sin') document.getElementById('ch-sin').classList.add('active');
-  else if(val === 'pendiente') document.getElementById('ch-pendiente').classList.add('active');
-  renderAll();
-}
+// ══════════════════ TAB 1 ══════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// TAB 1 — BATCH (recepciones agrupadas por frigorífico con estado de lote)
+// ══════════════════════════════════════════════════════════════════════════════
 
+// ── Filtros: estado (cerrado/parcial/sin/pendiente/todos) ────────────────────
+function setEstado(v){filtroEstado=v;document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));const m={'':'ch-todos',cerrado:'ch-cerrado',parcial:'ch-parcial',sin:'ch-sin',pendiente:'ch-pendiente'};if(m[v])document.getElementById(m[v]).classList.add('active');renderTab1();}
+
+// ── Aplica filtros combinados: frigorífico + rango fechas + estado + orden ────
 function applyFilters(data){
-  let filtered = [...data];
-  const fgo = document.getElementById('fl-fgo').value;
-  const desde = document.getElementById('fl-desde').value;
-  const hasta = document.getElementById('fl-hasta').value;
-  const orden = document.getElementById('fl-orden').value;
-
-  if(fgo) filtered = filtered.filter(r => r.fgo === fgo);
-  if(desde) filtered = filtered.filter(r => r.fecha >= desde);
-  if(hasta) filtered = filtered.filter(r => r.fecha <= hasta);
-  if(filtroEstado === 'cerrado') filtered = filtered.filter(r => r.estado === 'cerrado');
-  else if(filtroEstado === 'parcial') filtered = filtered.filter(r => r.estado === 'parcial');
-  else if(filtroEstado === 'sin') filtered = filtered.filter(r => r.estado === 'sin');
-  else if(filtroEstado === 'pendiente') filtered = filtered.filter(r => r.estado !== 'cerrado'); // parcial + sin
-
-  filtered.sort((a,b) => orden==='desc' ? b.fecha.localeCompare(a.fecha) : a.fecha.localeCompare(b.fecha));
-  return filtered;
+  let f=[...data];const fgo=document.getElementById('fl-fgo').value,desde=document.getElementById('fl-desde').value,hasta=document.getElementById('fl-hasta').value,orden=document.getElementById('fl-orden').value;
+  if(fgo)f=f.filter(r=>r.fgo===fgo);if(desde)f=f.filter(r=>r.fecha>=desde);if(hasta)f=f.filter(r=>r.fecha<=hasta);
+  if(filtroEstado==='cerrado')f=f.filter(r=>r.estado==='cerrado');else if(filtroEstado==='parcial')f=f.filter(r=>r.estado==='parcial');else if(filtroEstado==='sin')f=f.filter(r=>r.estado==='sin');else if(filtroEstado==='pendiente')f=f.filter(r=>r.estado!=='cerrado');
+  f.sort((a,b)=>orden==='desc'?b.fecha.localeCompare(a.fecha):a.fecha.localeCompare(b.fecha));return f;
 }
 
-// ── KPIs ──
-function renderKPIs(allData, filtered){
-  const cerrados = allData.filter(r=>r.estado==='cerrado').length;
-  const parciales = allData.filter(r=>r.estado==='parcial').length;
-  const sinClasif = allData.filter(r=>r.estado==='sin').length;
-
-  document.getElementById('k-cerrados').textContent = cerrados;
-  document.getElementById('k-parciales').textContent = parciales;
-  document.getElementById('k-sinclasif').textContent = sinClasif;
-  document.getElementById('k-total').textContent = allData.length;
-
-  // Unidades pendientes (sin clasificar + faltantes de parciales)
-  const pendSin = allData.filter(r=>r.estado==='sin').reduce((s,r)=>s+r.unid,0);
-  const pendParc = allData.filter(r=>r.estado==='parcial').reduce((s,r)=>s+Math.max(0, r.unid - r.acum),0);
-  document.getElementById('k-unidpend').textContent = (pendSin+pendParc).toLocaleString('es-AR');
-
-  // Kgs totales salados (solo cerrados)
-  const kgsTot = allData.filter(r=>r.estado==='cerrado').reduce((s,r)=>s+r.totalKgs,0);
-  document.getElementById('k-kgstotal').textContent = kgsTot ? kgsTot.toLocaleString('es-AR',{maximumFractionDigits:0}) : '—';
-
-  // Días promedio de cierre
-  const conDias = allData.filter(r=>r.dias!==null && r.dias >= 0);
-  const promDias = conDias.length ? (conDias.reduce((s,r)=>s+r.dias,0)/conDias.length).toFixed(1) : '—';
-  document.getElementById('k-dias').textContent = promDias;
+// ── KPIs: contadores + unidades pendientes + kgs salados + días promedio ─────
+function renderKPIs(all){
+  document.getElementById('k-cerrados').textContent=all.filter(r=>r.estado==='cerrado').length;
+  document.getElementById('k-parciales').textContent=all.filter(r=>r.estado==='parcial').length;
+  document.getElementById('k-sinclasif').textContent=all.filter(r=>r.estado==='sin').length;
+  document.getElementById('k-total').textContent=all.length;
+  const ps=all.filter(r=>r.estado==='sin').reduce((s,r)=>s+r.unid,0)+all.filter(r=>r.estado==='parcial').reduce((s,r)=>s+Math.max(0,r.unid-r.acum),0);
+  document.getElementById('k-unidpend').textContent=ps.toLocaleString('es-AR');
+  const kt=all.filter(r=>r.estado==='cerrado').reduce((s,r)=>s+r.totalKgs,0);
+  document.getElementById('k-kgstotal').textContent=kt?kt.toLocaleString('es-AR',{maximumFractionDigits:0}):'—';
+  const cd=all.filter(r=>r.dias!==null&&r.dias>=0);
+  document.getElementById('k-dias').textContent=cd.length?(cd.reduce((s,r)=>s+r.dias,0)/cd.length).toFixed(1):'—';
 }
 
-// ── Render ──
-function renderAll(){
-  const allData = buildData();
-  const filtered = applyFilters(allData);
-  renderKPIs(allData, filtered);
-
-  const content = document.getElementById('content');
-  if(!filtered.length){
-    content.innerHTML = '<div class="empty">No hay recepciones con los filtros seleccionados.</div>';
-    return;
-  }
-
-  // Group by frigorífico
-  const groups = {};
-  filtered.forEach(r => {
-    if(!groups[r.fgo]) groups[r.fgo] = [];
-    groups[r.fgo].push(r);
-  });
-
-  // Sort fgos by count desc
-  const fgos = Object.keys(groups).sort((a,b) => groups[b].length - groups[a].length);
-
-  let html = '';
-  fgos.forEach(fgo => {
-    const items = groups[fgo];
-    const cerr = items.filter(r=>r.estado==='cerrado').length;
-    const parc = items.filter(r=>r.estado==='parcial').length;
-    const sinc = items.filter(r=>r.estado==='sin').length;
-
-    html += `<div class="fgo-group">
-      <div class="fgo-header open" onclick="toggleFgo(this)">
-        <div>
-          <span class="fgo-name">${fgo}</span>
-          <span class="fgo-stats">
-            <span class="fgo-count">${items.length} rec.</span>
-            ${cerr?'<span class="fgo-badge st-cerrado">'+cerr+' cerr.</span>':''}
-            ${parc?'<span class="fgo-badge st-parcial">'+parc+' parc.</span>':''}
-            ${sinc?'<span class="fgo-badge st-sin">'+sinc+' pend.</span>':''}
-          </span>
-        </div>
-        <svg class="fgo-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
-      </div>
-      <div class="fgo-body open">
-        ${items.map(r => renderRecItem(r)).join('')}
-      </div>
-    </div>`;
-  });
-
-  content.innerHTML = html;
+// ── Render principal Tab 1: agrupa por frigorífico, muestra header con badges ─
+function renderTab1(){
+  const all=buildData(),filtered=applyFilters(all);renderKPIs(all);
+  const el=document.getElementById('content');
+  if(!filtered.length){el.innerHTML='<div class="empty">No hay recepciones con los filtros seleccionados.</div>';return;}
+  const groups={};filtered.forEach(r=>{if(!groups[r.fgo])groups[r.fgo]=[];groups[r.fgo].push(r);});
+  const fgos=Object.keys(groups).sort((a,b)=>groups[b].length-groups[a].length);
+  el.innerHTML=fgos.map(fgo=>{
+    const items=groups[fgo],ce=items.filter(r=>r.estado==='cerrado').length,pa=items.filter(r=>r.estado==='parcial').length,si=items.filter(r=>r.estado==='sin').length;
+    return`<div class="fgo-group"><div class="fgo-header open" onclick="toggleFgo(this)"><div><span class="fgo-name">${fgo}</span><span class="fgo-stats"><span class="fgo-count">${items.length} rec.</span>${ce?'<span class="fgo-badge st-cerrado">'+ce+' cerr.</span>':''}${pa?'<span class="fgo-badge st-parcial">'+pa+' parc.</span>':''}${si?'<span class="fgo-badge st-sin">'+si+' pend.</span>':''}</span></div><svg class="fgo-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></div><div class="fgo-body open">${items.map(r=>renderRecItem(r)).join('')}</div></div>`;
+  }).join('');
 }
 
+// ── Badge de días: semáforo visual de velocidad de procesamiento ─────────────
+// ≤10 días = rapido (verde), 11-20 = normal (azul), >20 = lento (rojo)
+function diasClass(d){return d<=10?'rapido':d<=20?'normal':'lento';}
+
+// ── Renderiza una recepción con estado, progreso y detalle expandible ────────
+// Incluye: tabla de rendimiento por categoría (%, kg/un) y total ponderado
 function renderRecItem(r){
-  const pct = r.unid > 0 ? Math.min(100, Math.round(r.acum / r.unid * 100)) : 0;
-  const fillColor = r.estado==='cerrado' ? 'var(--green)' : r.estado==='parcial' ? 'var(--amber)' : 'var(--gray)';
-  const stClass = r.estado==='cerrado' ? 'st-cerrado' : r.estado==='parcial' ? 'st-parcial' : 'st-sin';
-  const stLabel = r.estado==='cerrado' ? 'Cerrado' : r.estado==='parcial' ? 'Parcial' : 'Sin clasificar';
-  const itemClass = r.estado;
-  const uid = r.id.replace(/[^a-zA-Z0-9]/g,'_');
+  const pct=r.unid>0?Math.min(100,Math.round(r.acum/r.unid*100)):0;
+  const fc=r.estado==='cerrado'?'var(--green)':r.estado==='parcial'?'var(--amber)':'var(--gray)';
+  const sc=r.estado==='cerrado'?'st-cerrado':r.estado==='parcial'?'st-parcial':'st-sin';
+  const sl=r.estado==='cerrado'?'Cerrado':r.estado==='parcial'?'Parcial':'Sin clasificar';
+  const uid=r.id.replace(/[^a-zA-Z0-9]/g,'_');
+  let prog='';
+  if(r.estado!=='sin')prog=`<div class="rec-progress"><div class="rec-progress-fill" style="width:${pct}%;background:${fc}"></div></div><div class="rec-progress-txt"><span>${r.acum}/${r.unid} un</span><span>${pct}%</span></div>`;
+  let meta=`<span>${r.unid} un</span>`;
+  if(r.kgs)meta+=`<span>${String(r.kgs).replace('.',',')} kg</span>`;
+  if(r.tambores)meta+=`<span>${r.tambores} tamb.</span>`;
+  if(r.dias!==null)meta+=`<span class="dias-badge ${diasClass(r.dias)}">⏱ ${r.dias} días</span>`;
 
-  let progressHtml = '';
-  if(r.estado !== 'sin'){
-    const over = r.acum > r.unid;
-    progressHtml = `
-      <div class="rec-progress"><div class="rec-progress-fill" style="width:${pct}%;background:${fillColor}${over?' ;background:var(--red)':''}"></div></div>
-      <div class="rec-progress-txt"><span>${r.acum} / ${r.unid} un</span><span>${pct}%</span></div>`;
-  }
-
-  let metaHtml = `<span>${r.unid} un</span>`;
-  if(r.kgs) metaHtml += `<span>${String(r.kgs).replace('.',',')} kg</span>`;
-  if(r.tambores) metaHtml += `<span>${r.tambores} tamb.</span>`;
-  if(r.dias !== null) metaHtml += `<span class="dias-badge">${r.dias}d</span>`;
-
-  let detailHtml = '';
+  let det='';
   if(r.cargas.length){
-    detailHtml = r.cargas.map(c => {
-      const catPills = c.cats.filter(ct=>ct.unid>0).map(ct =>
-        `<span class="cat-pill ${CAT_CLS[ct.cat]}">${ct.cat}: ${ct.unid}un · ${ct.kgs.toFixed(1)}kg</span>`
-      ).join('');
-      return `<div class="carga-item">
-        <div class="carga-head">
-          <span class="carga-num">Carga N°${c.numParcial} ${c.esFinal?'(final)':''}</span>
-          <span class="carga-fecha">${fmt(c.fechaClasif)} · ${c.unidCarga} un · ${c.totalKgs.toFixed(1)} kg</span>
-        </div>
-        <div class="cat-row">${catPills}</div>
-        ${c.obs ? '<div style="font-size:11px;color:var(--muted);margin-top:3px">Obs: '+c.obs+'</div>' : ''}
-      </div>`;
+    det=r.cargas.map(c=>{
+      const pills=c.cats.filter(ct=>ct.unid>0).map(ct=>`<span class="cat-pill ${CAT_CLS[ct.cat]}">${ct.cat}: ${ct.unid}un · ${ct.kgs.toFixed(1)}kg</span>`).join('');
+      return`<div class="carga-item"><div class="carga-head"><span class="carga-num">Carga N°${c.numParcial} ${c.esFinal?'(final)':''}</span><span class="carga-fecha">${fmt(c.fechaClasif)} · ${c.unidCarga} un · ${c.totalKgs.toFixed(1)} kg</span></div><div class="cat-row">${pills}</div>${c.obs?'<div style="font-size:11px;color:var(--muted);margin-top:3px">Obs: '+c.obs+'</div>':''}</div>`;
     }).join('');
-
-    // Build consolidated totals by category (always, for summary table)
-    const totByCat = {};
-    CATS.forEach(cat => { totByCat[cat] = {unid:0, kgs:0}; });
-    r.cargas.forEach(c => c.cats.forEach(ct => { totByCat[ct.cat].unid += ct.unid; totByCat[ct.cat].kgs += ct.kgs; }));
-    const grandUnid = CATS.reduce((s,cat) => s + totByCat[cat].unid, 0);
-    const grandKgs  = CATS.reduce((s,cat) => s + totByCat[cat].kgs, 0);
-
-    // Multi-carga: show consolidated pills
-    if(r.cargas.length > 1){
-      const totPills = CATS.filter(cat=>totByCat[cat].unid>0).map(cat =>
-        `<span class="cat-pill ${CAT_CLS[cat]}">${cat}: ${totByCat[cat].unid}un · ${totByCat[cat].kgs.toFixed(1)}kg</span>`
-      ).join('');
-      detailHtml += `<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
-        <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:4px;text-transform:uppercase">Total acumulado</div>
-        <div class="cat-row">${totPills}</div>
-      </div>`;
+    const tb={};CATS.forEach(c=>{tb[c]={u:0,k:0};});r.cargas.forEach(c=>c.cats.forEach(ct=>{tb[ct.cat].u+=ct.unid;tb[ct.cat].k+=ct.kgs;}));
+    const gu=CATS.reduce((s,c)=>s+tb[c].u,0),gk=CATS.reduce((s,c)=>s+tb[c].k,0);
+    if(r.cargas.length>1){
+      det+=`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)"><div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:4px;text-transform:uppercase">Total acumulado</div><div class="cat-row">${CATS.filter(c=>tb[c].u>0).map(c=>`<span class="cat-pill ${CAT_CLS[c]}">${c}: ${tb[c].u}un · ${tb[c].k.toFixed(1)}kg</span>`).join('')}</div></div>`;
     }
-
-    // Summary table with %, kg/unit (for any lot with cargas)
-    const activeCats = CATS.filter(cat => totByCat[cat].unid > 0);
-    if(activeCats.length){
-      let trows = activeCats.map(cat => {
-        const u = totByCat[cat].unid;
-        const k = totByCat[cat].kgs;
-        const pctU = grandUnid > 0 ? (u/grandUnid*100).toFixed(1) : '0.0';
-        const kgUn = u > 0 ? (k/u).toFixed(3) : '—';
-        return `<tr>
-          <td><span class="cat-pill ${CAT_CLS[cat]}" style="font-size:11px">${cat}</span></td>
-          <td style="text-align:right;font-family:'JetBrains Mono',monospace">${u}</td>
-          <td style="text-align:right;font-family:'JetBrains Mono',monospace">${pctU}%</td>
-          <td style="text-align:right;font-family:'JetBrains Mono',monospace">${k.toFixed(1)}</td>
-          <td style="text-align:right;font-family:'JetBrains Mono',monospace;font-weight:600">${kgUn}</td>
-        </tr>`;
-      }).join('');
-      // Grand total row
-      const grandKgUn = grandUnid > 0 ? (grandKgs/grandUnid).toFixed(3) : '—';
-      trows += `<tr style="border-top:2px solid var(--border);font-weight:700">
-        <td style="padding-top:6px">Total</td>
-        <td style="text-align:right;font-family:'JetBrains Mono',monospace;padding-top:6px">${grandUnid}</td>
-        <td style="text-align:right;font-family:'JetBrains Mono',monospace;padding-top:6px">100%</td>
-        <td style="text-align:right;font-family:'JetBrains Mono',monospace;padding-top:6px">${grandKgs.toFixed(1)}</td>
-        <td style="text-align:right;font-family:'JetBrains Mono',monospace;padding-top:6px">${grandKgUn}</td>
-      </tr>`;
-
-      detailHtml += `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
-        <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase">Rendimiento por categoría</div>
-        <table style="width:100%;border-collapse:collapse;font-size:12px">
-          <thead><tr style="color:var(--muted)">
-            <th style="text-align:left;padding:3px 4px;font-weight:500;font-size:10px">Cat.</th>
-            <th style="text-align:right;padding:3px 4px;font-weight:500;font-size:10px">Unid.</th>
-            <th style="text-align:right;padding:3px 4px;font-weight:500;font-size:10px">%</th>
-            <th style="text-align:right;padding:3px 4px;font-weight:500;font-size:10px">Kgs</th>
-            <th style="text-align:right;padding:3px 4px;font-weight:500;font-size:10px">Kg/un</th>
-          </tr></thead>
-          <tbody>${trows}</tbody>
-        </table>
-      </div>`;
+    const ac=CATS.filter(c=>tb[c].u>0);
+    if(ac.length){
+      let tr=ac.map(c=>{const pU=gu>0?(tb[c].u/gu*100).toFixed(1):'0.0',kU=tb[c].u>0?(tb[c].k/tb[c].u).toFixed(3):'—';return`<tr><td><span class="cat-pill ${CAT_CLS[c]}" style="font-size:11px">${c}</span></td><td style="text-align:right;font-family:'JetBrains Mono',monospace">${tb[c].u}</td><td style="text-align:right;font-family:'JetBrains Mono',monospace">${pU}%</td><td style="text-align:right;font-family:'JetBrains Mono',monospace">${tb[c].k.toFixed(1)}</td><td style="text-align:right;font-family:'JetBrains Mono',monospace;font-weight:700">${kU}</td></tr>`;}).join('');
+      const gKU=gu>0?(gk/gu).toFixed(3):'—';
+      tr+=`<tr style="border-top:2px solid var(--border);font-weight:700"><td style="padding-top:6px">Total</td><td style="text-align:right;font-family:'JetBrains Mono',monospace;padding-top:6px">${gu}</td><td style="text-align:right;padding-top:6px">100%</td><td style="text-align:right;font-family:'JetBrains Mono',monospace;padding-top:6px">${gk.toFixed(1)}</td><td style="text-align:right;font-family:'JetBrains Mono',monospace;padding-top:6px">${gKU}</td></tr>`;
+      det+=`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)"><div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase">Rendimiento por categoría</div><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="color:var(--muted)"><th style="text-align:left;padding:3px 4px;font-weight:500;font-size:10px">Cat.</th><th style="text-align:right;padding:3px 4px;font-weight:500;font-size:10px">Unid.</th><th style="text-align:right;padding:3px 4px;font-weight:500;font-size:10px">%</th><th style="text-align:right;padding:3px 4px;font-weight:500;font-size:10px">Kgs</th><th style="text-align:right;padding:3px 4px;font-weight:500;font-size:10px">Kg/un</th></tr></thead><tbody>${tr}</tbody></table></div>`;
     }
-  } else {
-    detailHtml = '<div style="padding:12px 0;font-size:13px;color:var(--muted)">Sin cargas registradas aún.</div>';
+  }else det='<div style="padding:12px 0;font-size:13px;color:var(--muted)">Sin cargas registradas aún.</div>';
+  if(r.comentarios)det+=`<div style="margin-top:6px;font-size:12px;color:var(--muted);padding:6px 8px;background:var(--gray-bg);border-radius:6px">📝 ${r.comentarios}</div>`;
+
+  return`<div class="rec-item ${r.estado}"><div class="rec-head" onclick="toggleRec('${uid}')"><div class="rec-top"><span class="rec-date">${fmt(r.fecha)}</span><span class="status-badge ${sc}">${sl}</span></div><div class="rec-meta">${meta}</div>${prog}</div><div class="rec-detail" id="det-${uid}"><div class="rec-detail-inner">${det}</div></div></div>`;
+}
+
+// ══════════════════ TAB 2 — ANÁLISIS ══════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// TAB 2 — ANÁLISIS (distribución por categoría + percentiles por proveedor)
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── Función de percentil: interpolación lineal sobre array ordenado ──────────
+function pctl(arr,p){if(!arr.length)return 0;const i=(p/100)*(arr.length-1),lo=Math.floor(i),hi=Math.ceil(i);return lo===hi?arr[lo]:arr[lo]+(arr[hi]-arr[lo])*(i-lo);}
+
+// ── Prepara datos de análisis: totales por cat, kg/un, percentiles globales ──
+// Solo usa lotes cerrados. Filtra por frigorífico si se selecciona.
+function getAnalysisData(fgoF){
+  const all=buildData().filter(r=>r.estado==='cerrado'&&r.cargas.length>0);
+  const f=fgoF?all.filter(r=>r.fgo===fgoF):all;
+  const tb={};CATS.forEach(c=>{tb[c]={u:0,k:0};});
+  const kguAll=[],kguByCat={};CATS.forEach(c=>{kguByCat[c]=[];});
+  f.forEach(r=>r.cargas.forEach(c=>c.cats.forEach(ct=>{
+    tb[ct.cat].u+=ct.unid;tb[ct.cat].k+=ct.kgs;
+    if(ct.unid>0&&ct.kgs>0){const v=ct.kgs/ct.unid;kguAll.push(v);kguByCat[ct.cat].push(v);}
+  })));
+  kguAll.sort((a,b)=>a-b);
+  const gp={p10:pctl(kguAll,10),p25:pctl(kguAll,25),p50:pctl(kguAll,50),p75:pctl(kguAll,75),p90:pctl(kguAll,90)};
+  const cs=CATS.map(c=>{const a=[...kguByCat[c]].sort((a,b)=>a-b);return{cat:c,unid:tb[c].u,kgs:tb[c].k,kgu:tb[c].u>0?tb[c].k/tb[c].u:0,p25:pctl(a,25),p50:pctl(a,50),p75:pctl(a,75),count:a.length};});
+  const gu=CATS.reduce((s,c)=>s+tb[c].u,0),gk=CATS.reduce((s,c)=>s+tb[c].k,0);
+  return{totByCat:tb,globalPcts:gp,catStats:cs,grandUnid:gu,grandKgs:gk,kguAll,lotCount:f.length};
+}
+
+// ── Render Tab 2: KPIs + gráfico SVG + tabla percentiles + tabla categorías ──
+function renderTab2(){
+  const fgo=document.getElementById('an-fgo').value,d=getAnalysisData(fgo),label=fgo||'Consolidado';
+  if(!d.lotCount){
+    ['an-kpis-wrap','an-chart','an-percentiles','an-table'].forEach(id=>document.getElementById(id).innerHTML='');
+    document.getElementById('an-chart').innerHTML='<div class="empty">No hay lotes cerrados'+(fgo?' para '+fgo:'')+' para analizar.</div>';return;
   }
-  if(r.comentarios){
-    detailHtml += `<div style="margin-top:6px;font-size:12px;color:var(--muted);padding:6px 8px;background:var(--gray-bg);border-radius:6px">📝 ${r.comentarios}</div>`;
-  }
-
-  return `<div class="rec-item ${itemClass}">
-    <div class="rec-head" onclick="toggleRec('${uid}')">
-      <div class="rec-top">
-        <span class="rec-date">${fmt(r.fecha)}</span>
-        <span class="status-badge ${stClass}">${stLabel}</span>
-      </div>
-      <div class="rec-meta">${metaHtml}</div>
-      ${progressHtml}
-    </div>
-    <div class="rec-detail" id="det-${uid}">
-      <div class="rec-detail-inner">${detailHtml}</div>
-    </div>
-  </div>`;
+  const gKgu=d.grandUnid>0?(d.grandKgs/d.grandUnid).toFixed(3):'—';
+  document.getElementById('an-kpis-wrap').innerHTML=`<div class="an-kpis"><div class="an-kpi"><div class="kpi-val">${d.lotCount}</div><div class="kpi-lbl">Lotes</div></div><div class="an-kpi"><div class="kpi-val">${d.grandUnid.toLocaleString('es-AR')}</div><div class="kpi-lbl">Unidades</div></div><div class="an-kpi"><div class="kpi-val">${gKgu}</div><div class="kpi-lbl">Kg/un prom.</div></div></div>`;
+  renderDistChart(d,label);
+  renderPercTable(d);
+  renderCatTable(d);
 }
 
-// ── Toggle helpers ──
-function toggleFgo(el){
-  el.classList.toggle('open');
-  el.nextElementSibling.classList.toggle('open');
+// ── Gráfico SVG: distribución en campana ─────────────────────────────────────
+// Barras de kgs por categoría ordenadas bell-curve (menor→mayor→menor).
+// Eje izq: kgs totales. Eje der: kg/unidad.
+// Líneas horizontales: percentiles globales P10/P25/P50/P75/P90.
+// Banda verde suave entre P25-P75. Curva catmull-rom suavizada sobre barras.
+function renderDistChart(d,label){
+  const W=520,H=340,ML=56,MR=70,MT=24,MB=56,PW=W-ML-MR,PH=H-MT-MB;
+  const sorted=CATS.filter(c=>d.totByCat[c].k>0).sort((a,b)=>d.totByCat[a].k-d.totByCat[b].k);
+  if(!sorted.length){document.getElementById('an-chart').innerHTML='<div class="empty">Sin datos.</div>';return;}
+  const left=sorted.slice(0,Math.floor(sorted.length/2)),right=sorted.slice(Math.floor(sorted.length/2)).reverse();
+  const bell=[...left,...right];
+  const maxK=Math.max(...bell.map(c=>d.totByCat[c].k)),yMax=Math.ceil(maxK/500)*500+500;
+  const fy=v=>MT+PH-(v/yMax)*PH;
+  const maxKgu=d.kguAll.length?Math.max(...d.kguAll):1,KGU_MAX=Math.ceil(maxKgu*10)/10+0.2;
+  const fyK=v=>MT+PH-(v/KGU_MAX)*PH;
+  const slotW=PW/bell.length,barW=slotW*0.55;
+  let s=`<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;font-family:'DM Sans',sans-serif">`;
+  // Grid
+  const gs=yMax<=2000?500:yMax<=5000?1000:2000;
+  for(let v=0;v<=yMax;v+=gs){const y=fy(v);s+=`<line x1="${ML}" y1="${y}" x2="${ML+PW}" y2="${y}" stroke="#e5e5e5" stroke-width="0.5"/><text x="${ML-6}" y="${y+4}" text-anchor="end" font-size="9" fill="#999">${v>=1000?(v/1000)+'k':v}</text>`;}
+  // P25-P75 band
+  s+=`<rect x="${ML}" y="${fyK(d.globalPcts.p75)}" width="${PW}" height="${Math.max(0,fyK(d.globalPcts.p25)-fyK(d.globalPcts.p75))}" fill="#16a34a" fill-opacity="0.06"/>`;
+  // Percentile lines
+  [{k:'p10',c:'#E24B4A',d:'3,5',w:1},{k:'p25',c:'#EF9F27',d:'5,4',w:1.2},{k:'p50',c:'#444',d:'',w:2},{k:'p75',c:'#1D9E75',d:'5,4',w:1.2},{k:'p90',c:'#7F77DD',d:'3,5',w:1}].forEach(p=>{
+    const y=fyK(d.globalPcts[p.k]);if(y>=MT&&y<=MT+PH){s+=`<line x1="${ML}" y1="${y}" x2="${ML+PW}" y2="${y}" stroke="${p.c}" stroke-width="${p.w}" ${p.d?'stroke-dasharray="'+p.d+'"':''}/><text x="${ML+PW+4}" y="${y+3.5}" font-size="8.5" fill="${p.c}" font-weight="600">${p.k.toUpperCase()} ${d.globalPcts[p.k].toFixed(3)}</text>`;}
+  });
+  // Bars
+  const pts=[];
+  bell.forEach((cat,i)=>{
+    const x=ML+i*slotW+slotW/2,kgs=d.totByCat[cat].k,y=fy(kgs),bx=x-barW/2;
+    s+=`<rect x="${bx}" y="${y}" width="${barW}" height="${fy(0)-y}" fill="${CAT_COLORS[cat]}" fill-opacity="0.8" rx="3"/>`;
+    s+=`<text x="${x}" y="${y-6}" text-anchor="middle" font-size="9" font-weight="600" fill="${CAT_COLORS[cat]}">${kgs>=1000?(kgs/1000).toFixed(1)+'k':Math.round(kgs)}</text>`;
+    const pc=d.grandKgs>0?(kgs/d.grandKgs*100).toFixed(1):'0';
+    s+=`<text x="${x}" y="${H-MB+16}" text-anchor="middle" font-size="11" font-weight="700" fill="#333">${cat}</text>`;
+    s+=`<text x="${x}" y="${H-MB+28}" text-anchor="middle" font-size="9" fill="#888">${pc}%</text>`;
+    pts.push({x,y});
+  });
+  if(pts.length>=3)s+=`<path d="${catmullRom(pts)}" fill="none" stroke="#555" stroke-width="1.5" stroke-opacity="0.18"/>`;
+  s+=`<text x="${W-4}" y="${MT-8}" text-anchor="end" font-size="8" fill="#888">kg/un</text><text x="${ML-4}" y="${MT-8}" text-anchor="end" font-size="8" fill="#888">kgs</text></svg>`;
+  document.getElementById('an-chart').innerHTML=`<div class="chart-wrap"><div class="chart-title">Distribución por categoría — ${label}</div><div class="chart-sub">Kgs salados en campana · Percentiles de kg/un (eje derecho)</div>${s}<div class="legend"><span class="legend-item"><span class="legend-dot" style="background:#E24B4A"></span>P10</span><span class="legend-item"><span class="legend-dot" style="background:#EF9F27"></span>P25</span><span class="legend-item"><span class="legend-dot" style="background:#444;height:2px"></span>P50</span><span class="legend-item"><span class="legend-dot" style="background:#1D9E75"></span>P75</span><span class="legend-item"><span class="legend-dot" style="background:#7F77DD"></span>P90</span></div></div>`;
 }
 
-function toggleRec(uid){
-  const det = document.getElementById('det-'+uid);
-  det.classList.toggle('open');
+// ── Catmull-Rom spline: genera path SVG suavizado por puntos ─────────────────
+function catmullRom(pts){let d='';for(let i=0;i<pts.length;i++){if(i===0){d+=`M${pts[i].x},${pts[i].y}`;continue;}const p0=pts[Math.max(i-2,0)],p1=pts[i-1],p2=pts[i],p3=pts[Math.min(i+1,pts.length-1)];d+=` C${p1.x+(p2.x-p0.x)/6},${p1.y+(p2.y-p0.y)/6} ${p2.x-(p3.x-p1.x)/6},${p2.y-(p3.y-p1.y)/6} ${p2.x},${p2.y}`;}return d;}
+
+// ── Tabla de percentiles globales de kg/unidad ──────────────────────────────
+function renderPercTable(d){
+  const p=d.globalPcts;
+  document.getElementById('an-percentiles').innerHTML=`<div class="chart-wrap"><div class="chart-title">Percentiles globales de kg/unidad</div><div class="chart-sub">Sobre todos los lotes y categorías</div><table class="pct-table"><thead><tr><th>Percentil</th><th style="text-align:right">Kg/un</th><th style="text-align:right">Interpretación</th></tr></thead><tbody>
+    <tr><td style="color:#E24B4A;font-weight:600">P10</td><td style="text-align:right">${p.p10.toFixed(3)}</td><td style="text-align:right;font-family:'DM Sans';color:var(--muted)">Muy livianos</td></tr>
+    <tr><td style="color:#EF9F27;font-weight:600">P25</td><td style="text-align:right">${p.p25.toFixed(3)}</td><td style="text-align:right;font-family:'DM Sans';color:var(--muted)">Bajo el promedio</td></tr>
+    <tr style="background:#f9fafb"><td style="color:#444;font-weight:700">P50</td><td style="text-align:right;font-weight:700">${p.p50.toFixed(3)}</td><td style="text-align:right;font-family:'DM Sans';font-weight:600;color:var(--text)">Mediana</td></tr>
+    <tr><td style="color:#1D9E75;font-weight:600">P75</td><td style="text-align:right">${p.p75.toFixed(3)}</td><td style="text-align:right;font-family:'DM Sans';color:var(--muted)">Sobre el promedio</td></tr>
+    <tr><td style="color:#7F77DD;font-weight:600">P90</td><td style="text-align:right">${p.p90.toFixed(3)}</td><td style="text-align:right;font-family:'DM Sans';color:var(--muted)">Muy pesados</td></tr>
+  </tbody></table></div>`;
 }
 
-// ── Init ──
+// ── Tabla resumen por categoría: unid, %unid, kgs, %kgs, kg/un prom, P50 ────
+function renderCatTable(d){
+  const ac=d.catStats.filter(c=>c.unid>0);if(!ac.length){document.getElementById('an-table').innerHTML='';return;}
+  let rows=ac.map(c=>{const pU=d.grandUnid>0?(c.unid/d.grandUnid*100).toFixed(1):'0.0',pK=d.grandKgs>0?(c.kgs/d.grandKgs*100).toFixed(1):'0.0';
+    return`<tr><td><span class="cat-pill ${CAT_CLS[c.cat]}" style="font-size:11px">${c.cat}</span></td><td style="text-align:right">${c.unid.toLocaleString('es-AR')}</td><td style="text-align:right">${pU}%</td><td style="text-align:right">${c.kgs.toFixed(0)}</td><td style="text-align:right">${pK}%</td><td style="text-align:right;font-weight:700">${c.kgu.toFixed(3)}</td><td style="text-align:right">${c.p50.toFixed(3)}</td></tr>`;}).join('');
+  const gK=d.grandUnid>0?(d.grandKgs/d.grandUnid).toFixed(3):'—';
+  rows+=`<tr style="border-top:2px solid var(--border);font-weight:700"><td style="padding-top:6px">Total</td><td style="text-align:right;padding-top:6px">${d.grandUnid.toLocaleString('es-AR')}</td><td style="text-align:right;padding-top:6px">100%</td><td style="text-align:right;padding-top:6px">${d.grandKgs.toFixed(0)}</td><td style="text-align:right;padding-top:6px">100%</td><td style="text-align:right;padding-top:6px">${gK}</td><td style="text-align:right;padding-top:6px">—</td></tr>`;
+  document.getElementById('an-table').innerHTML=`<div class="chart-wrap"><div class="chart-title">Resumen por categoría</div><div style="overflow-x:auto"><table class="pct-table"><thead><tr><th>Cat.</th><th style="text-align:right">Unid.</th><th style="text-align:right">%Un</th><th style="text-align:right">Kgs</th><th style="text-align:right">%Kgs</th><th style="text-align:right">Kg/un</th><th style="text-align:right">P50</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+}
+
+// ── UI helpers: expandir/colapsar grupos y recepciones ──────────────────────
+function toggleFgo(el){el.classList.toggle('open');el.nextElementSibling.classList.toggle('open');}
+function toggleRec(uid){document.getElementById('det-'+uid).classList.toggle('open');}
+
+// ── Init: carga datos al abrir la página ────────────────────────────────────
 loadData();
 </script>
 </body>
