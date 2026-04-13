@@ -760,6 +760,10 @@ function buildEmpleadosDePlanta(planta, fecha) {
     emp.valorHETotal = emp.contratos.reduce((s, c) => s + c.valorHE, 0);
     emp.permiteHE = emp.contratos.some(c => c.valorHE > 0);
     emp.esFijoQuincenal = emp.contratos.every(c => c.tipoPago === 'FIJO_QUINCENAL');
+    // Modo quincenal (panel de días) solo aplica para CICLO II.
+    // Las demás plantas (ALBA, etc.) aunque sean FIJO_QUINCENAL usan el modo
+    // diario normal con prorrateo — el supervisor carga día por día.
+    emp.usaQuincenal = emp.esFijoQuincenal && emp.planta === 'CICLO II';
     emp.diasHabilesRef = dh;  // para mostrar en la UI
     emp.key = emp.nombre.toUpperCase().replace(/[^A-Z0-9]/g, '_');
     return emp;
@@ -821,7 +825,7 @@ function render() {
     const badgeLoaded = hayCargado ? '<span class="badge-loaded">Ya cargado</span>' : '';
     const legajos = [...new Set(emp.contratos.map(c => c.legajo || '—'))].join('/');
 
-    if (emp.esFijoQuincenal) {
+    if (emp.usaQuincenal) {
       // ============================================================
       // MODO QUINCENAL: botón "Quincena completa" + chips de días
       // ============================================================
@@ -857,6 +861,7 @@ function render() {
       // ============================================================
       const jornalStr = emp.jornalTotalDiario ? fmtMoney(emp.jornalTotalDiario) : 'Sin jornal';
       const heStr = emp.valorHETotal ? fmtMoney(emp.valorHETotal) + '/HE' : '';
+      const fijoNote = emp.esFijoQuincenal ? ' · <em style="color:var(--accent)">Prorrateo quincenal (÷' + emp.diasHabilesRef + ' días)</em>' : '';
 
       const heFieldHTML = emp.permiteHE ? `
         <div class="extras-item extras-presente hidden">
@@ -869,7 +874,7 @@ function render() {
         <div class="emp-top">
           <div class="emp-info">
             <div class="emp-name">${emp.nombre}${badgeLoaded}</div>
-            <div class="emp-meta">Leg ${legajos} · ${jornalStr}${heStr ? ' · ' + heStr : ''}</div>
+            <div class="emp-meta">Leg ${legajos} · ${jornalStr}${heStr ? ' · ' + heStr : ''}${fijoNote}</div>
           </div>
           <div class="status-toggle">
             <button type="button" class="status-btn btn-p" onclick="setStatus('${emp.key}', 'P')">PRES</button>
@@ -975,7 +980,7 @@ function setStatusSilent(key, status) {
 }
 
 function toggleAll(checked) {
-  empleados.filter(e => !e.esFijoQuincenal).forEach(emp => {
+  empleados.filter(e => !e.usaQuincenal).forEach(emp => {
     const row = document.getElementById('row_' + emp.key);
     if (!row) return;
     const isP = row.classList.contains('presente');
@@ -989,7 +994,7 @@ function toggleAll(checked) {
 }
 
 function checkSelectAllState() {
-  const allP = empleados.filter(e => !e.esFijoQuincenal).every(emp => {
+  const allP = empleados.filter(e => !e.usaQuincenal).every(emp => {
     const row = document.getElementById('row_' + emp.key);
     return row && row.classList.contains('presente');
   });
@@ -1141,7 +1146,7 @@ function updateTotales() {
   let total = 0, pres = 0, aus = 0;
 
   empleados.forEach(emp => {
-    if (emp.esFijoQuincenal) {
+    if (emp.usaQuincenal) {
       // Sumar lo que muestra el panel quincenal
       const container = document.getElementById('days_' + emp.key);
       if (!container) return;
@@ -1187,7 +1192,7 @@ async function guardar() {
   const ts = new Date().toISOString();
 
   empleados.forEach(emp => {
-    if (emp.esFijoQuincenal) {
+    if (emp.usaQuincenal) {
       // ---- MODO QUINCENAL: generar 1 fila por día × contrato ----
       const container = document.getElementById('days_' + emp.key);
       if (!container) return;
@@ -1228,7 +1233,13 @@ async function guardar() {
       const certMed = ausente ? (document.getElementById('cm_' + emp.key)?.checked || false) : false;
 
       emp.contratos.forEach(contrato => {
-        const jornalCobrado = presente ? contrato.jornal : 0;
+        // DIARIO usa valor directo; FIJO_QUINCENAL prorratea por días hábiles
+        let jornalCobrado = 0;
+        if (presente) {
+          jornalCobrado = contrato.tipoPago === 'FIJO_QUINCENAL'
+            ? contrato.jornal / diasHabilesQuincena(fecha)
+            : contrato.jornal;
+        }
         const importeHE = he * contrato.valorHE;
         const total = jornalCobrado + importeHE;
         const id = contrato.legajo + '||' + fecha + '||' + contrato.company + '||' + planta;
