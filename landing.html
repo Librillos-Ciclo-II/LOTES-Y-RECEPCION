@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IA Full — Santa Faz</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0c0f0a;
+    --surface: #151a12;
+    --surface-hover: #1c2318;
+    --border: #2a3326;
+    --primary: #8bc34a;
+    --primary-dim: #5a8a1e;
+    --accent: #c5a030;
+    --text: #e8e6e1;
+    --text-muted: #8a8a7a;
+    --danger: #e74c3c;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Outfit', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ---- HERO ---- */
+  .hero {
+    position: relative;
+    padding: 60px 24px 40px;
+    text-align: center;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -120px; left: 50%;
+    transform: translateX(-50%);
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, rgba(139,195,74,0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .logo-mark {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .logo-icon {
+    width: 48px; height: 48px;
+    background: var(--primary);
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.4rem; font-weight: 800; color: var(--bg);
+    box-shadow: 0 0 30px rgba(139,195,74,0.3);
+  }
+  .logo-text {
+    font-size: 1.8rem; font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+  .logo-text span { color: var(--primary); }
+
+  .hero-sub {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    font-weight: 400;
+    max-width: 500px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+
+  /* ---- SECTIONS ---- */
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 0 20px 60px;
+  }
+
+  .section-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    margin-top: 40px;
+  }
+  .section-label .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--primary);
+  }
+  .section-label h2 {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  /* ---- CARDS ---- */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 14px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px 20px;
+    text-decoration: none;
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  .card:hover {
+    background: var(--surface-hover);
+    border-color: var(--primary-dim);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.3), 0 0 0 1px var(--primary-dim);
+  }
+  .card:active {
+    transform: translateY(0);
+  }
+
+  .card-icon {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.2rem;
+    flex-shrink: 0;
+  }
+  .card-icon.green   { background: rgba(139,195,74,0.12); color: var(--primary); }
+  .card-icon.gold    { background: rgba(197,160,48,0.12); color: var(--accent); }
+  .card-icon.blue    { background: rgba(41,128,185,0.12); color: #5dade2; }
+  .card-icon.red     { background: rgba(231,76,60,0.1);  color: var(--danger); }
+
+  .card-title {
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+  }
+  .card-desc {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+  .card-tag {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem;
+    font-weight: 500;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: rgba(139,195,74,0.08);
+    color: var(--primary);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-top: auto;
+    align-self: flex-start;
+  }
+  .card-tag.beta {
+    background: rgba(197,160,48,0.1);
+    color: var(--accent);
+  }
+
+  .card-arrow {
+    position: absolute;
+    top: 22px; right: 18px;
+    font-size: 1rem;
+    color: var(--text-muted);
+    transition: transform 0.2s, color 0.2s;
+  }
+  .card:hover .card-arrow {
+    transform: translateX(3px);
+    color: var(--primary);
+  }
+
+  /* ---- STATUS BAR ---- */
+  .status-bar {
+    margin-top: 50px;
+    padding: 16px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--primary);
+    box-shadow: 0 0 8px var(--primary);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  .status-text {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+  }
+  .status-text strong { color: var(--text); }
+
+  /* ---- FOOTER ---- */
+  .footer {
+    text-align: center;
+    padding: 30px 20px;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    border-top: 1px solid var(--border);
+    margin-top: 20px;
+  }
+
+  /* ---- RESPONSIVE ---- */
+  @media (max-width: 600px) {
+    .hero { padding: 40px 16px 24px; }
+    .logo-text { font-size: 1.4rem; }
+    .grid { grid-template-columns: 1fr; }
+    .container { padding: 0 14px 40px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="logo-mark">
+    <div class="logo-icon">IA</div>
+    <div class="logo-text"><span>IA Full</span> — Santa Faz</div>
+  </div>
+  <p class="hero-sub">
+    Sistema de gestión de producción y RRHH para la exportación de librillo salado
+  </p>
+</div>
+
+<div class="container">
+
+  <!-- LOTES Y RECEPCIÓN -->
+  <div class="section-label">
+    <div class="dot"></div>
+    <h2>Lotes y Recepción</h2>
+  </div>
+  <div class="grid">
+    <a href="index.html" class="card">
+      <div class="card-icon green">📦</div>
+      <div class="card-title">Recepción y Clasificación</div>
+      <div class="card-desc">Registro de recepción de materia prima y clasificación de lotes por categoría de subproducto</div>
+      <div class="card-tag">producción</div>
+      <span class="card-arrow">→</span>
+    </a>
+
+    <a href="informes.html" class="card">
+      <div class="card-icon blue">📊</div>
+      <div class="card-title">Informes de Lotes</div>
+      <div class="card-desc">Consulta y análisis de lotes procesados, distribución de categorías y rendimiento por proveedor</div>
+      <div class="card-tag">consulta</div>
+      <span class="card-arrow">→</span>
+    </a>
+
+  </div>
+
+  <!-- RRHH -->
+  <div class="section-label">
+    <div class="dot" style="background:var(--accent)"></div>
+    <h2>Recursos Humanos</h2>
+  </div>
+  <div class="grid">
+    <a href="RRHH_Jornales.html" class="card">
+      <div class="card-icon green">✅</div>
+      <div class="card-title">Asistencia Jornaleros</div>
+      <div class="card-desc">Carga diaria de asistencia de jornaleros por planta. Presente / Ausente / HE. Incluye ALBA con prorrateo quincenal fijo</div>
+      <div class="card-tag">carga diaria</div>
+      <span class="card-arrow">→</span>
+    </a>
+
+    <a href="productividad.html" class="card">
+      <div class="card-icon gold">🔨</div>
+      <div class="card-title">Destajo Ciclo II</div>
+      <div class="card-desc">Registro de producción por destajo de operarios. Clasificado, despellejado, salado, lavado y más</div>
+      <div class="card-tag">carga diaria</div>
+      <span class="card-arrow">→</span>
+    </a>
+
+    <a href="RRHH_Reportes.html" class="card">
+      <div class="card-icon blue">📋</div>
+      <div class="card-title">Reportes RRHH</div>
+      <div class="card-desc">Dashboard de consulta con filtros por planta, company, fecha y empleado. Asistencia, destajo y resumen consolidado</div>
+      <div class="card-tag">consulta</div>
+      <span class="card-arrow">→</span>
+    </a>
+  </div>
+
+  <!-- STATUS -->
+  <div class="status-bar">
+    <div class="status-dot"></div>
+    <div class="status-text">
+      Sistema conectado a <strong>Google Apps Script</strong> · Datos en Google Sheets · Archivos servidos desde <strong>GitHub Pages</strong>
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">
+  IA Full — Santa Faz · Librillo Salado Argentina → China · 2026
+</div>
+
+</body>
+</html>
