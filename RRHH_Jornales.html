@@ -1006,7 +1006,9 @@ function checkSelectAllState() {
 //  MODO QUINCENAL (para FIJO_QUINCENAL: CICLO II + ALBA)
 // ============================================================
 
-// Genera los chips de días hábiles de la quincena actual
+// Genera los chips de días hábiles de la quincena actual.
+// Por default todos arrancan como PRESENTES (verde).
+// El supervisor solo clickea los días que el empleado faltó.
 function renderDaysChips(emp) {
   const fecha = document.getElementById('fecha').value;
   if (!fecha) return;
@@ -1029,63 +1031,77 @@ function renderDaysChips(emp) {
     const fechaDia = `${y}-${String(m).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
     const chip = document.createElement('button');
     chip.type = 'button';
-    chip.className = 'day-chip';
+    chip.className = 'day-chip selected';  // arranca presente por default
     chip.dataset.fecha = fechaDia;
     chip.dataset.key = emp.key;
     chip.innerHTML = `${diasNombre[dow]}<br>${i}`;
     chip.onclick = function() { toggleDay(emp.key, fechaDia); };
 
-    // Chequear si ya hay registro cargado para este día
+    // Si ya hay registro cargado para este día, respetar el estado guardado
     const planta = document.getElementById('planta').value;
     const existingIds = emp.contratos.map(c =>
       c.legajo + '||' + fechaDia + '||' + c.company + '||' + planta
     );
-    const yaPresente = existingIds.some(id => {
-      const reg = todosLosRegistros.find(r => String(r[0]) === id);
-      return reg && String(reg[7] || '').toUpperCase() === 'SI';
-    });
-    if (yaPresente) chip.classList.add('selected');
+    const regExistente = existingIds.map(id =>
+      todosLosRegistros.find(r => String(r[0]) === id)
+    ).find(r => r);
+
+    if (regExistente) {
+      const esAusente = String(regExistente[8] || '').toUpperCase() === 'SI';
+      if (esAusente) {
+        chip.classList.remove('selected');
+        chip.classList.add('ausente');
+      }
+    }
 
     container.appendChild(chip);
   }
 
+  // Marcar el botón quincena completa si todos están presentes
+  const btn = container.parentElement.querySelector('.btn-quincena');
+  const allSelected = container.querySelectorAll('.day-chip.ausente').length === 0;
+  if (btn) btn.classList.toggle('active', allSelected);
+
   updateQuincenalSummary(emp.key);
 }
 
-// Toggle un día individual
+// Toggle un día: presente ↔ ausente (solo 2 estados)
 function toggleDay(key, fecha) {
   const container = document.getElementById('days_' + key);
   const chip = container.querySelector(`[data-fecha="${fecha}"]`);
   if (!chip) return;
 
   if (chip.classList.contains('selected')) {
+    // Presente → Ausente
     chip.classList.remove('selected');
     chip.classList.add('ausente');
-  } else if (chip.classList.contains('ausente')) {
-    chip.classList.remove('ausente');
-    // No seleccionado
   } else {
+    // Ausente → Presente
+    chip.classList.remove('ausente');
     chip.classList.add('selected');
   }
+
+  // Actualizar botón quincena completa
+  const btn = container.parentElement.querySelector('.btn-quincena');
+  const allSelected = container.querySelectorAll('.day-chip.ausente').length === 0;
+  if (btn) btn.classList.toggle('active', allSelected);
 
   updateQuincenalSummary(key);
   updateTotales();
 }
 
-// Marca todos los días como presentes
+// Resetea todos los días a presente (deshace cualquier ausencia marcada)
 function toggleQuincenaCompleta(key) {
   const container = document.getElementById('days_' + key);
   const chips = container.querySelectorAll('.day-chip');
-  const allSelected = Array.from(chips).every(c => c.classList.contains('selected'));
 
   chips.forEach(c => {
-    c.classList.remove('selected', 'ausente');
-    if (!allSelected) c.classList.add('selected');
+    c.classList.remove('ausente');
+    c.classList.add('selected');
   });
 
-  // Cambiar estilo del botón
   const btn = container.parentElement.querySelector('.btn-quincena');
-  if (btn) btn.classList.toggle('active', !allSelected);
+  if (btn) btn.classList.add('active');
 
   updateQuincenalSummary(key);
   updateTotales();
