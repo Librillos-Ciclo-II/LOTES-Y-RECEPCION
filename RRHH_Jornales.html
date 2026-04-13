@@ -454,6 +454,95 @@
     margin-left: 6px;
     text-transform: uppercase;
   }
+
+  /* ---- Modo presentismo quincenal (FIJO_QUINCENAL) ---- */
+  .quincenal-panel {
+    margin-top: 10px;
+    padding: 12px 14px;
+    background: var(--accent-light);
+    border-radius: 8px;
+    border: 1px solid #e8d9a0;
+  }
+  .quincenal-panel .q-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .quincenal-panel .q-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #8a6d10;
+  }
+  .btn-quincena {
+    padding: 6px 14px;
+    border: 1.5px solid var(--primary);
+    background: var(--primary);
+    color: white;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 0.75rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-quincena:hover { opacity: 0.85; }
+  .btn-quincena.active {
+    background: #27ae60;
+    border-color: #27ae60;
+  }
+  .days-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+  }
+  .day-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 54px;
+    padding: 6px 4px;
+    border: 1.5px solid var(--border);
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 0.7rem;
+    font-weight: 600;
+    cursor: pointer;
+    background: white;
+    color: var(--text);
+    transition: all 0.15s;
+    text-align: center;
+    line-height: 1.1;
+  }
+  .day-chip.selected {
+    background: #d4edda;
+    border-color: #27ae60;
+    color: #155724;
+  }
+  .day-chip.ausente {
+    background: var(--danger-light);
+    border-color: var(--danger);
+    color: var(--danger);
+    text-decoration: line-through;
+  }
+  .q-summary {
+    margin-top: 8px;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .q-summary strong { color: var(--text); }
+  .q-total {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--primary);
+  }
 </style>
 </head>
 <body>
@@ -485,7 +574,7 @@
   <div id="companiesContainer"></div>
 
   <div class="total-card">
-    <div class="label">Total día</div>
+    <div class="label">Total período</div>
     <div class="value" id="totalDia">$ 0</div>
     <div class="detail" id="totalDetail">0 presentes · 0 ausentes</div>
   </div>
@@ -729,65 +818,96 @@ function render() {
     row.id = 'row_' + emp.key;
     row.dataset.key = emp.key;
 
-    // UI: mostramos el jornal DIARIO total (para FIJO_QUINCENAL es prorrateo)
-    const jornalStr = emp.jornalTotalDiario ? fmtMoney(emp.jornalTotalDiario) : 'Sin jornal';
-    const heStr = emp.valorHETotal ? fmtMoney(emp.valorHETotal) + '/HE' : '';
-    const fijoNote = emp.esFijoQuincenal ? ' · <em style="color:var(--accent)">Prorrateo quincenal (÷' + emp.diasHabilesRef + ' días)</em>' : '';
     const badgeLoaded = hayCargado ? '<span class="badge-loaded">Ya cargado</span>' : '';
     const legajos = [...new Set(emp.contratos.map(c => c.legajo || '—'))].join('/');
 
-    // HE input solo visible si el empleado permite HE (solo Ciclo II actualmente)
-    const heFieldHTML = emp.permiteHE ? `
-      <div class="extras-item extras-presente hidden">
-        <label for="he_${emp.key}">Hs extras:</label>
-        <input type="number" id="he_${emp.key}" min="0" step="0.5" value="0" onchange="recalcImporte('${emp.key}')">
-      </div>
-    ` : '';
+    if (emp.esFijoQuincenal) {
+      // ============================================================
+      // MODO QUINCENAL: botón "Quincena completa" + chips de días
+      // ============================================================
+      const montoQ = emp.contratos.reduce((s, c) => s + c.jornal, 0);
+      const montoQStr = fmtMoney(montoQ);
 
-    row.innerHTML = `
-      <div class="emp-top">
-        <div class="emp-info">
-          <div class="emp-name">${emp.nombre}${badgeLoaded}</div>
-          <div class="emp-meta">Leg ${legajos} · ${jornalStr}${heStr ? ' · ' + heStr : ''}${fijoNote}</div>
+      row.innerHTML = `
+        <div class="emp-top">
+          <div class="emp-info">
+            <div class="emp-name">${emp.nombre}${badgeLoaded}</div>
+            <div class="emp-meta">Leg ${legajos} · <strong>${montoQStr}/quincena</strong> · <em style="color:var(--accent)">Fijo quincenal (÷${emp.diasHabilesRef} días)</em></div>
+          </div>
         </div>
-        <div class="status-toggle">
-          <button type="button" class="status-btn btn-p" onclick="setStatus('${emp.key}', 'P')">PRES</button>
-          <button type="button" class="status-btn btn-a" onclick="setStatus('${emp.key}', 'A')">AUS</button>
+        <div class="quincenal-panel" id="qpanel_${emp.key}">
+          <div class="q-header">
+            <span class="q-label">Días de la quincena</span>
+            <button type="button" class="btn-quincena" onclick="toggleQuincenaCompleta('${emp.key}')">✓ Quincena completa</button>
+          </div>
+          <div class="days-grid" id="days_${emp.key}"></div>
+          <div class="q-summary">
+            <span><strong id="qpres_${emp.key}">0</strong> presentes · <strong id="qaus_${emp.key}">0</strong> ausencias</span>
+            <span class="q-total" id="qtotal_${emp.key}">$ 0</span>
+          </div>
         </div>
-      </div>
-      <div class="emp-extras">
-        ${heFieldHTML}
-        <div class="extras-item extras-ausente hidden">
-          <input type="checkbox" id="cm_${emp.key}">
-          <label for="cm_${emp.key}">Certificado médico</label>
+      `;
+
+      section.appendChild(row);
+      renderDaysChips(emp);
+
+    } else {
+      // ============================================================
+      // MODO DIARIO: PRES/AUS como siempre
+      // ============================================================
+      const jornalStr = emp.jornalTotalDiario ? fmtMoney(emp.jornalTotalDiario) : 'Sin jornal';
+      const heStr = emp.valorHETotal ? fmtMoney(emp.valorHETotal) + '/HE' : '';
+
+      const heFieldHTML = emp.permiteHE ? `
+        <div class="extras-item extras-presente hidden">
+          <label for="he_${emp.key}">Hs extras:</label>
+          <input type="number" id="he_${emp.key}" min="0" step="0.5" value="0" onchange="recalcImporte('${emp.key}')">
         </div>
-        <div class="importe-tag" id="imp_${emp.key}" style="display:none">$ 0</div>
-      </div>
-    `;
+      ` : '';
 
-    section.appendChild(row);
+      row.innerHTML = `
+        <div class="emp-top">
+          <div class="emp-info">
+            <div class="emp-name">${emp.nombre}${badgeLoaded}</div>
+            <div class="emp-meta">Leg ${legajos} · ${jornalStr}${heStr ? ' · ' + heStr : ''}</div>
+          </div>
+          <div class="status-toggle">
+            <button type="button" class="status-btn btn-p" onclick="setStatus('${emp.key}', 'P')">PRES</button>
+            <button type="button" class="status-btn btn-a" onclick="setStatus('${emp.key}', 'A')">AUS</button>
+          </div>
+        </div>
+        <div class="emp-extras">
+          ${heFieldHTML}
+          <div class="extras-item extras-ausente hidden">
+            <input type="checkbox" id="cm_${emp.key}">
+            <label for="cm_${emp.key}">Certificado médico</label>
+          </div>
+          <div class="importe-tag" id="imp_${emp.key}" style="display:none">$ 0</div>
+        </div>
+      `;
 
-    // Restaurar estado si ya hay registros cargados
-    const firstExisting = existings.find(e => e);
-    if (firstExisting) {
-      // Col indexes en ASISTENCIA v1.7:
-      // 7=Presente, 8=Ausente, 9=CertMed, 10=HorasExtras
-      const presente = String(firstExisting[7]||'').toUpperCase() === 'SI';
-      const ausente = String(firstExisting[8]||'').toUpperCase() === 'SI';
-      const certMed = String(firstExisting[9]||'').toUpperCase() === 'SI';
-      const he = parseFloat(firstExisting[10]) || 0;
+      section.appendChild(row);
 
-      if (presente) {
-        setStatusSilent(emp.key, 'P');
-        if (emp.permiteHE) {
-          const heInput = document.getElementById('he_' + emp.key);
-          if (heInput) heInput.value = he;
+      // Restaurar estado si ya hay registros cargados
+      const firstExisting = existings.find(e => e);
+      if (firstExisting) {
+        const presente = String(firstExisting[7]||'').toUpperCase() === 'SI';
+        const ausente = String(firstExisting[8]||'').toUpperCase() === 'SI';
+        const certMed = String(firstExisting[9]||'').toUpperCase() === 'SI';
+        const he = parseFloat(firstExisting[10]) || 0;
+
+        if (presente) {
+          setStatusSilent(emp.key, 'P');
+          if (emp.permiteHE) {
+            const heInput = document.getElementById('he_' + emp.key);
+            if (heInput) heInput.value = he;
+          }
+          recalcImporte(emp.key);
+        } else if (ausente) {
+          setStatusSilent(emp.key, 'A');
+          const cmInput = document.getElementById('cm_' + emp.key);
+          if (cmInput) cmInput.checked = certMed;
         }
-        recalcImporte(emp.key);
-      } else if (ausente) {
-        setStatusSilent(emp.key, 'A');
-        const cmInput = document.getElementById('cm_' + emp.key);
-        if (cmInput) cmInput.checked = certMed;
       }
     }
   });
@@ -855,7 +975,7 @@ function setStatusSilent(key, status) {
 }
 
 function toggleAll(checked) {
-  empleados.forEach(emp => {
+  empleados.filter(e => !e.esFijoQuincenal).forEach(emp => {
     const row = document.getElementById('row_' + emp.key);
     if (!row) return;
     const isP = row.classList.contains('presente');
@@ -869,12 +989,125 @@ function toggleAll(checked) {
 }
 
 function checkSelectAllState() {
-  const allP = empleados.every(emp => {
+  const allP = empleados.filter(e => !e.esFijoQuincenal).every(emp => {
     const row = document.getElementById('row_' + emp.key);
     return row && row.classList.contains('presente');
   });
   const selAll = document.getElementById('selAll');
   if (selAll) selAll.checked = allP;
+}
+
+// ============================================================
+//  MODO QUINCENAL (para FIJO_QUINCENAL: CICLO II + ALBA)
+// ============================================================
+
+// Genera los chips de días hábiles de la quincena actual
+function renderDaysChips(emp) {
+  const fecha = document.getElementById('fecha').value;
+  if (!fecha) return;
+  const [y, m] = fecha.split('-').map(Number);
+  const d = parseInt(fecha.split('-')[2]);
+  const ultimoDia = new Date(y, m, 0).getDate();
+  const desde = d <= 15 ? 1 : 16;
+  const hasta = d <= 15 ? 15 : ultimoDia;
+
+  const container = document.getElementById('days_' + emp.key);
+  if (!container) return;
+  container.innerHTML = '';
+
+  const diasNombre = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+
+  for (let i = desde; i <= hasta; i++) {
+    const dow = new Date(y, m - 1, i).getDay();
+    if (dow === 0 || dow === 6) continue;  // solo lun-vie
+
+    const fechaDia = `${y}-${String(m).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'day-chip';
+    chip.dataset.fecha = fechaDia;
+    chip.dataset.key = emp.key;
+    chip.innerHTML = `${diasNombre[dow]}<br>${i}`;
+    chip.onclick = function() { toggleDay(emp.key, fechaDia); };
+
+    // Chequear si ya hay registro cargado para este día
+    const planta = document.getElementById('planta').value;
+    const existingIds = emp.contratos.map(c =>
+      c.legajo + '||' + fechaDia + '||' + c.company + '||' + planta
+    );
+    const yaPresente = existingIds.some(id => {
+      const reg = todosLosRegistros.find(r => String(r[0]) === id);
+      return reg && String(reg[7] || '').toUpperCase() === 'SI';
+    });
+    if (yaPresente) chip.classList.add('selected');
+
+    container.appendChild(chip);
+  }
+
+  updateQuincenalSummary(emp.key);
+}
+
+// Toggle un día individual
+function toggleDay(key, fecha) {
+  const container = document.getElementById('days_' + key);
+  const chip = container.querySelector(`[data-fecha="${fecha}"]`);
+  if (!chip) return;
+
+  if (chip.classList.contains('selected')) {
+    chip.classList.remove('selected');
+    chip.classList.add('ausente');
+  } else if (chip.classList.contains('ausente')) {
+    chip.classList.remove('ausente');
+    // No seleccionado
+  } else {
+    chip.classList.add('selected');
+  }
+
+  updateQuincenalSummary(key);
+  updateTotales();
+}
+
+// Marca todos los días como presentes
+function toggleQuincenaCompleta(key) {
+  const container = document.getElementById('days_' + key);
+  const chips = container.querySelectorAll('.day-chip');
+  const allSelected = Array.from(chips).every(c => c.classList.contains('selected'));
+
+  chips.forEach(c => {
+    c.classList.remove('selected', 'ausente');
+    if (!allSelected) c.classList.add('selected');
+  });
+
+  // Cambiar estilo del botón
+  const btn = container.parentElement.querySelector('.btn-quincena');
+  if (btn) btn.classList.toggle('active', !allSelected);
+
+  updateQuincenalSummary(key);
+  updateTotales();
+}
+
+// Actualiza el resumen de presentes/ausentes/total de un empleado quincenal
+function updateQuincenalSummary(key) {
+  const emp = empleados.find(e => e.key === key);
+  if (!emp) return;
+
+  const container = document.getElementById('days_' + key);
+  const chips = container.querySelectorAll('.day-chip');
+  const total = chips.length;
+  const pres = container.querySelectorAll('.day-chip.selected').length;
+  const aus = container.querySelectorAll('.day-chip.ausente').length;
+
+  document.getElementById('qpres_' + key).textContent = pres;
+  document.getElementById('qaus_' + key).textContent = aus;
+
+  // Monto = (pres / total_días_hábiles) * monto_quincenal_total
+  const montoQ = emp.contratos.reduce((s, c) => s + c.jornal, 0);
+  const montoFinal = total > 0 ? (pres / total) * montoQ : 0;
+  document.getElementById('qtotal_' + key).textContent = fmtMoney(montoFinal);
+
+  // Marcar el botón como activo si todos están seleccionados
+  const btn = container.parentElement.querySelector('.btn-quincena');
+  if (btn) btn.classList.toggle('active', pres === total);
 }
 
 // ============================================================
@@ -908,14 +1141,30 @@ function updateTotales() {
   let total = 0, pres = 0, aus = 0;
 
   empleados.forEach(emp => {
-    const row = document.getElementById('row_' + emp.key);
-    if (!row) return;
-    if (row.classList.contains('presente')) {
-      pres++;
-      const he = getHE(emp.key, emp);
-      total += emp.jornalTotalDiario + (he * emp.valorHETotal);
-    } else if (row.classList.contains('ausente')) {
-      aus++;
+    if (emp.esFijoQuincenal) {
+      // Sumar lo que muestra el panel quincenal
+      const container = document.getElementById('days_' + emp.key);
+      if (!container) return;
+      const chips = container.querySelectorAll('.day-chip');
+      const chipsPres = container.querySelectorAll('.day-chip.selected').length;
+      const chipsAus = container.querySelectorAll('.day-chip.ausente').length;
+      const totalDias = chips.length;
+      if (chipsPres > 0) {
+        const montoQ = emp.contratos.reduce((s, c) => s + c.jornal, 0);
+        total += totalDias > 0 ? (chipsPres / totalDias) * montoQ : 0;
+        pres += chipsPres;
+      }
+      aus += chipsAus;
+    } else {
+      const row = document.getElementById('row_' + emp.key);
+      if (!row) return;
+      if (row.classList.contains('presente')) {
+        pres++;
+        const he = getHE(emp.key, emp);
+        total += emp.jornalTotalDiario + (he * emp.valorHETotal);
+      } else if (row.classList.contains('ausente')) {
+        aus++;
+      }
     }
   });
 
@@ -924,7 +1173,7 @@ function updateTotales() {
 }
 
 // ============================================================
-//  GUARDAR (v1.3 — multi-planta, FIJO_QUINCENAL, postBatch, ASISTENCIA)
+//  GUARDAR (v1.6 — quincenal batch + diario, multi-planta)
 // ============================================================
 async function guardar() {
   const btn = document.getElementById('btnGuardar');
@@ -934,50 +1183,70 @@ async function guardar() {
   if (!planta) { showToast('Falta seleccionar la planta', 'error'); return; }
 
   const rowsToSave = [];
+  const ua = navigator.userAgent.substring(0, 120);
+  const ts = new Date().toISOString();
+
   empleados.forEach(emp => {
-    const row = document.getElementById('row_' + emp.key);
-    if (!row) return;
-    const presente = row.classList.contains('presente');
-    const ausente = row.classList.contains('ausente');
-    if (!presente && !ausente) return;  // sin marcar, saltar
+    if (emp.esFijoQuincenal) {
+      // ---- MODO QUINCENAL: generar 1 fila por día × contrato ----
+      const container = document.getElementById('days_' + emp.key);
+      if (!container) return;
+      const chips = container.querySelectorAll('.day-chip');
+      const totalDias = chips.length;
+      if (totalDias === 0) return;
 
-    const he = presente ? getHE(emp.key, emp) : 0;
-    const certMed = ausente ? (document.getElementById('cm_' + emp.key)?.checked || false) : false;
-    const ua = navigator.userAgent.substring(0, 120);
-    const ts = new Date().toISOString();
+      chips.forEach(chip => {
+        const fechaDia = chip.dataset.fecha;
+        const presente = chip.classList.contains('selected');
+        const ausente = chip.classList.contains('ausente');
+        if (!presente && !ausente) return;  // día no marcado, saltar
 
-    // Emitir 1 fila por contrato (una por company)
-    const dh = diasHabilesQuincena(fecha);  // v1.4: dinámico según fecha
-    emp.contratos.forEach(contrato => {
-      // Jornal cobrado: DIARIO usa valor directo; FIJO_QUINCENAL prorratea
-      let jornalCobrado = 0;
-      if (presente) {
-        jornalCobrado = contrato.tipoPago === 'FIJO_QUINCENAL'
-          ? contrato.jornal / dh
-          : contrato.jornal;
-      }
-      const importeHE = he * contrato.valorHE;
-      const total = jornalCobrado + importeHE;
+        emp.contratos.forEach(contrato => {
+          const jornalCobrado = presente ? contrato.jornal / totalDias : 0;
+          const id = contrato.legajo + '||' + fechaDia + '||' + contrato.company + '||' + planta;
 
-      // Nuevo formato de ID v1.7: Legajo||Fecha||Company||Planta
-      const id = contrato.legajo + '||' + fecha + '||' + contrato.company + '||' + planta;
+          rowsToSave.push([
+            id, fechaDia, contrato.legajo, emp.nombre, planta, contrato.company, contrato.tipoPago,
+            presente ? 'SI' : 'NO',
+            ausente ? 'SI' : 'NO',
+            'NO', // certMed
+            0,    // HE
+            Math.round(jornalCobrado * 100) / 100, 0, Math.round(jornalCobrado * 100) / 100,
+            ua, ts
+          ]);
+        });
+      });
+    } else {
+      // ---- MODO DIARIO: 1 fila por contrato para la fecha seleccionada ----
+      const row = document.getElementById('row_' + emp.key);
+      if (!row) return;
+      const presente = row.classList.contains('presente');
+      const ausente = row.classList.contains('ausente');
+      if (!presente && !ausente) return;
 
-      // Columnas ASISTENCIA v1.7:
-      // [ID, Fecha, Legajo, Nombre, Planta, Company, Tipo_Pago, Presente, Ausente,
-      //  Cert_Medico, Horas_Extras, Jornal, Importe_HE, Importe_Total, UA, Timestamp]
-      rowsToSave.push([
-        id, fecha, contrato.legajo, emp.nombre, planta, contrato.company, contrato.tipoPago,
-        presente ? 'SI' : 'NO',
-        ausente ? 'SI' : 'NO',
-        certMed ? 'SI' : 'NO',
-        he, Math.round(jornalCobrado * 100) / 100, Math.round(importeHE * 100) / 100, Math.round(total * 100) / 100,
-        ua, ts
-      ]);
-    });
+      const he = presente ? getHE(emp.key, emp) : 0;
+      const certMed = ausente ? (document.getElementById('cm_' + emp.key)?.checked || false) : false;
+
+      emp.contratos.forEach(contrato => {
+        const jornalCobrado = presente ? contrato.jornal : 0;
+        const importeHE = he * contrato.valorHE;
+        const total = jornalCobrado + importeHE;
+        const id = contrato.legajo + '||' + fecha + '||' + contrato.company + '||' + planta;
+
+        rowsToSave.push([
+          id, fecha, contrato.legajo, emp.nombre, planta, contrato.company, contrato.tipoPago,
+          presente ? 'SI' : 'NO',
+          ausente ? 'SI' : 'NO',
+          certMed ? 'SI' : 'NO',
+          he, Math.round(jornalCobrado * 100) / 100, Math.round(importeHE * 100) / 100, Math.round(total * 100) / 100,
+          ua, ts
+        ]);
+      });
+    }
   });
 
   if (rowsToSave.length === 0) {
-    showToast('Marcá al menos un empleado', 'error');
+    showToast('Marcá al menos un empleado o día', 'error');
     return;
   }
 
@@ -985,7 +1254,6 @@ async function guardar() {
   btn.textContent = 'Guardando ' + rowsToSave.length + ' registros...';
 
   try {
-    // v1.3: una sola llamada batch al Apps Script (actionPostBatch)
     const resp = await postBatch('ASISTENCIA', rowsToSave);
     if (resp && resp.ok) {
       const updatedStr = resp.updated > 0 ? ' (' + resp.updated + ' actualizado' + (resp.updated !== 1 ? 's' : '') + ')' : '';
