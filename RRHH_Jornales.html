@@ -853,7 +853,6 @@ function render() {
       `;
 
       section.appendChild(row);
-      renderDaysChips(emp);
 
     } else {
       // ============================================================
@@ -918,6 +917,11 @@ function render() {
   });
 
   container.appendChild(section);
+
+  // Renderizar chips de días DESPUÉS de que el section esté en el DOM
+  // (getElementById no encuentra nada si el elemento no está en el document)
+  empleados.filter(e => e.usaQuincenal).forEach(emp => renderDaysChips(emp));
+
   updateTotales();
 }
 
