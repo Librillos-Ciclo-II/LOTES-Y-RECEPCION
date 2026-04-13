@@ -106,6 +106,41 @@
     - Fix: agregados guards "if (extrasP)" e "if (extrasA)"
       antes de cada operación sobre esos elementos.
 
+  v1.6  2026-04-13  Modo quincenal con panel de días para CICLO II
+    - Los 5 empleados de Ciclo II pasan a FIJO_QUINCENAL.
+    - Nuevo panel con chips de cada día hábil de la quincena.
+    - Botón "Quincena completa" marca lun-vie como presentes.
+    - Click en un chip lun-vie alterna entre presente/ausente.
+    - Al guardar genera N filas (una por día × company).
+    - ALBA y demás plantas usan modo diario con prorrateo.
+    - Nueva jornalera: YAÑEZ XIMENA PAOLA (leg 138) DIARIO.
+    - Fix: renderDaysChips se ejecuta después de appendChild
+      para que getElementById encuentre los elementos en el DOM.
+    - Nueva propiedad emp.usaQuincenal (FIJO + CICLO II).
+
+  v1.7  2026-04-13  Sábados para Robaina y Dible en Ciclo II
+    - Los sábados aparecen como chips diferenciados (borde
+      punteado) solo para Robaina (118) y Dible (119).
+    - Raimondi, Acosta y Esquivo no tienen sábados.
+    - Sábados son APARTE del fijo quincenal (no se prorratea,
+      se paga con tarifa fija).
+    - 3 estados circulares por click:
+      · No trabajó (gris, "— no") → $0
+      · Día completo (verde, "$40k ✓") → $40.000
+      · Medio día (amarillo, "$20k ½") → $20.000
+    - El monto de sábados se suma al total quincenal en el
+      resumen y en updateTotales.
+    - Al guardar, los sábados generan filas con Tipo_Pago
+      = "SABADO" y jornal = 40000 o 20000. Si el empleado
+      tiene varias companies, el monto se reparte
+      proporcionalmente al peso de cada una.
+    - El botón "Quincena completa" solo resetea lun-vie,
+      no toca sábados.
+    - Nueva propiedad emp.tieneSabados (solo leg 118/119).
+    - CSS: ::after en chips de sábado muestra el estado
+      actual ("— no", "$40k ✓", "$20k ½") sin necesidad
+      de texto adicional.
+
   ============================================================
 -->
 <style>
@@ -528,10 +563,22 @@
     color: var(--danger);
     text-decoration: line-through;
   }
-  /* Sábados: chip diferenciado */
+  /* Sábados: chip diferenciado con estado visible */
   .day-chip.sabado {
     border-style: dashed;
-    opacity: 0.6;
+    border-color: #aaa;
+    background: #f0f0ec;
+    color: var(--text-muted);
+    width: 62px;
+    position: relative;
+  }
+  .day-chip.sabado::after {
+    content: '— no';
+    display: block;
+    font-size: 0.55rem;
+    font-weight: 500;
+    margin-top: 1px;
+    letter-spacing: 0;
   }
   .day-chip.sabado.sab-completo {
     background: #d4edda;
@@ -540,12 +587,20 @@
     color: #155724;
     opacity: 1;
   }
+  .day-chip.sabado.sab-completo::after {
+    content: '$40k ✓';
+    color: #155724;
+  }
   .day-chip.sabado.sab-medio {
     background: var(--accent-light);
     border-color: var(--accent);
     border-style: solid;
     color: #8a6d10;
     opacity: 1;
+  }
+  .day-chip.sabado.sab-medio::after {
+    content: '$20k ½';
+    color: #8a6d10;
   }
   .q-summary {
     margin-top: 8px;
@@ -783,6 +838,10 @@ function buildEmpleadosDePlanta(planta, fecha) {
     // Las demás plantas (ALBA, etc.) aunque sean FIJO_QUINCENAL usan el modo
     // diario normal con prorrateo — el supervisor carga día por día.
     emp.usaQuincenal = emp.esFijoQuincenal && emp.planta === 'CICLO II';
+    // Sábados solo aplican a Robaina (118) y Dible (119) en Ciclo II.
+    // Raimondi, Acosta y Esquivo no trabajan sábados.
+    const legajosSabado = ['118', '119'];
+    emp.tieneSabados = emp.usaQuincenal && emp.contratos.some(c => legajosSabado.includes(c.legajo));
     emp.diasHabilesRef = dh;  // para mostrar en la UI
     emp.key = emp.nombre.toUpperCase().replace(/[^A-Z0-9]/g, '_');
     return emp;
@@ -1044,7 +1103,6 @@ function renderDaysChips(emp) {
   const ultimoDia = new Date(y, m, 0).getDate();
   const desde = d <= 15 ? 1 : 16;
   const hasta = d <= 15 ? 15 : ultimoDia;
-  const esCicloII = emp.planta === 'CICLO II';
 
   const container = document.getElementById('days_' + emp.key);
   if (!container) return;
@@ -1055,7 +1113,7 @@ function renderDaysChips(emp) {
   for (let i = desde; i <= hasta; i++) {
     const dow = new Date(y, m - 1, i).getDay();
     if (dow === 0) continue;  // nunca domingos
-    if (dow === 6 && !esCicloII) continue;  // sábados solo en Ciclo II
+    if (dow === 6 && !emp.tieneSabados) continue;  // sábados solo si tiene flag
 
     const fechaDia = `${y}-${String(m).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
     const esSabado = dow === 6;
