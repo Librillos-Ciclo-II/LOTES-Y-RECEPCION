@@ -1364,8 +1364,8 @@ async function guardar() {
   if (!planta) { showToast('Falta seleccionar la planta', 'error'); return; }
 
   const rowsToSave = [];
-  const ua = navigator.userAgent.substring(0, 120);
-  const ts = new Date().toISOString();
+  const ua = (navigator.userAgent || '').substring(0, 30);
+  const ts = new Date().toISOString().slice(0, 19);
 
   empleados.forEach(emp => {
     if (emp.usaQuincenal) {
@@ -1463,8 +1463,8 @@ async function guardar() {
   btn.disabled = true;
 
   try {
-    // Enviar en chunks de máximo 15 filas para no exceder el límite de URL GET
-    const CHUNK_SIZE = 15;
+    // Enviar en chunks pequeños para no exceder límite de URL GET del Apps Script
+    const CHUNK_SIZE = 5;
     let totalOk = 0, totalUpdated = 0;
 
     for (let i = 0; i < rowsToSave.length; i += CHUNK_SIZE) {
