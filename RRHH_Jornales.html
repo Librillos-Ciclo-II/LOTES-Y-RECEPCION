@@ -771,7 +771,7 @@ async function init() {
 
     const [empData, asisData] = await Promise.all([
       fetchSheet('EMPLEADOS_JORNAL'),
-      fetchSheet('ASISTENCIA')
+      fetchSheet('ASISTENCIA JORNALES')
     ]);
 
     // Parse EMPLEADOS_JORNAL:
@@ -1471,7 +1471,7 @@ async function guardar() {
       const chunk = rowsToSave.slice(i, i + CHUNK_SIZE);
       btn.textContent = `Guardando ${i + chunk.length} de ${rowsToSave.length}...`;
 
-      const resp = await postBatch('ASISTENCIA', chunk);
+      const resp = await postBatch('ASISTENCIA JORNALES', chunk);
       if (resp && resp.ok) {
         totalOk += resp.total || chunk.length;
         totalUpdated += resp.updated || 0;
