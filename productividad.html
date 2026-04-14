@@ -405,7 +405,7 @@
 //  CONFIG
 // ============================================================
 // ⚠️ REEMPLAZAR con la URL del nuevo Apps Script de RRHH después del deploy
-const API = 'https://script.google.com/macros/s/AKfycbyctjlH0VL581pmXS3It3_bZTsDqbMlNhkO36l3hBlpQy9AKzv5BcyKe3JLEenJ6g_l/exec';
+const API = 'https://script.google.com/macros/s/AKfycbzud3BqEJzJPVy4ehTnfOH_m_DfQv05Arx1aEhEgYEUz1V0cKZb0rwSU1ZjR8ZbIECN/exec';
 const CACHE_TTL = 30000;
 
 let operarios = [];
@@ -481,7 +481,7 @@ async function init() {
     const [ops, params, rrhh] = await Promise.all([
       fetchSheet('OPERARIOS', true),
       fetchSheet('PARAMETROS', true),
-      fetchSheet('RRHH', true)
+      fetchSheet('DESTAJO', true)
     ]);
 
     // Parse OPERARIOS: [Legajo, Nombre, Modalidad, Act1, Act2, Act3, ...]
@@ -622,8 +622,24 @@ document.getElementById('fecha').addEventListener('change', function() {
 
 // ============================================================
 //  IMPORTE CALCULATION
+//  v1.4: Si el operario ya tiene otra actividad registrada en la
+//  misma fecha, las actividades BASE_PLUS (RESALADO, LAVADO A MANO)
+//  no cobran la tarifa base — solo el plus por unidad.
 // ============================================================
-function calcImporte(actividadName, unidades) {
+function tieneOtraActividadHoy() {
+  const fecha = document.getElementById('fecha').value;
+  const legajo = document.getElementById('operario').value;
+  const actividad = document.getElementById('actividad').value;
+  if (!fecha || !legajo || !actividad) return false;
+
+  return registrosRRHH.some(r =>
+    String(r[2]) === legajo &&
+    String(r[1]).slice(0,10) === fecha &&
+    String(r[4]) !== actividad
+  );
+}
+
+function calcImporte(actividadName, unidades, skipBase) {
   const param = parametros.find(p => p.actividad === actividadName);
   if (!param) return { total: 0, detail: '' };
 
@@ -635,17 +651,26 @@ function calcImporte(actividadName, unidades) {
   }
 
   if (param.tipo === 'BASE_PLUS') {
-    const base = param.tarifaBase;
+    // v1.4: si skipBase=true (ya tiene otra actividad hoy), base = 0
+    const base = skipBase ? 0 : param.tarifaBase;
     let plus = 0;
     if (u > param.umbralPlus) {
       plus = u * param.plusPorUnidad;
     }
     const total = base + plus;
-    let detail = 'Base $' + base.toLocaleString('es-AR');
-    if (plus > 0) {
-      detail += ' + Plus $' + plus.toLocaleString('es-AR') + ' (' + u + 'u × $' + param.plusPorUnidad + ')';
-    } else if (u > 0) {
-      detail += ' (sin plus, ≤' + param.umbralPlus + 'u)';
+    let detail = '';
+    if (skipBase) {
+      detail = 'Sin base (ya tiene otra actividad hoy)';
+      if (plus > 0) {
+        detail += ' + Plus $' + plus.toLocaleString('es-AR') + ' (' + u + 'u × $' + param.plusPorUnidad + ')';
+      }
+    } else {
+      detail = 'Base $' + base.toLocaleString('es-AR');
+      if (plus > 0) {
+        detail += ' + Plus $' + plus.toLocaleString('es-AR') + ' (' + u + 'u × $' + param.plusPorUnidad + ')';
+      } else if (u > 0) {
+        detail += ' (sin plus, ≤' + param.umbralPlus + 'u)';
+      }
     }
     return { total, detail };
   }
@@ -676,7 +701,8 @@ function calcImporte(actividadName, unidades) {
 function recalcImporte() {
   const act = document.getElementById('actividad').value;
   const uni = document.getElementById('unidades').value;
-  const result = calcImporte(act, uni);
+  const skipBase = tieneOtraActividadHoy();
+  const result = calcImporte(act, uni, skipBase);
   document.getElementById('importeValue').textContent = fmtMoney(result.total);
   document.getElementById('importeDetail').textContent = result.detail;
 }
@@ -772,7 +798,7 @@ async function guardar() {
     const actividad = document.getElementById('actividad').value;
     const unidades = document.getElementById('unidades').value || '1';
     const op = operarios.find(o => o.legajo === legajo);
-    const result = calcImporte(actividad, unidades);
+    const result = calcImporte(actividad, unidades, tieneOtraActividadHoy());
 
     const id = legajo + '||' + fecha + '||' + actividad;
 
@@ -797,7 +823,7 @@ async function guardar() {
     const row = [id, fecha, legajo, op.nombre, actividad, parseInt(unidades) || 1, Math.round(result.total), ua, ts];
 
     invalidateCache();
-    const resp = await postRow('RRHH', row);
+    const resp = await postRow('DESTAJO', row);
 
     if (resp.ok) {
       showToast('Registrado: ' + op.nombre + ' — ' + actividad);
