@@ -651,28 +651,28 @@ function calcImporte(actividadName, unidades, skipBase) {
   }
 
   if (param.tipo === 'BASE_PLUS') {
-    // v1.4: si skipBase=true (ya tiene otra actividad hoy), base = 0
-    const base = skipBase ? 0 : param.tarifaBase;
-    let plus = 0;
-    if (u > param.umbralPlus) {
-      plus = u * param.plusPorUnidad;
-    }
-    const total = base + plus;
-    let detail = '';
     if (skipBase) {
-      detail = 'Sin base (ya tiene otra actividad hoy)';
-      if (plus > 0) {
-        detail += ' + Plus $' + plus.toLocaleString('es-AR') + ' (' + u + 'u × $' + param.plusPorUnidad + ')';
-      }
+      // v1.4: Más de 1 actividad en el día → sin base, sin umbral.
+      // Se paga plus_por_unidad × TODAS las unidades desde la primera.
+      const total = u * param.plusPorUnidad;
+      const detail = 'Sin base (2+ actividades) · ' + u + 'u × $' + param.plusPorUnidad.toLocaleString('es-AR') + '/u';
+      return { total, detail };
     } else {
-      detail = 'Base $' + base.toLocaleString('es-AR');
+      // Actividad única del día → base + plus solo por encima del umbral
+      const base = param.tarifaBase;
+      let plus = 0;
+      if (u > param.umbralPlus) {
+        plus = u * param.plusPorUnidad;
+      }
+      const total = base + plus;
+      let detail = 'Base $' + base.toLocaleString('es-AR');
       if (plus > 0) {
         detail += ' + Plus $' + plus.toLocaleString('es-AR') + ' (' + u + 'u × $' + param.plusPorUnidad + ')';
       } else if (u > 0) {
         detail += ' (sin plus, ≤' + param.umbralPlus + 'u)';
       }
+      return { total, detail };
     }
-    return { total, detail };
   }
 
   if (param.tipo === 'FIJO') {
