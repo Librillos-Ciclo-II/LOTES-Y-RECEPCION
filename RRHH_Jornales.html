@@ -141,6 +141,19 @@
       actual ("— no", "$40k ✓", "$20k ½") sin necesidad
       de texto adicional.
 
+  v1.8  2026-04-14  Fix "Failed to fetch" al guardar quincena
+    - Causa: al guardar CICLO II con 5+ empleados quincenal,
+      se generaban ~80 filas. Codificadas como JSON en la URL
+      GET del Apps Script, la URL excedía el límite de ~8000
+      caracteres (llegaba a ~27.000).
+    - Fix 1: Filtrar empleados sin cambios — si un empleado
+      quincenal tiene 0 presentes y 0 sábados trabajados, no
+      se generan filas. Antes se mandaban 11 filas de ausencia
+      por cada empleado no tocado.
+    - Fix 2: Envío en chunks de máximo 15 filas por llamada.
+      Si hay 40 filas, hace 3 llamadas secuenciales de 15+15+10.
+      El botón muestra progreso: "Guardando 15 de 40..."
+
   ============================================================
 -->
 <style>
@@ -1341,7 +1354,7 @@ function updateTotales() {
 }
 
 // ============================================================
-//  GUARDAR (v1.6 — quincenal batch + diario, multi-planta)
+//  GUARDAR (v1.8 — chunked batch para evitar URL demasiado larga)
 // ============================================================
 async function guardar() {
   const btn = document.getElementById('btnGuardar');
@@ -1356,47 +1369,44 @@ async function guardar() {
 
   empleados.forEach(emp => {
     if (emp.usaQuincenal) {
-      // ---- MODO QUINCENAL: generar 1 fila por día × contrato ----
+      // ---- MODO QUINCENAL ----
       const container = document.getElementById('days_' + emp.key);
       if (!container) return;
 
-      // Contar solo lun-vie para el prorrateo del fijo quincenal
       const diasSemana = container.querySelectorAll('.day-chip:not(.sabado)');
       const totalDiasLV = diasSemana.length;
       if (totalDiasLV === 0) return;
 
-      // Procesar todos los chips (lun-vie + sábados)
+      // Solo procesar este empleado si tiene al menos 1 día presente o 1 sábado trabajado
+      const presLV = Array.from(diasSemana).filter(c => c.classList.contains('selected')).length;
+      const sabTrabajados = container.querySelectorAll('.day-chip.sab-completo, .day-chip.sab-medio').length;
+      if (presLV === 0 && sabTrabajados === 0) return;  // no tocado, saltar
+
       const allChips = container.querySelectorAll('.day-chip');
       allChips.forEach(chip => {
         const fechaDia = chip.dataset.fecha;
         const esSabado = chip.dataset.sabado === '1';
 
         if (esSabado) {
-          // Sábado: solo generar fila si trabajó (completo o medio)
           const completo = chip.classList.contains('sab-completo');
           const medio = chip.classList.contains('sab-medio');
-          if (!completo && !medio) return;  // no trabajó, saltar
+          if (!completo && !medio) return;
 
           const jornalSab = completo ? SABADO_DIA_COMPLETO : SABADO_MEDIO_DIA;
 
           emp.contratos.forEach(contrato => {
-            // El sábado se paga con tarifa fija, no prorrateado del quincenal.
-            // Se divide entre las companies proporcionalmente al peso de cada una.
             const pesoCompany = emp.contratos.length > 1
               ? contrato.jornal / emp.contratos.reduce((s, c) => s + (c.jornal || 1), 0)
               : 1;
             const jornalCompany = Math.round(jornalSab * pesoCompany * 100) / 100;
-
             const id = contrato.legajo + '||' + fechaDia + '||' + contrato.company + '||' + planta;
             rowsToSave.push([
               id, fechaDia, contrato.legajo, emp.nombre, planta, contrato.company, 'SABADO',
               'SI', 'NO', 'NO', 0,
-              jornalCompany, 0, jornalCompany,
-              ua, ts
+              jornalCompany, 0, jornalCompany, ua, ts
             ]);
           });
         } else {
-          // Lun-Vie: prorrateo del fijo quincenal
           const presente = chip.classList.contains('selected');
           const ausente = chip.classList.contains('ausente');
           if (!presente && !ausente) return;
@@ -1404,11 +1414,9 @@ async function guardar() {
           emp.contratos.forEach(contrato => {
             const jornalCobrado = presente ? contrato.jornal / totalDiasLV : 0;
             const id = contrato.legajo + '||' + fechaDia + '||' + contrato.company + '||' + planta;
-
             rowsToSave.push([
               id, fechaDia, contrato.legajo, emp.nombre, planta, contrato.company, contrato.tipoPago,
-              presente ? 'SI' : 'NO',
-              ausente ? 'SI' : 'NO',
+              presente ? 'SI' : 'NO', ausente ? 'SI' : 'NO',
               'NO', 0,
               Math.round(jornalCobrado * 100) / 100, 0, Math.round(jornalCobrado * 100) / 100,
               ua, ts
@@ -1417,7 +1425,7 @@ async function guardar() {
         }
       });
     } else {
-      // ---- MODO DIARIO: 1 fila por contrato para la fecha seleccionada ----
+      // ---- MODO DIARIO ----
       const row = document.getElementById('row_' + emp.key);
       if (!row) return;
       const presente = row.classList.contains('presente');
@@ -1428,7 +1436,6 @@ async function guardar() {
       const certMed = ausente ? (document.getElementById('cm_' + emp.key)?.checked || false) : false;
 
       emp.contratos.forEach(contrato => {
-        // DIARIO usa valor directo; FIJO_QUINCENAL prorratea por días hábiles
         let jornalCobrado = 0;
         if (presente) {
           jornalCobrado = contrato.tipoPago === 'FIJO_QUINCENAL'
@@ -1438,12 +1445,9 @@ async function guardar() {
         const importeHE = he * contrato.valorHE;
         const total = jornalCobrado + importeHE;
         const id = contrato.legajo + '||' + fecha + '||' + contrato.company + '||' + planta;
-
         rowsToSave.push([
           id, fecha, contrato.legajo, emp.nombre, planta, contrato.company, contrato.tipoPago,
-          presente ? 'SI' : 'NO',
-          ausente ? 'SI' : 'NO',
-          certMed ? 'SI' : 'NO',
+          presente ? 'SI' : 'NO', ausente ? 'SI' : 'NO', certMed ? 'SI' : 'NO',
           he, Math.round(jornalCobrado * 100) / 100, Math.round(importeHE * 100) / 100, Math.round(total * 100) / 100,
           ua, ts
         ]);
@@ -1457,17 +1461,28 @@ async function guardar() {
   }
 
   btn.disabled = true;
-  btn.textContent = 'Guardando ' + rowsToSave.length + ' registros...';
 
   try {
-    const resp = await postBatch('ASISTENCIA', rowsToSave);
-    if (resp && resp.ok) {
-      const updatedStr = resp.updated > 0 ? ' (' + resp.updated + ' actualizado' + (resp.updated !== 1 ? 's' : '') + ')' : '';
-      showToast('✓ ' + resp.total + ' registro' + (resp.total !== 1 ? 's' : '') + ' guardados' + updatedStr);
-      setTimeout(() => location.reload(), 1200);
-    } else {
-      throw new Error(resp?.error || 'Error desconocido');
+    // Enviar en chunks de máximo 15 filas para no exceder el límite de URL GET
+    const CHUNK_SIZE = 15;
+    let totalOk = 0, totalUpdated = 0;
+
+    for (let i = 0; i < rowsToSave.length; i += CHUNK_SIZE) {
+      const chunk = rowsToSave.slice(i, i + CHUNK_SIZE);
+      btn.textContent = `Guardando ${i + chunk.length} de ${rowsToSave.length}...`;
+
+      const resp = await postBatch('ASISTENCIA', chunk);
+      if (resp && resp.ok) {
+        totalOk += resp.total || chunk.length;
+        totalUpdated += resp.updated || 0;
+      } else {
+        throw new Error(resp?.error || 'Error en chunk ' + (Math.floor(i/CHUNK_SIZE)+1));
+      }
     }
+
+    const updatedStr = totalUpdated > 0 ? ' (' + totalUpdated + ' actualizado' + (totalUpdated !== 1 ? 's' : '') + ')' : '';
+    showToast('✓ ' + totalOk + ' registro' + (totalOk !== 1 ? 's' : '') + ' guardados' + updatedStr);
+    setTimeout(() => location.reload(), 1200);
   } catch(e) {
     showToast('Error: ' + e.message, 'error');
     btn.disabled = false;
