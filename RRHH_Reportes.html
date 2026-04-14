@@ -508,8 +508,8 @@ async function init() {
     setSemana();
 
     const [asisData, rrhhData] = await Promise.all([
-      fetchSheet('ASISTENCIA'),
-      fetchSheet('RRHH')
+      fetchSheet('ASISTENCIA JORNALES'),
+      fetchSheet('DESTAJO')
     ]);
 
     // Parse ASISTENCIA
