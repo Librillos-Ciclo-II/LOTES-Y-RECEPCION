@@ -831,6 +831,54 @@ async function guardar() {
       // Update local data
       registrosRRHH.push(row);
 
+      // v1.5: Si esta es la 2da+ actividad del día para este operario,
+      // las actividades BASE_PLUS anteriores se grabaron con tarifa base.
+      // Hay que recalcularlas sin base y sobreescribirlas.
+      const regsHoyMismoOp = registrosRRHH.filter(r =>
+        String(r[2]) === legajo &&
+        String(r[1]).slice(0,10) === fecha &&
+        String(r[4]) !== actividad
+      );
+
+      if (regsHoyMismoOp.length > 0) {
+        // Hay otras actividades → chequear si alguna es BASE_PLUS con base incluida
+        const ACTIVIDADES_BASE_PLUS = ['RESALADO', 'LAVADO A MANO'];
+        const aCorregir = [];
+
+        for (const reg of regsHoyMismoOp) {
+          const actReg = String(reg[4]);
+          if (!ACTIVIDADES_BASE_PLUS.includes(actReg)) continue;
+
+          const paramReg = parametros.find(p => p.actividad === actReg);
+          if (!paramReg || paramReg.tipo !== 'BASE_PLUS') continue;
+
+          const unidadesReg = parseInt(reg[5]) || 0;
+          const importeActual = parseFloat(reg[6]) || 0;
+          // Importe correcto sin base = unidades × plus_por_unidad
+          const importeCorrecto = unidadesReg * paramReg.plusPorUnidad;
+
+          // Si el importe actual es mayor que el correcto, tiene la base incluida
+          if (importeActual > importeCorrecto) {
+            aCorregir.push({
+              id: String(reg[0]),
+              actReg, unidadesReg, importeCorrecto,
+              row: [String(reg[0]), fecha, legajo, op.nombre, actReg, unidadesReg, Math.round(importeCorrecto), ua, ts]
+            });
+          }
+        }
+
+        if (aCorregir.length > 0) {
+          console.log('Corrigiendo ' + aCorregir.length + ' registros BASE_PLUS con base incluida...');
+          for (const fix of aCorregir) {
+            await postRow('DESTAJO', fix.row);
+            // Actualizar el registro local
+            const idx = registrosRRHH.findIndex(r => String(r[0]) === fix.id);
+            if (idx >= 0) registrosRRHH[idx] = fix.row;
+          }
+          showToast('✓ Corregidos ' + aCorregir.length + ' registro(s) previos sin tarifa base');
+        }
+      }
+
       // Reset form for next entry (keep fecha)
       document.getElementById('operario').value = '';
       document.getElementById('actividad').innerHTML = '<option value="">— Primero seleccioná operario —</option>';
