@@ -2,12 +2,20 @@
 <!--
   ╔══════════════════════════════════════════════════════════════════════════════╗
   ║  Santa Faz — Informes de Lotes                                             ║
-  ║  Versión: 2.2.0-beta                                                       ║
-  ║  Fecha:   2026-04-14                                                       ║
+  ║  Versión: 2.3.0-beta                                                       ║
+  ║  Fecha:   2026-04-15                                                       ║
   ║  Autor:   IA Full + Claude (Anthropic)                                     ║
   ║  Repo:    librillos-ciclo-ii.github.io/LOTES-Y-RECEPCION                  ║
   ╠══════════════════════════════════════════════════════════════════════════════╣
   ║  CHANGELOG                                                                 ║
+  ║                                                                            ║
+  ║  v2.3.0-beta (2026-04-15)                                                 ║
+  ║  ─────────────────────────────────────────────────────────────────────────  ║
+  ║  [NUEVO] Filtro de fechas (desde/hasta) en Tab Análisis para excluir      ║
+  ║          batches específicos del análisis de distribución y percentiles    ║
+  ║  [NUEVO] Indicador de filtros activos con contador de lotes incluidos     ║
+  ║  [NUEVO] Botón "Limpiar filtros" en Análisis                              ║
+  ║  [CAMBIO] getAnalysisData acepta parámetros de fecha para filtrado        ║
   ║                                                                            ║
   ║  v2.2.0-beta (2026-04-14)                                                 ║
   ║  ─────────────────────────────────────────────────────────────────────────  ║
@@ -269,8 +277,16 @@ select:focus,input:focus{outline:none;border-color:var(--accent)}
     </button>
   </div>
   <div class="filters" style="margin-bottom:14px">
-    <div class="filters-title">Proveedor</div>
-    <select id="an-fgo" onchange="renderTab2()"><option value="">Consolidado (todos)</option><option>DELTA</option><option>RECREO</option><option>ALBA</option><option>SANTA INES</option><option>C.PARANA</option><option>SUIPACHA</option></select>
+    <div class="filters-title">Proveedor y período</div>
+    <select id="an-fgo" onchange="renderTab2()" style="margin-bottom:8px"><option value="">Consolidado (todos)</option><option>DELTA</option><option>RECREO</option><option>ALBA</option><option>SANTA INES</option><option>C.PARANA</option><option>SUIPACHA</option></select>
+    <div class="filter-row" style="margin-bottom:8px">
+      <input type="date" id="an-desde" onchange="renderTab2()" placeholder="Desde">
+      <input type="date" id="an-hasta" onchange="renderTab2()" placeholder="Hasta">
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:11px;color:var(--muted)" id="an-filter-info">Mostrando todos los lotes cerrados</span>
+      <button onclick="clearAnFilters()" style="font-size:11px;color:var(--accent);background:none;border:none;cursor:pointer;padding:2px 4px">Limpiar filtros</button>
+    </div>
   </div>
   <div id="an-kpis-wrap"></div>
   <div id="an-chart"></div>
@@ -295,7 +311,7 @@ select:focus,input:focus{outline:none;border-color:var(--accent)}
 
 <script>
 // ══════════════════════════════════════════════════════════════════════════════
-// Santa Faz — Informes v2.2.0-beta
+// Santa Faz — Informes v2.3.0-beta
 // ══════════════════════════════════════════════════════════════════════════════
 
 // ── Configuración ────────────────────────────────────────────────────────────
@@ -464,13 +480,15 @@ function renderRecItem(r){
 function pctl(arr,p){if(!arr.length)return 0;const i=(p/100)*(arr.length-1),lo=Math.floor(i),hi=Math.ceil(i);return lo===hi?arr[lo]:arr[lo]+(arr[hi]-arr[lo])*(i-lo);}
 
 // ── Prepara datos de análisis: totales por cat, kg/un, percentiles globales ──
-// Solo usa lotes cerrados. Filtra por frigorífico si se selecciona.
-function getAnalysisData(fgoF){
-  const all=buildData().filter(r=>r.estado==='cerrado'&&r.cargas.length>0);
-  const f=fgoF?all.filter(r=>r.fgo===fgoF):all;
+// Solo usa lotes cerrados. Filtra por frigorífico y rango de fechas.
+function getAnalysisData(fgoF, desde, hasta){
+  let all=buildData().filter(r=>r.estado==='cerrado'&&r.cargas.length>0);
+  if(fgoF) all=all.filter(r=>r.fgo===fgoF);
+  if(desde) all=all.filter(r=>r.fecha>=desde);
+  if(hasta) all=all.filter(r=>r.fecha<=hasta);
   const tb={};CATS.forEach(c=>{tb[c]={u:0,k:0};});
   const kguAll=[],kguByCat={};CATS.forEach(c=>{kguByCat[c]=[];});
-  f.forEach(r=>r.cargas.forEach(c=>c.cats.forEach(ct=>{
+  all.forEach(r=>r.cargas.forEach(c=>c.cats.forEach(ct=>{
     tb[ct.cat].u+=ct.unid;tb[ct.cat].k+=ct.kgs;
     if(ct.unid>0&&ct.kgs>0){const v=ct.kgs/ct.unid;kguAll.push(v);kguByCat[ct.cat].push(v);}
   })));
@@ -478,19 +496,38 @@ function getAnalysisData(fgoF){
   const gp={p10:pctl(kguAll,10),p25:pctl(kguAll,25),p50:pctl(kguAll,50),p75:pctl(kguAll,75),p90:pctl(kguAll,90)};
   const cs=CATS.map(c=>{const a=[...kguByCat[c]].sort((a,b)=>a-b);return{cat:c,unid:tb[c].u,kgs:tb[c].k,kgu:tb[c].u>0?tb[c].k/tb[c].u:0,p25:pctl(a,25),p50:pctl(a,50),p75:pctl(a,75),count:a.length};});
   const gu=CATS.reduce((s,c)=>s+tb[c].u,0),gk=CATS.reduce((s,c)=>s+tb[c].k,0);
-  return{totByCat:tb,globalPcts:gp,catStats:cs,grandUnid:gu,grandKgs:gk,kguAll,lotCount:f.length};
+  return{totByCat:tb,globalPcts:gp,catStats:cs,grandUnid:gu,grandKgs:gk,kguAll,lotCount:all.length};
+}
+
+// ── Limpiar filtros del tab Análisis ────────────────────────────────────────
+function clearAnFilters(){
+  document.getElementById('an-fgo').value='';
+  document.getElementById('an-desde').value='';
+  document.getElementById('an-hasta').value='';
+  renderTab2();
 }
 
 // ── Render Tab 2: KPIs + gráfico SVG + tabla percentiles + tabla categorías ──
 function renderTab2(){
-  const fgo=document.getElementById('an-fgo').value,d=getAnalysisData(fgo),label=fgo||'Consolidado';
+  const fgo=document.getElementById('an-fgo').value;
+  const desde=document.getElementById('an-desde').value;
+  const hasta=document.getElementById('an-hasta').value;
+  const d=getAnalysisData(fgo, desde, hasta);
+  const label=fgo||'Consolidado';
+
+  // Actualizar texto informativo de filtros
+  const parts=[];
+  if(fgo) parts.push(fgo); else parts.push('Todos');
+  if(desde||hasta){ parts.push((desde?fmt(desde):'inicio')+' → '+(hasta?fmt(hasta):'hoy')); }
+  document.getElementById('an-filter-info').textContent=d.lotCount+' lotes — '+parts.join(' · ');
+
   if(!d.lotCount){
     ['an-kpis-wrap','an-chart','an-percentiles','an-table'].forEach(id=>document.getElementById(id).innerHTML='');
-    document.getElementById('an-chart').innerHTML='<div class="empty">No hay lotes cerrados'+(fgo?' para '+fgo:'')+' para analizar.</div>';return;
+    document.getElementById('an-chart').innerHTML='<div class="empty">No hay lotes cerrados con los filtros seleccionados.</div>';return;
   }
   const gKgu=d.grandUnid>0?(d.grandKgs/d.grandUnid).toFixed(3):'—';
   document.getElementById('an-kpis-wrap').innerHTML=`<div class="an-kpis"><div class="an-kpi"><div class="kpi-val">${d.lotCount}</div><div class="kpi-lbl">Lotes</div></div><div class="an-kpi"><div class="kpi-val">${d.grandUnid.toLocaleString('es-AR')}</div><div class="kpi-lbl">Unidades</div></div><div class="an-kpi"><div class="kpi-val">${gKgu}</div><div class="kpi-lbl">Kg/un prom.</div></div></div>`;
-  renderDistChart(d,label);
+  renderDistChart(d,label+(desde||hasta?' (filtrado)':''));
   renderPercTable(d);
   renderCatTable(d);
 }
