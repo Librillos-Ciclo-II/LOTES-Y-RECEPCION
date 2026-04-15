@@ -2,12 +2,36 @@
 <!--
   ╔══════════════════════════════════════════════════════════════════════════════╗
   ║  Santa Faz — Informes de Lotes                                             ║
-  ║  Versión: 2.0.0-beta                                                       ║
-  ║  Fecha:   2026-04-13                                                       ║
+  ║  Versión: 2.2.0-beta                                                       ║
+  ║  Fecha:   2026-04-14                                                       ║
   ║  Autor:   IA Full + Claude (Anthropic)                                     ║
   ║  Repo:    librillos-ciclo-ii.github.io/LOTES-Y-RECEPCION                  ║
   ╠══════════════════════════════════════════════════════════════════════════════╣
   ║  CHANGELOG                                                                 ║
+  ║                                                                            ║
+  ║  v2.2.0-beta (2026-04-14)                                                 ║
+  ║  ─────────────────────────────────────────────────────────────────────────  ║
+  ║  [NUEVO] Tab "Producción": ritmo operativo por frigorífico                ║
+  ║  [NUEVO] Tabla recepción: recepciones, días efectivos, total un,          ║
+  ║          un/día, un/semana, un/mes por frigorífico + total                ║
+  ║  [NUEVO] Tabla clasificación: días efectivos, un clasif y kgs salados     ║
+  ║          con promedios día/semana/mes por frigorífico + total             ║
+  ║  [NUEVO] KPIs cabecera: un recep/día, un clasif/día, kgs/día             ║
+  ║  [NUEVO] Cálculo basado en días efectivos (días con actividad real,       ║
+  ║          no calendario). Sem = día×7, Mes = día×30.                       ║
+  ║  [NUEVO] Filtro de período (desde/hasta) independiente de Tab Batch       ║
+  ║  [CAMBIO] Nav de 2 a 3 solapas: Batch / Análisis / Producción            ║
+  ║                                                                            ║
+  ║  v2.1.0-beta (2026-04-14)                                                 ║
+  ║  ─────────────────────────────────────────────────────────────────────────  ║
+  ║  [NUEVO] Exportar Excel (Tab Batch): genera .xlsx con SheetJS (CDN),      ║
+  ║          una solapa por frigorífico + CONSOLIDADO. Incluye estado, días,   ║
+  ║          desglose por categoría (unid, kgs), kg/un promedio.              ║
+  ║  [NUEVO] Exportar PDF (Tab Análisis): captura gráfico SVG + tablas con    ║
+  ║          html2canvas + jsPDF (CDN). PDF A4 con título y fecha.            ║
+  ║  [NUEVO] Carga dinámica de librerías: SheetJS, jsPDF, html2canvas se     ║
+  ║          cargan bajo demanda al primer click (no penaliza carga inicial). ║
+  ║  [CAMBIO] Tab 1 renombrada de "Recepciones" a "Batch"                     ║
   ║                                                                            ║
   ║  v2.0.0-beta (2026-04-13)                                                 ║
   ║  ─────────────────────────────────────────────────────────────────────────  ║
@@ -36,7 +60,9 @@
   ║  - Google Fonts: DM Sans, JetBrains Mono                                  ║
   ║  - Apps Script: get_all (v2) o get+get_config (v1 fallback)               ║
   ║  - Google Sheets: SantaFaz_Lotes (RECEPCIONES, LOTES, CONFIG)             ║
-  ║  - Sin librerías externas — SVG puro para gráficos                        ║
+  ║  - SVG puro para gráficos (sin Chart.js)                                  ║
+  ║  - SheetJS 0.18.5 (CDN, carga bajo demanda) — exportación Excel           ║
+  ║  - jsPDF 2.5.1 + html2canvas 1.4.1 (CDN, bajo demanda) — export PDF     ║
   ╚══════════════════════════════════════════════════════════════════════════════╝
 -->
 <html lang="es">
@@ -66,10 +92,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 .refresh-btn svg{transition:transform .6s}
 .refresh-btn.loading svg{animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-.nav{display:grid;grid-template-columns:1fr 1fr;gap:0;margin-bottom:14px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
-.nav-btn{padding:11px;font-size:14px;font-weight:500;cursor:pointer;background:var(--gray-bg);color:var(--muted);border:none;transition:all .15s}
+.nav{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;margin-bottom:14px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.nav-btn{padding:11px;font-size:13px;font-weight:500;cursor:pointer;background:var(--gray-bg);color:var(--muted);border:none;transition:all .15s}
 .nav-btn.active{background:var(--card);color:var(--text);font-weight:600}
-.nav-btn:first-child{border-right:1px solid var(--border)}
+.nav-btn:not(:last-child){border-right:1px solid var(--border)}
 .hidden{display:none}
 .kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
 .kpi{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;position:relative;overflow:hidden}
@@ -150,6 +176,29 @@ select:focus,input:focus{outline:none;border-color:var(--accent)}
 .pct-table th{text-align:left;font-size:10px;color:var(--muted);font-weight:500;padding:4px 6px;text-transform:uppercase;border-bottom:1px solid var(--border)}
 .pct-table td{padding:5px 6px;border-bottom:1px solid #f5f4f0;font-family:'JetBrains Mono',monospace;font-size:12px}
 .pct-table tr:last-child td{border-bottom:none}
+.export-bar{display:flex;gap:8px;margin-bottom:14px}
+.btn-export{display:inline-flex;align-items:center;gap:5px;padding:9px 14px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;border-radius:8px;cursor:pointer;border:1px solid var(--border);background:var(--card);color:var(--text);transition:all .15s;flex:1;justify-content:center}
+.btn-export:active{transform:scale(.97)}
+.btn-export.excel{border-color:#16a34a;color:#166534;background:#f0fdf4}
+.btn-export.excel:hover{background:#dcfce7}
+.btn-export.pdf{border-color:#0c4a6e;color:#0c4a6e;background:#f0f9ff}
+.btn-export.pdf:hover{background:#e0f2fe}
+.btn-export:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.prod-table{width:100%;border-collapse:collapse;font-size:12px}
+.prod-table th{text-align:right;font-size:10px;color:var(--muted);font-weight:500;padding:5px 6px;text-transform:uppercase;border-bottom:1px solid var(--border)}
+.prod-table th:first-child{text-align:left}
+.prod-table td{padding:6px;border-bottom:1px solid #f5f4f0;font-family:'JetBrains Mono',monospace;font-size:12px;text-align:right}
+.prod-table td:first-child{text-align:left;font-family:'DM Sans',sans-serif;font-weight:600;font-size:13px}
+.prod-table tr:last-child td{border-bottom:none}
+.prod-table tr.total-row{border-top:2px solid var(--border);font-weight:700}
+.prod-table tr.total-row td{padding-top:8px}
+.prod-section{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:14px;overflow-x:auto}
+.prod-section-title{font-size:14px;font-weight:700;margin-bottom:4px}
+.prod-section-sub{font-size:12px;color:var(--muted);margin-bottom:12px}
+.prod-kpis{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px}
+.prod-kpi{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:12px;text-align:center;position:relative;overflow:hidden}
+.prod-kpi::before{content:'';position:absolute;bottom:0;left:0;width:100%;height:3px}
+.prod-kpi.rec::before{background:var(--accent)}.prod-kpi.clas::before{background:var(--green)}.prod-kpi.kgs::before{background:var(--amber)}
 </style>
 </head>
 <body>
@@ -165,6 +214,7 @@ select:focus,input:focus{outline:none;border-color:var(--accent)}
 <div class="nav">
   <button class="nav-btn active" id="nav1" onclick="showTab(1)">Batch</button>
   <button class="nav-btn" id="nav2" onclick="showTab(2)">Análisis</button>
+  <button class="nav-btn" id="nav3" onclick="showTab(3)">Producción</button>
 </div>
 
 <!-- ══════ TAB 1 ══════ -->
@@ -179,6 +229,12 @@ select:focus,input:focus{outline:none;border-color:var(--accent)}
     <div class="kpi-sm"><div class="kpi-val" id="k-unidpend">—</div><div class="kpi-lbl">Un. pendientes</div></div>
     <div class="kpi-sm"><div class="kpi-val" id="k-kgstotal">—</div><div class="kpi-lbl">Kgs salados</div></div>
     <div class="kpi-sm"><div class="kpi-val" id="k-dias">—</div><div class="kpi-lbl">Días prom.</div></div>
+  </div>
+  <div class="export-bar">
+    <button class="btn-export excel" id="btn-export-xls" onclick="exportExcel()" disabled>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h2"/><path d="M8 17h2"/><path d="M14 13h2"/><path d="M14 17h2"/></svg>
+      Exportar Excel
+    </button>
   </div>
   <div class="filters">
     <div class="filters-title">Filtros</div>
@@ -206,6 +262,12 @@ select:focus,input:focus{outline:none;border-color:var(--accent)}
 
 <!-- ══════ TAB 2 ══════ -->
 <div id="tab2" class="hidden">
+  <div class="export-bar">
+    <button class="btn-export pdf" id="btn-export-pdf" onclick="exportPDF()" disabled>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M10 12l2 2 4-4"/></svg>
+      Exportar PDF
+    </button>
+  </div>
   <div class="filters" style="margin-bottom:14px">
     <div class="filters-title">Proveedor</div>
     <select id="an-fgo" onchange="renderTab2()"><option value="">Consolidado (todos)</option><option>DELTA</option><option>RECREO</option><option>ALBA</option><option>SANTA INES</option><option>C.PARANA</option><option>SUIPACHA</option></select>
@@ -215,11 +277,25 @@ select:focus,input:focus{outline:none;border-color:var(--accent)}
   <div id="an-percentiles"></div>
   <div id="an-table"></div>
 </div>
+
+<!-- ══════ TAB 3 — PRODUCCIÓN ══════ -->
+<div id="tab3" class="hidden">
+  <div class="filters" style="margin-bottom:14px">
+    <div class="filters-title">Período</div>
+    <div class="filter-row">
+      <input type="date" id="pr-desde" onchange="renderTab3()">
+      <input type="date" id="pr-hasta" onchange="renderTab3()">
+    </div>
+  </div>
+  <div id="pr-kpis"></div>
+  <div id="pr-recepcion"></div>
+  <div id="pr-clasificacion"></div>
+</div>
 </div>
 
 <script>
 // ══════════════════════════════════════════════════════════════════════════════
-// Santa Faz — Informes v2.0.0-beta
+// Santa Faz — Informes v2.2.0-beta
 // ══════════════════════════════════════════════════════════════════════════════
 
 // ── Configuración ────────────────────────────────────────────────────────────
@@ -241,11 +317,12 @@ function num(v){return Number(v)||0;}
 
 function showTab(n){
   currentTab=n;
-  document.getElementById('tab1').classList.toggle('hidden',n!==1);
-  document.getElementById('tab2').classList.toggle('hidden',n!==2);
-  document.getElementById('nav1').classList.toggle('active',n===1);
-  document.getElementById('nav2').classList.toggle('active',n===2);
+  [1,2,3].forEach(i=>{
+    document.getElementById('tab'+i).classList.toggle('hidden',n!==i);
+    document.getElementById('nav'+i).classList.toggle('active',n===i);
+  });
   if(n===2)renderTab2();
+  if(n===3)renderTab3();
 }
 
 // ── Carga de datos desde Apps Script ─────────────────────────────────────────
@@ -266,7 +343,7 @@ async function loadData(){
       recepciones=(r1.ok?r1.values:[]).slice(1).filter(r=>r[0]);
       lotes=(r2.ok?r2.values:[]).slice(1).filter(r=>r[0]);
     }
-    renderTab1();if(currentTab===2)renderTab2();
+    renderTab1();if(currentTab===2)renderTab2();if(currentTab===3)renderTab3();enableExportBtns();
   }catch(e){document.getElementById('content').innerHTML='<div class="empty" style="color:var(--red)">Error de conexión.</div>';}
   btn.classList.remove('loading');document.getElementById('refresh-txt').textContent='Actualizar';
 }
@@ -485,12 +562,375 @@ function renderCatTable(d){
   document.getElementById('an-table').innerHTML=`<div class="chart-wrap"><div class="chart-title">Resumen por categoría</div><div style="overflow-x:auto"><table class="pct-table"><thead><tr><th>Cat.</th><th style="text-align:right">Unid.</th><th style="text-align:right">%Un</th><th style="text-align:right">Kgs</th><th style="text-align:right">%Kgs</th><th style="text-align:right">Kg/un</th><th style="text-align:right">P50</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// TAB 3 — PRODUCCIÓN (ritmo operativo por frigorífico: recepción y clasificación)
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── Calcula días efectivos: cantidad de fechas únicas con actividad ──────────
+// No usa días calendario — solo cuenta los días en que realmente hubo operación.
+function diasEfectivos(fechas){
+  const unique = new Set(fechas.map(f=>String(f).slice(0,10)));
+  unique.delete(''); unique.delete('undefined');
+  return unique.size;
+}
+
+// ── Render Tab 3 ────────────────────────────────────────────────────────────
+function renderTab3(){
+  const desde = document.getElementById('pr-desde').value;
+  const hasta = document.getElementById('pr-hasta').value;
+  const allData = buildData();
+
+  // Filtrar por período si hay fechas
+  let filtered = allData;
+  if(desde) filtered = filtered.filter(r => r.fecha >= desde);
+  if(hasta) filtered = filtered.filter(r => r.fecha <= hasta);
+
+  if(!filtered.length){
+    document.getElementById('pr-kpis').innerHTML = '';
+    document.getElementById('pr-recepcion').innerHTML = '<div class="empty">No hay datos en el período seleccionado.</div>';
+    document.getElementById('pr-clasificacion').innerHTML = '';
+    return;
+  }
+
+  // ── Datos de RECEPCIÓN por frigorífico ────────────────────────────────────
+  const FGOS = ['DELTA','RECREO','ALBA','SANTA INES','C.PARANA','SUIPACHA'];
+  const recByFgo = {};
+  FGOS.forEach(f => { recByFgo[f] = {unid:0, fechas:[], count:0}; });
+
+  filtered.forEach(r => {
+    if(!recByFgo[r.fgo]) recByFgo[r.fgo] = {unid:0, fechas:[], count:0};
+    recByFgo[r.fgo].unid += r.unid;
+    recByFgo[r.fgo].fechas.push(r.fecha);
+    recByFgo[r.fgo].count++;
+  });
+
+  // ── Datos de CLASIFICACIÓN por frigorífico ────────────────────────────────
+  const clasByFgo = {};
+  FGOS.forEach(f => { clasByFgo[f] = {unid:0, kgs:0, fechas:[]}; });
+
+  filtered.forEach(r => {
+    if(!clasByFgo[r.fgo]) clasByFgo[r.fgo] = {unid:0, kgs:0, fechas:[]};
+    r.cargas.forEach(c => {
+      clasByFgo[r.fgo].unid += c.unidCarga;
+      clasByFgo[r.fgo].kgs += c.totalKgs;
+      if(c.fechaClasif && c.fechaClasif !== 'undefined') clasByFgo[r.fgo].fechas.push(c.fechaClasif);
+    });
+  });
+
+  // ── Totales globales ──────────────────────────────────────────────────────
+  const allRecFechas = filtered.map(r => r.fecha);
+  const allClasFechas = [];
+  filtered.forEach(r => r.cargas.forEach(c => { if(c.fechaClasif && c.fechaClasif!=='undefined') allClasFechas.push(c.fechaClasif); }));
+
+  const totalRecUnid = filtered.reduce((s,r) => s+r.unid, 0);
+  const totalClasUnid = Object.values(clasByFgo).reduce((s,v) => s+v.unid, 0);
+  const totalClasKgs = Object.values(clasByFgo).reduce((s,v) => s+v.kgs, 0);
+  const diasRec = diasEfectivos(allRecFechas);
+  const diasClas = diasEfectivos(allClasFechas);
+
+  const recDia = diasRec > 0 ? Math.round(totalRecUnid / diasRec) : 0;
+  const clasDia = diasClas > 0 ? Math.round(totalClasUnid / diasClas) : 0;
+  const kgsDia = diasClas > 0 ? Math.round(totalClasKgs / diasClas) : 0;
+
+  // ── KPIs de cabecera ──────────────────────────────────────────────────────
+  document.getElementById('pr-kpis').innerHTML = `
+    <div class="prod-kpis">
+      <div class="prod-kpi rec">
+        <div class="kpi-val">${recDia.toLocaleString('es-AR')}</div>
+        <div class="kpi-lbl">Un recep./día</div>
+      </div>
+      <div class="prod-kpi clas">
+        <div class="kpi-val">${clasDia.toLocaleString('es-AR')}</div>
+        <div class="kpi-lbl">Un clasif./día</div>
+      </div>
+      <div class="prod-kpi kgs">
+        <div class="kpi-val">${kgsDia.toLocaleString('es-AR')}</div>
+        <div class="kpi-lbl">Kgs salados/día</div>
+      </div>
+    </div>
+    <div style="text-align:center;font-size:11px;color:var(--muted);margin:-8px 0 14px">
+      Promedios sobre días efectivos — Recepción: ${diasRec} días · Clasificación: ${diasClas} días
+    </div>`;
+
+  // ── Tabla RECEPCIÓN por frigorífico ────────────────────────────────────────
+  const activeFgosRec = FGOS.filter(f => recByFgo[f].count > 0);
+  let recRows = activeFgosRec.map(f => {
+    const d = recByFgo[f];
+    const de = diasEfectivos(d.fechas);
+    const dia = de > 0 ? Math.round(d.unid / de) : 0;
+    return `<tr>
+      <td>${f}</td>
+      <td>${d.count}</td>
+      <td>${de}</td>
+      <td>${d.unid.toLocaleString('es-AR')}</td>
+      <td style="font-weight:700">${dia.toLocaleString('es-AR')}</td>
+      <td>${(dia*7).toLocaleString('es-AR')}</td>
+      <td>${(dia*30).toLocaleString('es-AR')}</td>
+    </tr>`;
+  }).join('');
+  // Fila total
+  recRows += `<tr class="total-row">
+    <td>TOTAL</td>
+    <td>${filtered.length}</td>
+    <td>${diasRec}</td>
+    <td>${totalRecUnid.toLocaleString('es-AR')}</td>
+    <td style="font-weight:700">${recDia.toLocaleString('es-AR')}</td>
+    <td>${(recDia*7).toLocaleString('es-AR')}</td>
+    <td>${(recDia*30).toLocaleString('es-AR')}</td>
+  </tr>`;
+
+  document.getElementById('pr-recepcion').innerHTML = `<div class="prod-section">
+    <div class="prod-section-title">Recepción de materia prima</div>
+    <div class="prod-section-sub">Unidades recibidas por frigorífico — promedio sobre días con actividad</div>
+    <table class="prod-table">
+      <thead><tr><th style="text-align:left">Frigorífico</th><th>Recep.</th><th>Días ef.</th><th>Total un.</th><th>Un/día</th><th>Un/sem</th><th>Un/mes</th></tr></thead>
+      <tbody>${recRows}</tbody>
+    </table>
+  </div>`;
+
+  // ── Tabla CLASIFICACIÓN por frigorífico ────────────────────────────────────
+  const activeFgosClas = FGOS.filter(f => clasByFgo[f].unid > 0);
+  let clasRows = activeFgosClas.map(f => {
+    const d = clasByFgo[f];
+    const de = diasEfectivos(d.fechas);
+    const uDia = de > 0 ? Math.round(d.unid / de) : 0;
+    const kDia = de > 0 ? Math.round(d.kgs / de) : 0;
+    return `<tr>
+      <td>${f}</td>
+      <td>${de}</td>
+      <td>${d.unid.toLocaleString('es-AR')}</td>
+      <td style="font-weight:700">${uDia.toLocaleString('es-AR')}</td>
+      <td>${(uDia*7).toLocaleString('es-AR')}</td>
+      <td>${(uDia*30).toLocaleString('es-AR')}</td>
+      <td>${d.kgs?Math.round(d.kgs).toLocaleString('es-AR'):'—'}</td>
+      <td style="font-weight:700">${kDia.toLocaleString('es-AR')}</td>
+      <td>${(kDia*7).toLocaleString('es-AR')}</td>
+      <td>${(kDia*30).toLocaleString('es-AR')}</td>
+    </tr>`;
+  }).join('');
+  // Fila total
+  clasRows += `<tr class="total-row">
+    <td>TOTAL</td>
+    <td>${diasClas}</td>
+    <td>${totalClasUnid.toLocaleString('es-AR')}</td>
+    <td style="font-weight:700">${clasDia.toLocaleString('es-AR')}</td>
+    <td>${(clasDia*7).toLocaleString('es-AR')}</td>
+    <td>${(clasDia*30).toLocaleString('es-AR')}</td>
+    <td>${totalClasKgs?Math.round(totalClasKgs).toLocaleString('es-AR'):'—'}</td>
+    <td style="font-weight:700">${kgsDia.toLocaleString('es-AR')}</td>
+    <td>${(kgsDia*7).toLocaleString('es-AR')}</td>
+    <td>${(kgsDia*30).toLocaleString('es-AR')}</td>
+  </tr>`;
+
+  document.getElementById('pr-clasificacion').innerHTML = `<div class="prod-section">
+    <div class="prod-section-title">Clasificación y empaque</div>
+    <div class="prod-section-sub">Unidades y kgs salados por frigorífico — promedio sobre días con actividad</div>
+    <div style="overflow-x:auto">
+    <table class="prod-table">
+      <thead>
+        <tr>
+          <th style="text-align:left" rowspan="2">Frigorífico</th>
+          <th rowspan="2">Días ef.</th>
+          <th colspan="4" style="text-align:center;border-bottom:1px solid var(--border)">Unidades clasificadas</th>
+          <th colspan="4" style="text-align:center;border-bottom:1px solid var(--border)">Kgs salados</th>
+        </tr>
+        <tr>
+          <th>Total</th><th>Día</th><th>Sem</th><th>Mes</th>
+          <th>Total</th><th>Día</th><th>Sem</th><th>Mes</th>
+        </tr>
+      </thead>
+      <tbody>${clasRows}</tbody>
+    </table>
+    </div>
+  </div>`;
+}
+
 // ── UI helpers: expandir/colapsar grupos y recepciones ──────────────────────
 function toggleFgo(el){el.classList.toggle('open');el.nextElementSibling.classList.toggle('open');}
 function toggleRec(uid){document.getElementById('det-'+uid).classList.toggle('open');}
 
 // ── Init: carga datos al abrir la página ────────────────────────────────────
 loadData();
+
+// ══════════════════════════════════════════════════════════════════════════════
+// EXPORTACIÓN — Excel (Tab Batch) + PDF (Tab Análisis)
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── Habilitar botones de exportación una vez que hay datos ───────────────────
+function enableExportBtns(){
+  document.getElementById('btn-export-xls').disabled = !recepciones.length;
+  document.getElementById('btn-export-pdf').disabled = !recepciones.length;
+}
+
+// ── EXCEL: exporta datos filtrados de Tab Batch con SheetJS ─────────────────
+// Genera un .xlsx con una solapa por frigorífico + una CONSOLIDADO.
+// Cada solapa tiene: Fecha Ingreso, Unidades, Kgs, Estado, Días, y desglose
+// por categoría (unidades, kgs, %, kg/un).
+async function exportExcel(){
+  const btn = document.getElementById('btn-export-xls');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;margin:0"></span> Generando...';
+
+  // Esperar a que SheetJS cargue si todavía no lo hizo
+  if(typeof XLSX === 'undefined'){
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+  }
+
+  const allData = buildData();
+  const filtered = applyFilters(allData);
+  if(!filtered.length){ alert('No hay datos para exportar con los filtros actuales.'); resetExportBtn('xls'); return; }
+
+  const wb = XLSX.utils.book_new();
+
+  // Agrupar por frigorífico
+  const groups = {};
+  filtered.forEach(r => { if(!groups[r.fgo]) groups[r.fgo] = []; groups[r.fgo].push(r); });
+
+  // Función para armar filas de una solapa
+  function buildRows(items){
+    const header = ['Fecha Ingreso','Frigorífico','Unidades Recep.','Kgs Recep.','Estado','Días Proceso',
+      'Un. Clasificadas','Kgs Salados','Kg/Un Prom.',
+      'AAA Un','AAA Kg','AA Un','AA Kg','A Un','A Kg','B Un','B Kg','C Un','C Kg','D Un','D Kg'];
+    const rows = [header];
+    items.forEach(r => {
+      // Consolidar categorías
+      const tb = {}; CATS.forEach(c => { tb[c] = {u:0,k:0}; });
+      r.cargas.forEach(c => c.cats.forEach(ct => { tb[ct.cat].u += ct.unid; tb[ct.cat].k += ct.kgs; }));
+      const gu = CATS.reduce((s,c) => s+tb[c].u, 0);
+      const gk = CATS.reduce((s,c) => s+tb[c].k, 0);
+      const kgu = gu > 0 ? Math.round((gk/gu)*1000)/1000 : '';
+      const estado = r.estado==='cerrado' ? 'Cerrado' : r.estado==='parcial' ? 'Parcial' : 'Sin clasificar';
+      const row = [r.fecha, r.fgo, r.unid, r.kgs||'', estado, r.dias!==null?r.dias:'', gu, gk?Math.round(gk*10)/10:'', kgu];
+      CATS.forEach(c => { row.push(tb[c].u||''); row.push(tb[c].k?Math.round(tb[c].k*10)/10:''); });
+      rows.push(row);
+    });
+    return rows;
+  }
+
+  // Solapa por cada frigorífico
+  const fgos = Object.keys(groups).sort();
+  fgos.forEach(fgo => {
+    const rows = buildRows(groups[fgo]);
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    // Anchos de columna
+    ws['!cols'] = [{wch:12},{wch:14},{wch:10},{wch:10},{wch:14},{wch:8},{wch:10},{wch:10},{wch:10},
+      ...CATS.flatMap(() => [{wch:7},{wch:8}])];
+    XLSX.utils.book_append_sheet(wb, ws, fgo.slice(0,31));
+  });
+
+  // Solapa CONSOLIDADO (todos)
+  if(fgos.length > 1){
+    const rows = buildRows(filtered);
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{wch:12},{wch:14},{wch:10},{wch:10},{wch:14},{wch:8},{wch:10},{wch:10},{wch:10},
+      ...CATS.flatMap(() => [{wch:7},{wch:8}])];
+    XLSX.utils.book_append_sheet(wb, ws, 'CONSOLIDADO');
+  }
+
+  const fecha = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `SantaFaz_Batch_${fecha}.xlsx`);
+  resetExportBtn('xls');
+}
+
+// ── PDF: captura Tab Análisis como imagen y genera PDF con jsPDF ────────────
+// Captura el contenido visual completo (KPIs, gráfico SVG, tablas) y lo
+// renderiza en un PDF A4 apaisado optimizado para compartir.
+async function exportPDF(){
+  const btn = document.getElementById('btn-export-pdf');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;margin:0"></span> Generando...';
+
+  // Cargar librerías si no están disponibles
+  if(typeof html2canvas === 'undefined'){
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+  }
+  if(typeof jspdf === 'undefined' && typeof jsPDF === 'undefined'){
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+  }
+
+  // Asegurar que Tab 2 está visible y renderizada
+  const wasHidden = document.getElementById('tab2').classList.contains('hidden');
+  if(wasHidden) document.getElementById('tab2').classList.remove('hidden');
+
+  // Contenedor temporal para captura
+  const container = document.createElement('div');
+  container.style.cssText = 'position:absolute;left:-9999px;top:0;width:800px;background:#fff;padding:24px;font-family:DM Sans,sans-serif';
+
+  // Título
+  const title = document.createElement('div');
+  const fgoSel = document.getElementById('an-fgo').value || 'Consolidado';
+  const fecha = new Date().toLocaleDateString('es-AR');
+  title.innerHTML = `<div style="margin-bottom:16px"><div style="font-size:20px;font-weight:700;color:#1c1917">Santa Faz — Análisis de Distribución</div><div style="font-size:13px;color:#78716c;margin-top:4px">${fgoSel} · Generado ${fecha}</div></div>`;
+  container.appendChild(title);
+
+  // Clonar contenido de Tab 2 (sin el filtro ni el botón)
+  ['an-kpis-wrap','an-chart','an-percentiles','an-table'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el && el.innerHTML.trim()){
+      const clone = el.cloneNode(true);
+      clone.style.marginBottom = '16px';
+      container.appendChild(clone);
+    }
+  });
+
+  document.body.appendChild(container);
+
+  try {
+    // Esperar un frame para que el DOM se pinte
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+    const canvas = await html2canvas(container, {
+      scale: 2, useCORS: true, backgroundColor: '#ffffff',
+      logging: false, windowWidth: 800
+    });
+
+    const JsPDF = (typeof jsPDF !== 'undefined') ? jsPDF : window.jspdf.jsPDF;
+    const imgData = canvas.toDataURL('image/png');
+    const imgW = canvas.width, imgH = canvas.height;
+
+    // A4 landscape: 297 x 210 mm
+    const pageW = 297, pageH = 210, margin = 12;
+    const usableW = pageW - margin*2, usableH = pageH - margin*2;
+    const ratio = Math.min(usableW / imgW, usableH / imgH);
+    const finalW = imgW * ratio, finalH = imgH * ratio;
+
+    const pdf = new JsPDF({ orientation: finalH > usableH * 0.9 ? 'portrait' : 'landscape', unit: 'mm', format: 'a4' });
+    const pW = pdf.internal.pageSize.getWidth(), pH = pdf.internal.pageSize.getHeight();
+    const x = (pW - finalW) / 2, y = margin;
+
+    pdf.addImage(imgData, 'PNG', x, y, finalW, Math.min(finalH, pH - margin*2));
+
+    const fechaFile = new Date().toISOString().slice(0,10);
+    pdf.save(`SantaFaz_Analisis_${fgoSel}_${fechaFile}.pdf`);
+  } catch(e){
+    console.error('Error generando PDF:', e);
+    alert('Error al generar el PDF. Intentá de nuevo.');
+  }
+
+  document.body.removeChild(container);
+  if(wasHidden) document.getElementById('tab2').classList.add('hidden');
+  resetExportBtn('pdf');
+}
+
+// ── Helper: carga dinámica de scripts CDN ───────────────────────────────────
+function loadScript(url){
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = url; s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+// ── Helper: resetear botón de exportación ───────────────────────────────────
+function resetExportBtn(type){
+  if(type === 'xls'){
+    const btn = document.getElementById('btn-export-xls');
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h2"/><path d="M8 17h2"/><path d="M14 13h2"/><path d="M14 17h2"/></svg> Exportar Excel';
+  } else {
+    const btn = document.getElementById('btn-export-pdf');
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M10 12l2 2 4-4"/></svg> Exportar PDF';
+  }
+}
 </script>
 </body>
 </html>
