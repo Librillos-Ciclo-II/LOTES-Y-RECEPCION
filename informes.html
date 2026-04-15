@@ -290,9 +290,15 @@ select:focus,input:focus{outline:none;border-color:var(--accent)}
   <div class="filters" style="margin-bottom:14px">
     <div class="filters-title">Proveedor y período</div>
     <select id="an-fgo" onchange="renderTab2()" style="margin-bottom:8px"><option value="">Consolidado (todos)</option><option>DELTA</option><option>RECREO</option><option>ALBA</option><option>SANTA INES</option><option>C.PARANA</option><option>SUIPACHA</option></select>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Fecha de ingreso (Recepción)</div>
     <div class="filter-row" style="margin-bottom:8px">
-      <input type="date" id="an-desde" onchange="renderTab2()" placeholder="Desde">
-      <input type="date" id="an-hasta" onchange="renderTab2()" placeholder="Hasta">
+      <input type="date" id="an-desde" onchange="renderTab2()">
+      <input type="date" id="an-hasta" onchange="renderTab2()">
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Fecha de cierre (clasificación)</div>
+    <div class="filter-row" style="margin-bottom:8px">
+      <input type="date" id="an-cierre-desde" onchange="renderTab2()">
+      <input type="date" id="an-cierre-hasta" onchange="renderTab2()">
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center">
       <span style="font-size:11px;color:var(--muted)" id="an-filter-info">Mostrando todos los lotes cerrados</span>
@@ -389,10 +395,10 @@ function buildData(){
     const acum=misLotes.reduce((s,l)=>s+num(l[6]),0);
     const totalKgs=misLotes.reduce((s,l)=>s+num(l[21]),0);
     let estado='sin';if(cerrado)estado='cerrado';else if(tieneCargas)estado='parcial';
-    let dias=null;
-    if(cerrado){const fc=misLotes.map(l=>String(l[3]).slice(0,10)).filter(f=>f&&f!=='undefined').sort();if(fc.length)dias=Math.round((new Date(fc[fc.length-1])-new Date(fecha))/(1000*86400));}
+    let dias=null, fechaCierre=null;
+    if(cerrado){const fc=misLotes.map(l=>String(l[3]).slice(0,10)).filter(f=>f&&f!=='undefined').sort();if(fc.length){fechaCierre=fc[fc.length-1];dias=Math.round((new Date(fechaCierre)-new Date(fecha))/(1000*86400));}}
     const cargas=misLotes.map(l=>({numParcial:num(l[4]),fechaClasif:String(l[3]).slice(0,10),unidCarga:num(l[6]),esFinal:String(l[5])==='1'||l[5]===true||l[5]==='TRUE',cats:CATS.map((c,i)=>({cat:c,unid:num(l[9+i]),kgs:num(l[15+i])})),totalKgs:num(l[21]),obs:l[22]||''}));
-    return{id,fgo,fecha,unid,kgs,kg_unid,tambores,comentarios,estado,acum,totalKgs,dias,cargas,cerrado};
+    return{id,fgo,fecha,unid,kgs,kg_unid,tambores,comentarios,estado,acum,totalKgs,dias,fechaCierre,cargas,cerrado};
   });
 }
 
@@ -493,11 +499,13 @@ function pctl(arr,p){if(!arr.length)return 0;const i=(p/100)*(arr.length-1),lo=M
 // ── Prepara datos de análisis: totales por cat, kg/un, percentiles globales ──
 // Solo usa lotes cerrados. Filtra por frigorífico y rango de fechas.
 // También genera desglose por proveedor×categoría para drill-down.
-function getAnalysisData(fgoF, desde, hasta){
+function getAnalysisData(fgoF, desde, hasta, cierreDesde, cierreHasta){
   let all=buildData().filter(r=>r.estado==='cerrado'&&r.cargas.length>0);
   if(fgoF) all=all.filter(r=>r.fgo===fgoF);
   if(desde) all=all.filter(r=>r.fecha>=desde);
   if(hasta) all=all.filter(r=>r.fecha<=hasta);
+  if(cierreDesde) all=all.filter(r=>r.fechaCierre&&r.fechaCierre>=cierreDesde);
+  if(cierreHasta) all=all.filter(r=>r.fechaCierre&&r.fechaCierre<=cierreHasta);
   const tb={};CATS.forEach(c=>{tb[c]={u:0,k:0};});
   const kguAll=[],kguByCat={};CATS.forEach(c=>{kguByCat[c]=[];});
   // Desglose por proveedor × categoría
@@ -523,6 +531,8 @@ function clearAnFilters(){
   document.getElementById('an-fgo').value='';
   document.getElementById('an-desde').value='';
   document.getElementById('an-hasta').value='';
+  document.getElementById('an-cierre-desde').value='';
+  document.getElementById('an-cierre-hasta').value='';
   renderTab2();
 }
 
@@ -532,14 +542,17 @@ function renderTab2(){
   const fgo=document.getElementById('an-fgo').value;
   const desde=document.getElementById('an-desde').value;
   const hasta=document.getElementById('an-hasta').value;
-  const d=getAnalysisData(fgo, desde, hasta);
+  const cDesde=document.getElementById('an-cierre-desde').value;
+  const cHasta=document.getElementById('an-cierre-hasta').value;
+  const d=getAnalysisData(fgo, desde, hasta, cDesde, cHasta);
   lastAnalysisData = d;
   const label=fgo||'Consolidado';
 
   // Actualizar texto informativo de filtros
   const parts=[];
   if(fgo) parts.push(fgo); else parts.push('Todos');
-  if(desde||hasta){ parts.push((desde?fmt(desde):'inicio')+' → '+(hasta?fmt(hasta):'hoy')); }
+  if(desde||hasta) parts.push('Recepción: '+(desde?fmt(desde):'inicio')+' → '+(hasta?fmt(hasta):'hoy'));
+  if(cDesde||cHasta) parts.push('Cierre: '+(cDesde?fmt(cDesde):'inicio')+' → '+(cHasta?fmt(cHasta):'hoy'));
   document.getElementById('an-filter-info').textContent=d.lotCount+' lotes — '+parts.join(' · ');
 
   if(!d.lotCount){
