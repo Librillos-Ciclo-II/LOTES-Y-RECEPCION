@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Santa Faz — Control Diario RRHH</title>
+<!--
+  RRHH_Diario.html — Control Diario para supervisores y gerencia
+  v1.0  2026-04-15
+
+  FUNCIONALIDADES:
+    1. Vista diaria: seleccionar fecha → ver todo lo cargado ese día
+    2. Dos paneles: ASISTENCIA JORNALES + DESTAJO
+    3. Aprobación: checkbox individual o "Aprobar todos"
+    4. Alertas: plantas sin carga, empleados faltantes
+    5. KPIs del día: presentes, ausentes, total jornales, total destajo
+    6. Filtro por planta
+    7. Exportar aprobación (marca de conformidad)
+
+  Lee las mismas solapas que los otros HTMLs via el Apps Script GET.
+-->
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f4f1eb;
+    --surface: #ffffff;
+    --primary: #2D5A27;
+    --primary-light: #e8f0e6;
+    --accent: #C5A030;
+    --accent-light: #fdf6e3;
+    --danger: #c0392b;
+    --danger-light: #fceaea;
+    --text: #1a1a1a;
+    --text-muted: #7a7a6e;
+    --border: #e0ddd4;
+    --radius: 10px;
+    --shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding-bottom: 80px;
+  }
+
+  .header {
+    background: var(--primary);
+    color: white;
+    padding: 18px 16px 14px;
+    text-align: center;
+  }
+  .header h1 { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.02em; }
+  .header small { opacity: 0.75; font-size: 0.75rem; }
+
+  .container { max-width: 900px; margin: 0 auto; padding: 12px 14px; }
+
+  .card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    padding: 16px;
+    margin-bottom: 12px;
+    box-shadow: var(--shadow);
+  }
+
+  .controls-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: end;
+  }
+  .control-group { flex: 1; min-width: 140px; }
+  .control-group label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+  .control-group select,
+  .control-group input[type="date"] {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 0.92rem;
+    font-weight: 500;
+    background: white;
+    color: var(--text);
+  }
+  .control-group select:focus,
+  .control-group input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(45,90,39,0.12);
+  }
+
+  /* KPI Cards */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .kpi {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 12px;
+    text-align: center;
+    box-shadow: var(--shadow);
+  }
+  .kpi .value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--primary);
+  }
+  .kpi .label {
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+  .kpi.danger .value { color: var(--danger); }
+  .kpi.accent .value { color: var(--accent); }
+
+  /* Alerts */
+  .alert {
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-weight: 500;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .alert-warning {
+    background: var(--accent-light);
+    border: 1px solid #e8d9a0;
+    color: #8a6d10;
+  }
+  .alert-success {
+    background: var(--primary-light);
+    border: 1px solid #b8d4b0;
+    color: var(--primary);
+  }
+  .alert-danger {
+    background: var(--danger-light);
+    border: 1px solid #e8b0b0;
+    color: var(--danger);
+  }
+
+  /* Section headers */
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .section-title {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--primary);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .section-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: var(--primary-light);
+    color: var(--primary);
+  }
+
+  /* Approve controls */
+  .approve-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--bg);
+    border-radius: 8px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .approve-bar label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .approve-bar input[type="checkbox"] {
+    width: 18px; height: 18px;
+    accent-color: var(--primary);
+    cursor: pointer;
+  }
+  .approve-status {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+  .approve-status.done { color: var(--primary); }
+
+  /* Data table */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+  }
+  .data-table th {
+    background: var(--primary);
+    color: white;
+    padding: 8px 6px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+  .data-table td {
+    padding: 7px 6px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+  .data-table tr:hover td { background: rgba(45,90,39,0.03); }
+  .data-table .num {
+    font-family: 'JetBrains Mono', monospace;
+    text-align: right;
+    font-weight: 500;
+  }
+  .data-table .check-col {
+    width: 32px;
+    text-align: center;
+  }
+  .data-table .check-col input { width: 16px; height: 16px; accent-color: var(--primary); cursor: pointer; }
+  .data-table tr.checked td { background: var(--primary-light); }
+  .data-table tr.ausente td { background: var(--danger-light); color: var(--danger); }
+  .data-table tr.medio td { background: var(--accent-light); }
+  .data-table .total-row td {
+    font-weight: 700;
+    border-top: 2px solid var(--primary);
+    background: var(--accent-light);
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .badge-pres { background: #d4edda; color: #155724; }
+  .badge-aus { background: var(--danger-light); color: var(--danger); }
+  .badge-medio { background: var(--accent-light); color: #8a6d10; }
+  .badge-sab { background: #daeef3; color: #1a5276; }
+
+  .empty-msg {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    padding: 30px 10px;
+  }
+
+  .btn-export {
+    padding: 8px 16px;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .btn-export:hover { opacity: 0.85; }
+  .btn-export:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .hidden { display: none !important; }
+
+  .loading-overlay {
+    position: fixed; inset: 0;
+    background: rgba(255,255,255,0.92);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 300; font-weight: 600; color: var(--primary);
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 16px; height: 16px;
+    border: 2px solid #ddd;
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--primary); color: white;
+    padding: 10px 20px; border-radius: 8px;
+    font-size: 0.82rem; font-weight: 600;
+    z-index: 999; opacity: 0; transition: opacity 0.3s;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  }
+  .toast.show { opacity: 1; }
+  .toast.error { background: var(--danger); }
+
+  .nav-link {
+    display: block;
+    text-align: center;
+    margin-top: 12px;
+    font-size: 0.82rem;
+    color: var(--primary);
+    text-decoration: none;
+    font-weight: 600;
+  }
+  .nav-link:hover { text-decoration: underline; }
+
+  .tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 14px;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1.5px solid var(--border);
+  }
+  .tab-btn {
+    flex: 1;
+    padding: 10px 8px;
+    background: var(--bg);
+    border: none;
+    font-family: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: all 0.15s;
+    text-align: center;
+  }
+  .tab-btn.active {
+    background: var(--primary);
+    color: white;
+  }
+  .tab-btn:not(.active):hover { background: var(--primary-light); }
+
+  @media (max-width: 600px) {
+    .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    .data-table { font-size: 0.72rem; }
+    .data-table th, .data-table td { padding: 6px 4px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Control Diario — RRHH</h1>
+  <small>Supervisión y aprobación de cargas diarias</small>
+</div>
+
+<div id="loadingOverlay" class="loading-overlay">
+  <div><span class="spinner"></span> Cargando datos...</div>
+</div>
+
+<div class="container">
+
+  <!-- Controles -->
+  <div class="card">
+    <div class="controls-row">
+      <div class="control-group" style="flex:1.2">
+        <label for="fecha">Fecha</label>
+        <input type="date" id="fecha">
+      </div>
+      <div class="control-group">
+        <label for="planta">Planta</label>
+        <select id="planta">
+          <option value="">Todas</option>
+        </select>
+      </div>
+      <div class="control-group" style="flex:0.6; align-self:end;">
+        <button class="btn-export" onclick="cargarDia()" style="width:100%;padding:11px">Consultar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="kpi-grid" id="kpiGrid" style="display:none">
+    <div class="kpi"><div class="value" id="kpiPresentes">0</div><div class="label">Presentes</div></div>
+    <div class="kpi danger"><div class="value" id="kpiAusentes">0</div><div class="label">Ausentes</div></div>
+    <div class="kpi accent"><div class="value" id="kpiJornales">$ 0</div><div class="label">Jornales</div></div>
+    <div class="kpi"><div class="value" id="kpiDestajo">$ 0</div><div class="label">Destajo</div></div>
+    <div class="kpi accent"><div class="value" id="kpiTotal">$ 0</div><div class="label">Total día</div></div>
+  </div>
+
+  <!-- Alertas -->
+  <div id="alertsContainer"></div>
+
+  <!-- Tabs -->
+  <div class="tabs" id="tabsContainer" style="display:none">
+    <button class="tab-btn active" onclick="switchTab('asistencia')">Asistencia Jornales</button>
+    <button class="tab-btn" onclick="switchTab('destajo')">Destajo Operarios</button>
+    <button class="tab-btn" onclick="switchTab('resumen')">Resumen Empleados</button>
+  </div>
+
+  <!-- Tab: Asistencia -->
+  <div class="card" id="tabAsistencia" style="display:none">
+    <div class="section-header">
+      <span class="section-title">Asistencia Jornales</span>
+      <span class="section-badge" id="asisCount">0 registros</span>
+    </div>
+    <div class="approve-bar">
+      <label><input type="checkbox" id="checkAllAsis" onchange="toggleCheckAll('asis', this.checked)"> Aprobar todos</label>
+      <span class="approve-status" id="asisApproveStatus">0 / 0 aprobados</span>
+    </div>
+    <div id="asisTableContainer">
+      <p class="empty-msg">Seleccioná una fecha y hacé click en Consultar</p>
+    </div>
+  </div>
+
+  <!-- Tab: Destajo -->
+  <div class="card" id="tabDestajo" style="display:none">
+    <div class="section-header">
+      <span class="section-title">Destajo Operarios</span>
+      <span class="section-badge" id="destCount">0 registros</span>
+    </div>
+    <div class="approve-bar">
+      <label><input type="checkbox" id="checkAllDest" onchange="toggleCheckAll('dest', this.checked)"> Aprobar todos</label>
+      <span class="approve-status" id="destApproveStatus">0 / 0 aprobados</span>
+    </div>
+    <div id="destTableContainer">
+      <p class="empty-msg">Seleccioná una fecha y hacé click en Consultar</p>
+    </div>
+  </div>
+
+  <!-- Tab: Resumen -->
+  <div class="card" id="tabResumen" style="display:none">
+    <div class="section-header">
+      <span class="section-title">Resumen por Empleado</span>
+      <span class="section-badge" id="resumenCount">0 empleados</span>
+    </div>
+    <div id="resumenTableContainer">
+      <p class="empty-msg">Seleccioná una fecha y hacé click en Consultar</p>
+    </div>
+  </div>
+
+  <a class="nav-link" href="RRHH_Jornales.html">← Ir a Asistencia Jornaleros</a>
+  <a class="nav-link" href="productividad.html">← Ir a Destajo Operarios</a>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = 'https://script.google.com/macros/s/AKfycbzud3BqEJzJPVy4ehTnfOH_m_DfQv05Arx1aEhEgYEUz1V0cKZb0rwSU1ZjR8ZbIECN/exec';
+
+let allAsistencia = [];
+let allDestajo = [];
+let filteredAsis = [];
+let filteredDest = [];
+
+// ============================================================
+//  INIT
+// ============================================================
+document.getElementById('fecha').value = new Date().toISOString().slice(0, 10);
+
+async function fetchSheet(sheet) {
+  const encoded = encodeURIComponent(sheet);
+  const url = `${API}?action=get&sheet=${encoded}&_=${Date.now()}`;
+  const resp = await fetch(url);
+  const data = await resp.json();
+  if (!data.ok) throw new Error(data.error || 'Error');
+  return data.data;
+}
+
+async function init() {
+  try {
+    const [asis, dest] = await Promise.all([
+      fetchSheet('ASISTENCIA JORNALES'),
+      fetchSheet('DESTAJO')
+    ]);
+
+    allAsistencia = asis.slice(1).filter(r => r[0]);
+    allDestajo = dest.slice(1).filter(r => r[0]);
+
+    // Build planta dropdown from asistencia data
+    const plantas = [...new Set(allAsistencia.map(r => String(r[4] || '').trim()).filter(Boolean))].sort();
+    const sel = document.getElementById('planta');
+    plantas.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p;
+      opt.textContent = p;
+      sel.appendChild(opt);
+    });
+
+    document.getElementById('loadingOverlay').style.display = 'none';
+    cargarDia();
+  } catch (e) {
+    document.getElementById('loadingOverlay').innerHTML =
+      `<div style="color:var(--danger)">Error: ${e.message}<br><small>Recargá la página</small></div>`;
+  }
+}
+init();
+
+// ============================================================
+//  CARGAR DIA
+// ============================================================
+function cargarDia() {
+  const fecha = document.getElementById('fecha').value;
+  const planta = document.getElementById('planta').value;
+  if (!fecha) return;
+
+  // Filter asistencia
+  filteredAsis = allAsistencia.filter(r => {
+    const f = String(r[1] || '').trim().slice(0, 10);
+    if (f !== fecha) return false;
+    if (planta && String(r[4] || '').trim().toUpperCase() !== planta.toUpperCase()) return false;
+    return true;
+  });
+
+  // Filter destajo
+  filteredDest = allDestajo.filter(r => {
+    const f = String(r[1] || '').trim().slice(0, 10);
+    return f === fecha;
+  });
+
+  renderKPIs();
+  renderAlerts();
+  renderAsistencia();
+  renderDestajo();
+  renderResumen();
+
+  document.getElementById('kpiGrid').style.display = '';
+  document.getElementById('tabsContainer').style.display = '';
+  switchTab('asistencia');
+}
+
+// ============================================================
+//  KPIs
+// ============================================================
+function fmtMoney(n) {
+  return '$ ' + Math.round(n).toLocaleString('es-AR');
+}
+
+function renderKPIs() {
+  const presentes = filteredAsis.filter(r => String(r[7] || '').toUpperCase() === 'SI').length;
+  const ausentes = filteredAsis.filter(r => String(r[8] || '').toUpperCase() === 'SI').length;
+  const totalJornales = filteredAsis.reduce((s, r) => s + (parseFloat(r[13]) || 0), 0);
+  const totalDestajo = filteredDest.reduce((s, r) => s + (parseFloat(r[6]) || 0), 0);
+
+  document.getElementById('kpiPresentes').textContent = presentes;
+  document.getElementById('kpiAusentes').textContent = ausentes;
+  document.getElementById('kpiJornales').textContent = fmtMoney(totalJornales);
+  document.getElementById('kpiDestajo').textContent = fmtMoney(totalDestajo);
+  document.getElementById('kpiTotal').textContent = fmtMoney(totalJornales + totalDestajo);
+}
+
+// ============================================================
+//  ALERTAS
+// ============================================================
+function renderAlerts() {
+  const container = document.getElementById('alertsContainer');
+  container.innerHTML = '';
+  const fecha = document.getElementById('fecha').value;
+  const planta = document.getElementById('planta').value;
+
+  // Check which plants have records
+  const TODAS_PLANTAS = ['CICLO II', 'DELTA', 'ALBA', 'RECREO', 'CCP'];
+  const plantasConAsistencia = new Set(filteredAsis.map(r => String(r[4] || '').trim().toUpperCase()));
+  const plantasConDestajo = new Set(filteredDest.map(r => 'CICLO II')); // destajo is always Ciclo II
+
+  if (!planta) {
+    const faltantes = TODAS_PLANTAS.filter(p => !plantasConAsistencia.has(p));
+    if (faltantes.length > 0 && filteredAsis.length > 0) {
+      container.innerHTML += `<div class="alert alert-warning">⚠ Sin asistencia cargada en: <strong>${faltantes.join(', ')}</strong></div>`;
+    }
+  }
+
+  if (filteredAsis.length === 0 && filteredDest.length === 0) {
+    container.innerHTML += `<div class="alert alert-danger">✗ No hay registros para el ${fecha}${planta ? ' en ' + planta : ''}</div>`;
+  } else {
+    const totalRegs = filteredAsis.length + filteredDest.length;
+    container.innerHTML += `<div class="alert alert-success">✓ ${totalRegs} registros cargados para el ${fecha}${planta ? ' en ' + planta : ''}</div>`;
+  }
+}
+
+// ============================================================
+//  TABS
+// ============================================================
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach((b, i) => {
+    b.classList.toggle('active', ['asistencia', 'destajo', 'resumen'][i] === tab);
+  });
+  document.getElementById('tabAsistencia').style.display = tab === 'asistencia' ? '' : 'none';
+  document.getElementById('tabDestajo').style.display = tab === 'destajo' ? '' : 'none';
+  document.getElementById('tabResumen').style.display = tab === 'resumen' ? '' : 'none';
+}
+
+// ============================================================
+//  ASISTENCIA TABLE
+// ============================================================
+function renderAsistencia() {
+  const container = document.getElementById('asisTableContainer');
+  document.getElementById('asisCount').textContent = filteredAsis.length + ' registros';
+
+  if (filteredAsis.length === 0) {
+    container.innerHTML = '<p class="empty-msg">Sin registros de asistencia para esta fecha</p>';
+    return;
+  }
+
+  const sorted = [...filteredAsis].sort((a, b) => {
+    const pa = String(a[4] || ''); const pb = String(b[4] || '');
+    if (pa !== pb) return pa.localeCompare(pb);
+    return String(a[3] || '').localeCompare(String(b[3] || ''));
+  });
+
+  let html = `<div style="overflow-x:auto"><table class="data-table">
+    <thead><tr>
+      <th class="check-col"></th>
+      <th>Planta</th><th>Legajo</th><th>Empleado</th><th>Company</th>
+      <th>Tipo</th><th>Estado</th><th class="num">Jornal $</th><th class="num">HE $</th><th class="num">Total $</th>
+    </tr></thead><tbody>`;
+
+  sorted.forEach((r, idx) => {
+    const presente = String(r[7] || '').toUpperCase() === 'SI';
+    const ausente = String(r[8] || '').toUpperCase() === 'SI';
+    const tipo = String(r[6] || '');
+    const isMedio = tipo === 'MEDIO_DIA';
+    const isSab = tipo === 'SABADO';
+    let rowClass = ausente ? 'ausente' : (isMedio ? 'medio' : '');
+    let badge = presente ? '<span class="badge badge-pres">PRES</span>' : (ausente ? '<span class="badge badge-aus">AUS</span>' : '');
+    if (isMedio) badge = '<span class="badge badge-medio">½ DÍA</span>';
+    if (isSab) badge = '<span class="badge badge-sab">SÁB</span>';
+
+    const jornal = parseFloat(r[11]) || 0;
+    const he = parseFloat(r[12]) || 0;
+    const total = parseFloat(r[13]) || 0;
+
+    html += `<tr class="${rowClass}" data-group="asis" data-idx="${idx}">
+      <td class="check-col"><input type="checkbox" onchange="updateApproveCount('asis')"></td>
+      <td>${r[4] || ''}</td><td>${r[2] || ''}</td><td>${r[3] || ''}</td><td>${r[5] || ''}</td>
+      <td>${tipo}</td><td>${badge}</td>
+      <td class="num">${jornal ? Math.round(jornal).toLocaleString('es-AR') : ''}</td>
+      <td class="num">${he ? Math.round(he).toLocaleString('es-AR') : ''}</td>
+      <td class="num"><strong>${total ? Math.round(total).toLocaleString('es-AR') : ''}</strong></td>
+    </tr>`;
+  });
+
+  // Total row
+  const totalJorn = sorted.reduce((s, r) => s + (parseFloat(r[11]) || 0), 0);
+  const totalHE = sorted.reduce((s, r) => s + (parseFloat(r[12]) || 0), 0);
+  const totalTotal = sorted.reduce((s, r) => s + (parseFloat(r[13]) || 0), 0);
+  html += `<tr class="total-row">
+    <td></td><td colspan="6" style="text-align:right">TOTAL</td>
+    <td class="num">${Math.round(totalJorn).toLocaleString('es-AR')}</td>
+    <td class="num">${Math.round(totalHE).toLocaleString('es-AR')}</td>
+    <td class="num">${Math.round(totalTotal).toLocaleString('es-AR')}</td>
+  </tr>`;
+
+  html += '</tbody></table></div>';
+  container.innerHTML = html;
+  updateApproveCount('asis');
+}
+
+// ============================================================
+//  DESTAJO TABLE
+// ============================================================
+function renderDestajo() {
+  const container = document.getElementById('destTableContainer');
+  document.getElementById('destCount').textContent = filteredDest.length + ' registros';
+
+  if (filteredDest.length === 0) {
+    container.innerHTML = '<p class="empty-msg">Sin registros de destajo para esta fecha</p>';
+    return;
+  }
+
+  const sorted = [...filteredDest].sort((a, b) => String(a[3] || '').localeCompare(String(b[3] || '')));
+
+  let html = `<div style="overflow-x:auto"><table class="data-table">
+    <thead><tr>
+      <th class="check-col"></th>
+      <th>Legajo</th><th>Operario</th><th>Actividad</th>
+      <th class="num">Unidades</th><th class="num">Importe $</th>
+    </tr></thead><tbody>`;
+
+  sorted.forEach((r, idx) => {
+    const importe = parseFloat(r[6]) || 0;
+    html += `<tr data-group="dest" data-idx="${idx}">
+      <td class="check-col"><input type="checkbox" onchange="updateApproveCount('dest')"></td>
+      <td>${r[2] || ''}</td><td>${r[3] || ''}</td><td>${r[4] || ''}</td>
+      <td class="num">${r[5] || ''}</td>
+      <td class="num"><strong>${importe ? Math.round(importe).toLocaleString('es-AR') : ''}</strong></td>
+    </tr>`;
+  });
+
+  const totalDest = sorted.reduce((s, r) => s + (parseFloat(r[6]) || 0), 0);
+  html += `<tr class="total-row">
+    <td></td><td colspan="4" style="text-align:right">TOTAL</td>
+    <td class="num">${Math.round(totalDest).toLocaleString('es-AR')}</td>
+  </tr>`;
+
+  html += '</tbody></table></div>';
+  container.innerHTML = html;
+  updateApproveCount('dest');
+}
+
+// ============================================================
+//  RESUMEN POR EMPLEADO
+// ============================================================
+function renderResumen() {
+  const container = document.getElementById('resumenTableContainer');
+
+  const byEmpleado = {};
+
+  filteredAsis.forEach(r => {
+    const nombre = String(r[3] || '').trim();
+    if (!nombre) return;
+    if (!byEmpleado[nombre]) byEmpleado[nombre] = { planta: String(r[4] || ''), jornales: 0, destajo: 0, estado: 'PRES', company: String(r[5] || '') };
+    byEmpleado[nombre].jornales += parseFloat(r[13]) || 0;
+    if (String(r[8] || '').toUpperCase() === 'SI') byEmpleado[nombre].estado = 'AUS';
+    if (String(r[6] || '').toUpperCase() === 'MEDIO_DIA') byEmpleado[nombre].estado = '½ DÍA';
+  });
+
+  filteredDest.forEach(r => {
+    const nombre = String(r[3] || '').trim();
+    if (!nombre) return;
+    if (!byEmpleado[nombre]) byEmpleado[nombre] = { planta: 'CICLO II', jornales: 0, destajo: 0, estado: '—', company: 'MT' };
+    byEmpleado[nombre].destajo += parseFloat(r[6]) || 0;
+  });
+
+  const empleados = Object.entries(byEmpleado).sort((a, b) => a[0].localeCompare(b[0]));
+  document.getElementById('resumenCount').textContent = empleados.length + ' empleados';
+
+  if (empleados.length === 0) {
+    container.innerHTML = '<p class="empty-msg">Sin datos para esta fecha</p>';
+    return;
+  }
+
+  let html = `<div style="overflow-x:auto"><table class="data-table">
+    <thead><tr><th>Empleado</th><th>Planta</th><th>Estado</th><th class="num">Jornales $</th><th class="num">Destajo $</th><th class="num">Total $</th></tr></thead><tbody>`;
+
+  let totJ = 0, totD = 0;
+  empleados.forEach(([nombre, datos]) => {
+    const total = datos.jornales + datos.destajo;
+    totJ += datos.jornales; totD += datos.destajo;
+    const badge = datos.estado === 'AUS' ? 'badge-aus' : (datos.estado === '½ DÍA' ? 'badge-medio' : 'badge-pres');
+    html += `<tr>
+      <td><strong>${nombre}</strong></td><td>${datos.planta}</td>
+      <td><span class="badge ${badge}">${datos.estado}</span></td>
+      <td class="num">${datos.jornales ? Math.round(datos.jornales).toLocaleString('es-AR') : ''}</td>
+      <td class="num">${datos.destajo ? Math.round(datos.destajo).toLocaleString('es-AR') : ''}</td>
+      <td class="num"><strong>${Math.round(total).toLocaleString('es-AR')}</strong></td>
+    </tr>`;
+  });
+
+  html += `<tr class="total-row">
+    <td colspan="3" style="text-align:right">TOTAL</td>
+    <td class="num">${Math.round(totJ).toLocaleString('es-AR')}</td>
+    <td class="num">${Math.round(totD).toLocaleString('es-AR')}</td>
+    <td class="num">${Math.round(totJ + totD).toLocaleString('es-AR')}</td>
+  </tr>`;
+
+  html += '</tbody></table></div>';
+  container.innerHTML = html;
+}
+
+// ============================================================
+//  APPROVAL SYSTEM
+// ============================================================
+function toggleCheckAll(group, checked) {
+  const checkboxes = document.querySelectorAll(`tr[data-group="${group}"] input[type="checkbox"]`);
+  checkboxes.forEach(cb => {
+    cb.checked = checked;
+    cb.closest('tr').classList.toggle('checked', checked);
+  });
+  updateApproveCount(group);
+}
+
+function updateApproveCount(group) {
+  const all = document.querySelectorAll(`tr[data-group="${group}"] input[type="checkbox"]`);
+  const checked = document.querySelectorAll(`tr[data-group="${group}"] input[type="checkbox"]:checked`);
+
+  all.forEach(cb => cb.closest('tr').classList.toggle('checked', cb.checked));
+
+  const total = all.length;
+  const done = checked.length;
+  const statusEl = document.getElementById(group + 'ApproveStatus');
+  statusEl.textContent = `${done} / ${total} aprobados`;
+  statusEl.className = 'approve-status' + (done === total && total > 0 ? ' done' : '');
+
+  // Update check-all checkbox
+  const checkAll = document.getElementById(group === 'asis' ? 'checkAllAsis' : 'checkAllDest');
+  checkAll.checked = done === total && total > 0;
+  checkAll.indeterminate = done > 0 && done < total;
+}
+
+// ============================================================
+//  TOAST
+// ============================================================
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (type === 'error' ? ' error' : '');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.className = 'toast', 3000);
+}
+</script>
+</body>
+</html>
