@@ -652,25 +652,20 @@ function calcImporte(actividadName, unidades, skipBase) {
 
   if (param.tipo === 'BASE_PLUS') {
     if (skipBase) {
-      // v1.4: Más de 1 actividad en el día → sin base, sin umbral.
-      // Se paga plus_por_unidad × TODAS las unidades desde la primera.
+      // 2+ actividades en el día → sin base, sin umbral.
       const total = u * param.plusPorUnidad;
       const detail = 'Sin base (2+ actividades) · ' + u + 'u × $' + param.plusPorUnidad.toLocaleString('es-AR') + '/u';
       return { total, detail };
+    } else if (u > param.umbralPlus) {
+      // Supera el umbral → NO cobra base, solo unidades × plus
+      const total = u * param.plusPorUnidad;
+      const detail = u + 'u × $' + param.plusPorUnidad.toLocaleString('es-AR') + '/u (supera ' + param.umbralPlus + 'u)';
+      return { total, detail };
     } else {
-      // Actividad única del día → base + plus solo por encima del umbral
-      const base = param.tarifaBase;
-      let plus = 0;
-      if (u > param.umbralPlus) {
-        plus = u * param.plusPorUnidad;
-      }
-      const total = base + plus;
-      let detail = 'Base $' + base.toLocaleString('es-AR');
-      if (plus > 0) {
-        detail += ' + Plus $' + plus.toLocaleString('es-AR') + ' (' + u + 'u × $' + param.plusPorUnidad + ')';
-      } else if (u > 0) {
-        detail += ' (sin plus, ≤' + param.umbralPlus + 'u)';
-      }
+      // Dentro del umbral → cobra solo la base fija
+      const total = param.tarifaBase;
+      let detail = 'Base $' + param.tarifaBase.toLocaleString('es-AR');
+      if (u > 0) detail += ' (≤' + param.umbralPlus + 'u, sin plus)';
       return { total, detail };
     }
   }
