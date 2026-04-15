@@ -2,12 +2,20 @@
 <!--
   ╔══════════════════════════════════════════════════════════════════════════════╗
   ║  Santa Faz — Informes de Lotes                                             ║
-  ║  Versión: 2.3.0-beta                                                       ║
+  ║  Versión: 2.4.0-beta                                                       ║
   ║  Fecha:   2026-04-15                                                       ║
   ║  Autor:   IA Full + Claude (Anthropic)                                     ║
   ║  Repo:    librillos-ciclo-ii.github.io/LOTES-Y-RECEPCION                  ║
   ╠══════════════════════════════════════════════════════════════════════════════╣
   ║  CHANGELOG                                                                 ║
+  ║                                                                            ║
+  ║  v2.4.0-beta (2026-04-15)                                                 ║
+  ║  ─────────────────────────────────────────────────────────────────────────  ║
+  ║  [NUEVO] Drill-down por categoría en tabla de Análisis: click en una      ║
+  ║          categoría expande filas con desglose por proveedor mostrando     ║
+  ║          unidades, %, kgs, %kgs y kg/un de cada frigorífico               ║
+  ║  [NUEVO] getAnalysisData genera byFgoCat (proveedor×categoría)            ║
+  ║  [CAMBIO] Subtítulo "Tocá una categoría para ver desglose por proveedor"  ║
   ║                                                                            ║
   ║  v2.3.0-beta (2026-04-15)                                                 ║
   ║  ─────────────────────────────────────────────────────────────────────────  ║
@@ -184,6 +192,9 @@ select:focus,input:focus{outline:none;border-color:var(--accent)}
 .pct-table th{text-align:left;font-size:10px;color:var(--muted);font-weight:500;padding:4px 6px;text-transform:uppercase;border-bottom:1px solid var(--border)}
 .pct-table td{padding:5px 6px;border-bottom:1px solid #f5f4f0;font-family:'JetBrains Mono',monospace;font-size:12px}
 .pct-table tr:last-child td{border-bottom:none}
+.pct-table tr[onclick]{transition:background .1s}
+.pct-table tr[onclick]:active{background:#f5f4f0}
+.drill-row td{font-size:11px!important;padding:4px 6px!important}
 .export-bar{display:flex;gap:8px;margin-bottom:14px}
 .btn-export{display:inline-flex;align-items:center;gap:5px;padding:9px 14px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;border-radius:8px;cursor:pointer;border:1px solid var(--border);background:var(--card);color:var(--text);transition:all .15s;flex:1;justify-content:center}
 .btn-export:active{transform:scale(.97)}
@@ -311,7 +322,7 @@ select:focus,input:focus{outline:none;border-color:var(--accent)}
 
 <script>
 // ══════════════════════════════════════════════════════════════════════════════
-// Santa Faz — Informes v2.3.0-beta
+// Santa Faz — Informes v2.4.0-beta
 // ══════════════════════════════════════════════════════════════════════════════
 
 // ── Configuración ────────────────────────────────────────────────────────────
@@ -481,6 +492,7 @@ function pctl(arr,p){if(!arr.length)return 0;const i=(p/100)*(arr.length-1),lo=M
 
 // ── Prepara datos de análisis: totales por cat, kg/un, percentiles globales ──
 // Solo usa lotes cerrados. Filtra por frigorífico y rango de fechas.
+// También genera desglose por proveedor×categoría para drill-down.
 function getAnalysisData(fgoF, desde, hasta){
   let all=buildData().filter(r=>r.estado==='cerrado'&&r.cargas.length>0);
   if(fgoF) all=all.filter(r=>r.fgo===fgoF);
@@ -488,15 +500,22 @@ function getAnalysisData(fgoF, desde, hasta){
   if(hasta) all=all.filter(r=>r.fecha<=hasta);
   const tb={};CATS.forEach(c=>{tb[c]={u:0,k:0};});
   const kguAll=[],kguByCat={};CATS.forEach(c=>{kguByCat[c]=[];});
-  all.forEach(r=>r.cargas.forEach(c=>c.cats.forEach(ct=>{
-    tb[ct.cat].u+=ct.unid;tb[ct.cat].k+=ct.kgs;
-    if(ct.unid>0&&ct.kgs>0){const v=ct.kgs/ct.unid;kguAll.push(v);kguByCat[ct.cat].push(v);}
-  })));
+  // Desglose por proveedor × categoría
+  const byFgoCat={};
+  all.forEach(r=>{
+    if(!byFgoCat[r.fgo]) { byFgoCat[r.fgo]={}; CATS.forEach(c=>{byFgoCat[r.fgo][c]={u:0,k:0};}); }
+    r.cargas.forEach(c=>c.cats.forEach(ct=>{
+      tb[ct.cat].u+=ct.unid;tb[ct.cat].k+=ct.kgs;
+      byFgoCat[r.fgo][ct.cat].u+=ct.unid;
+      byFgoCat[r.fgo][ct.cat].k+=ct.kgs;
+      if(ct.unid>0&&ct.kgs>0){const v=ct.kgs/ct.unid;kguAll.push(v);kguByCat[ct.cat].push(v);}
+    }));
+  });
   kguAll.sort((a,b)=>a-b);
   const gp={p10:pctl(kguAll,10),p25:pctl(kguAll,25),p50:pctl(kguAll,50),p75:pctl(kguAll,75),p90:pctl(kguAll,90)};
   const cs=CATS.map(c=>{const a=[...kguByCat[c]].sort((a,b)=>a-b);return{cat:c,unid:tb[c].u,kgs:tb[c].k,kgu:tb[c].u>0?tb[c].k/tb[c].u:0,p25:pctl(a,25),p50:pctl(a,50),p75:pctl(a,75),count:a.length};});
   const gu=CATS.reduce((s,c)=>s+tb[c].u,0),gk=CATS.reduce((s,c)=>s+tb[c].k,0);
-  return{totByCat:tb,globalPcts:gp,catStats:cs,grandUnid:gu,grandKgs:gk,kguAll,lotCount:all.length};
+  return{totByCat:tb,globalPcts:gp,catStats:cs,grandUnid:gu,grandKgs:gk,kguAll,lotCount:all.length,byFgoCat};
 }
 
 // ── Limpiar filtros del tab Análisis ────────────────────────────────────────
@@ -508,11 +527,13 @@ function clearAnFilters(){
 }
 
 // ── Render Tab 2: KPIs + gráfico SVG + tabla percentiles + tabla categorías ──
+let lastAnalysisData = null; // Guardado global para drill-down por categoría
 function renderTab2(){
   const fgo=document.getElementById('an-fgo').value;
   const desde=document.getElementById('an-desde').value;
   const hasta=document.getElementById('an-hasta').value;
   const d=getAnalysisData(fgo, desde, hasta);
+  lastAnalysisData = d;
   const label=fgo||'Consolidado';
 
   // Actualizar texto informativo de filtros
@@ -590,13 +611,56 @@ function renderPercTable(d){
 }
 
 // ── Tabla resumen por categoría: unid, %unid, kgs, %kgs, kg/un prom, P50 ────
+// Click en una categoría expande el desglose por proveedor.
 function renderCatTable(d){
   const ac=d.catStats.filter(c=>c.unid>0);if(!ac.length){document.getElementById('an-table').innerHTML='';return;}
-  let rows=ac.map(c=>{const pU=d.grandUnid>0?(c.unid/d.grandUnid*100).toFixed(1):'0.0',pK=d.grandKgs>0?(c.kgs/d.grandKgs*100).toFixed(1):'0.0';
-    return`<tr><td><span class="cat-pill ${CAT_CLS[c.cat]}" style="font-size:11px">${c.cat}</span></td><td style="text-align:right">${c.unid.toLocaleString('es-AR')}</td><td style="text-align:right">${pU}%</td><td style="text-align:right">${c.kgs.toFixed(0)}</td><td style="text-align:right">${pK}%</td><td style="text-align:right;font-weight:700">${c.kgu.toFixed(3)}</td><td style="text-align:right">${c.p50.toFixed(3)}</td></tr>`;}).join('');
+  const fgos=Object.keys(d.byFgoCat).sort();
+
+  let rows=ac.map(c=>{
+    const pU=d.grandUnid>0?(c.unid/d.grandUnid*100).toFixed(1):'0.0';
+    const pK=d.grandKgs>0?(c.kgs/d.grandKgs*100).toFixed(1):'0.0';
+    const catId='drill-'+c.cat;
+
+    // Sub-filas por proveedor para esta categoría
+    const activeFgos=fgos.filter(f=>d.byFgoCat[f][c.cat].u>0);
+    let subRows=activeFgos.map(f=>{
+      const fd=d.byFgoCat[f][c.cat];
+      const fpU=c.unid>0?(fd.u/c.unid*100).toFixed(1):'0.0';
+      const fKgu=fd.u>0?(fd.k/fd.u).toFixed(3):'—';
+      return`<tr class="drill-row" style="display:none;background:#fafaf9" data-drill="${catId}">
+        <td style="padding-left:20px;font-family:'DM Sans',sans-serif;font-weight:400;font-size:12px;color:var(--muted)">${f}</td>
+        <td style="text-align:right;color:var(--muted)">${fd.u.toLocaleString('es-AR')}</td>
+        <td style="text-align:right;color:var(--muted)">${fpU}%</td>
+        <td style="text-align:right;color:var(--muted)">${fd.k.toFixed(0)}</td>
+        <td style="text-align:right;color:var(--muted)">${fd.k>0&&c.kgs>0?(fd.k/c.kgs*100).toFixed(1):'0.0'}%</td>
+        <td style="text-align:right;font-weight:600;color:var(--muted)">${fKgu}</td>
+        <td style="text-align:right;color:var(--muted)">—</td>
+      </tr>`;
+    }).join('');
+
+    return`<tr onclick="toggleDrill('${catId}')" style="cursor:pointer">
+      <td><span class="cat-pill ${CAT_CLS[c.cat]}" style="font-size:11px">${c.cat}</span> <span style="font-size:10px;color:var(--muted)" id="arrow-${catId}">▸</span></td>
+      <td style="text-align:right">${c.unid.toLocaleString('es-AR')}</td>
+      <td style="text-align:right">${pU}%</td>
+      <td style="text-align:right">${c.kgs.toFixed(0)}</td>
+      <td style="text-align:right">${pK}%</td>
+      <td style="text-align:right;font-weight:700">${c.kgu.toFixed(3)}</td>
+      <td style="text-align:right">${c.p50.toFixed(3)}</td>
+    </tr>${subRows}`;
+  }).join('');
+
   const gK=d.grandUnid>0?(d.grandKgs/d.grandUnid).toFixed(3):'—';
   rows+=`<tr style="border-top:2px solid var(--border);font-weight:700"><td style="padding-top:6px">Total</td><td style="text-align:right;padding-top:6px">${d.grandUnid.toLocaleString('es-AR')}</td><td style="text-align:right;padding-top:6px">100%</td><td style="text-align:right;padding-top:6px">${d.grandKgs.toFixed(0)}</td><td style="text-align:right;padding-top:6px">100%</td><td style="text-align:right;padding-top:6px">${gK}</td><td style="text-align:right;padding-top:6px">—</td></tr>`;
-  document.getElementById('an-table').innerHTML=`<div class="chart-wrap"><div class="chart-title">Resumen por categoría</div><div style="overflow-x:auto"><table class="pct-table"><thead><tr><th>Cat.</th><th style="text-align:right">Unid.</th><th style="text-align:right">%Un</th><th style="text-align:right">Kgs</th><th style="text-align:right">%Kgs</th><th style="text-align:right">Kg/un</th><th style="text-align:right">P50</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+  document.getElementById('an-table').innerHTML=`<div class="chart-wrap"><div class="chart-title">Resumen por categoría</div><div class="chart-sub">Tocá una categoría para ver el desglose por proveedor</div><div style="overflow-x:auto"><table class="pct-table"><thead><tr><th>Cat.</th><th style="text-align:right">Unid.</th><th style="text-align:right">%Un</th><th style="text-align:right">Kgs</th><th style="text-align:right">%Kgs</th><th style="text-align:right">Kg/un</th><th style="text-align:right">P50</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+}
+
+// ── Toggle drill-down: muestra/oculta filas de proveedor por categoría ──────
+function toggleDrill(catId){
+  const rows=document.querySelectorAll('[data-drill="'+catId+'"]');
+  const arrow=document.getElementById('arrow-'+catId);
+  const show=rows.length&&rows[0].style.display==='none';
+  rows.forEach(r=>r.style.display=show?'table-row':'none');
+  if(arrow) arrow.textContent=show?'▾':'▸';
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
