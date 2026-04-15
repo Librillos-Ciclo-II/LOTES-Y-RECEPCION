@@ -488,8 +488,8 @@ async function init() {
     // Activities are in columns D onwards (index 3+)
     operarios = ops.slice(1).filter(r => r[0] || r[1]).map(r => {
       const actividades = [];
-      // Act_1 a Act_5 = cols D-H = indices 3,4,5,6,7
-      for (let i = 3; i <= 7 && i < r.length; i++) {
+      // Act_1 a Act_8 = cols D-K = indices 3,4,5,6,7,8,9,10
+      for (let i = 3; i <= 10 && i < r.length; i++) {
         const v = String(r[i] || '').trim().toUpperCase();
         if (v && v !== '\xa0' && v !== 'UNDEFINED' && v !== 'NULL') {
           actividades.push(v);
