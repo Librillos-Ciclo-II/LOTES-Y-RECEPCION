@@ -7,121 +7,63 @@
 <!--
   RRHH_Diario.html — Control Diario para supervisores y gerencia
   v1.0  2026-04-15  Versión inicial
-  v1.1  2026-04-15  Sistema de confirmación con guardado en Google Sheet
-    - Botón "Confirmar aprobación" que graba en solapa APROBACIONES
-    - Campo "Aprobador" para identificar quién confirma
-    - Al cargar, detecta si la fecha ya fue aprobada y muestra estado
-    - Registro de auditoría: fecha, planta, aprobador, tipo, totales, timestamp
+  v1.1  2026-04-15  Confirmación global con guardado en Google Sheet
+  v1.2  2026-04-15  Aprobación por registro individual
+    - Cada registro (asistencia o destajo) se aprueba individualmente
+    - Los ya aprobados aparecen bloqueados y en verde al recargar
+    - El botón "Confirmar" solo graba los nuevos checks (no los ya guardados)
+    - La solapa APROBACIONES guarda 1 fila por registro aprobado con:
+      ID_Registro, Fecha, Tipo (ASIS/DEST), Empleado, Aprobador, Importe, Timestamp
 -->
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #f4f1eb;
-    --surface: #ffffff;
-    --primary: #2D5A27;
-    --primary-light: #e8f0e6;
-    --accent: #C5A030;
-    --accent-light: #fdf6e3;
-    --danger: #c0392b;
-    --danger-light: #fceaea;
-    --text: #1a1a1a;
-    --text-muted: #7a7a6e;
-    --border: #e0ddd4;
-    --radius: 10px;
+    --bg: #f4f1eb; --surface: #ffffff; --primary: #2D5A27; --primary-light: #e8f0e6;
+    --accent: #C5A030; --accent-light: #fdf6e3; --danger: #c0392b; --danger-light: #fceaea;
+    --text: #1a1a1a; --text-muted: #7a7a6e; --border: #e0ddd4; --radius: 10px;
     --shadow: 0 1px 4px rgba(0,0,0,0.06);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: 'DM Sans', sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-    padding-bottom: 80px;
-  }
-  .header {
-    background: var(--primary);
-    color: white;
-    padding: 18px 16px 14px;
-    text-align: center;
-  }
-  .header h1 { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.02em; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding-bottom: 80px; }
+  .header { background: var(--primary); color: white; padding: 18px 16px 14px; text-align: center; }
+  .header h1 { font-size: 1.15rem; font-weight: 700; }
   .header small { opacity: 0.75; font-size: 0.75rem; }
   .container { max-width: 900px; margin: 0 auto; padding: 12px 14px; }
-  .card {
-    background: var(--surface);
-    border-radius: var(--radius);
-    border: 1px solid var(--border);
-    padding: 16px;
-    margin-bottom: 12px;
-    box-shadow: var(--shadow);
-  }
-  .controls-row {
-    display: flex; gap: 10px; flex-wrap: wrap; align-items: end;
-  }
+  .card { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); padding: 16px; margin-bottom: 12px; box-shadow: var(--shadow); }
+  .controls-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
   .control-group { flex: 1; min-width: 120px; }
-  .control-group label {
-    display: block; font-size: 0.72rem; font-weight: 600;
-    text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 4px;
-  }
-  .control-group select, .control-group input {
-    width: 100%; padding: 10px 12px; border: 1.5px solid var(--border);
-    border-radius: 8px; font-family: inherit; font-size: 0.92rem; font-weight: 500;
-    background: white; color: var(--text);
-  }
-  .control-group select:focus, .control-group input:focus {
-    outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(45,90,39,0.12);
-  }
-  .kpi-grid {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-    gap: 10px; margin-bottom: 14px;
-  }
-  .kpi {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 14px 12px; text-align: center; box-shadow: var(--shadow);
-  }
+  .control-group label { display: block; font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 4px; }
+  .control-group select, .control-group input { width: 100%; padding: 10px 12px; border: 1.5px solid var(--border); border-radius: 8px; font-family: inherit; font-size: 0.92rem; font-weight: 500; background: white; color: var(--text); }
+  .control-group select:focus, .control-group input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(45,90,39,0.12); }
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 12px; text-align: center; box-shadow: var(--shadow); }
   .kpi .value { font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: var(--primary); }
   .kpi .label { font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin-top: 2px; }
   .kpi.danger .value { color: var(--danger); }
   .kpi.accent .value { color: var(--accent); }
-  .alert {
-    padding: 10px 14px; border-radius: 8px; font-size: 0.82rem; font-weight: 500;
-    margin-bottom: 10px; display: flex; align-items: center; gap: 8px;
-  }
+  .alert { padding: 10px 14px; border-radius: 8px; font-size: 0.82rem; font-weight: 500; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
   .alert-warning { background: var(--accent-light); border: 1px solid #e8d9a0; color: #8a6d10; }
   .alert-success { background: var(--primary-light); border: 1px solid #b8d4b0; color: var(--primary); }
   .alert-danger { background: var(--danger-light); border: 1px solid #e8b0b0; color: var(--danger); }
   .alert-info { background: #daeef3; border: 1px solid #a8d4e0; color: #1a5276; }
-  .section-header {
-    display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 10px; flex-wrap: wrap; gap: 8px;
-  }
+  .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px; }
   .section-title { font-size: 0.88rem; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.03em; }
-  .section-badge {
-    font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600;
-    padding: 3px 8px; border-radius: 4px; background: var(--primary-light); color: var(--primary);
-  }
-  .approve-bar {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 8px 12px; background: var(--bg); border-radius: 8px; margin-bottom: 10px; flex-wrap: wrap; gap: 6px;
-  }
-  .approve-bar label {
-    font-size: 0.78rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px;
-  }
+  .section-badge { font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600; padding: 3px 8px; border-radius: 4px; background: var(--primary-light); color: var(--primary); }
+  .approve-bar { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--bg); border-radius: 8px; margin-bottom: 10px; flex-wrap: wrap; gap: 6px; }
+  .approve-bar label { font-size: 0.78rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; }
   .approve-bar input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--primary); cursor: pointer; }
   .approve-status { font-size: 0.72rem; font-weight: 600; color: var(--text-muted); }
   .approve-status.done { color: var(--primary); }
   .data-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
-  .data-table th {
-    background: var(--primary); color: white; padding: 8px 6px; text-align: left;
-    font-weight: 600; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.03em;
-    position: sticky; top: 0; z-index: 2;
-  }
+  .data-table th { background: var(--primary); color: white; padding: 8px 6px; text-align: left; font-weight: 600; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.03em; position: sticky; top: 0; z-index: 2; }
   .data-table td { padding: 7px 6px; border-bottom: 1px solid var(--border); vertical-align: middle; }
   .data-table tr:hover td { background: rgba(45,90,39,0.03); }
   .data-table .num { font-family: 'JetBrains Mono', monospace; text-align: right; font-weight: 500; }
   .data-table .check-col { width: 32px; text-align: center; }
   .data-table .check-col input { width: 16px; height: 16px; accent-color: var(--primary); cursor: pointer; }
   .data-table tr.checked td { background: var(--primary-light); }
+  .data-table tr.approved td { background: #d4edda; }
+  .data-table tr.approved .check-col input { accent-color: #27ae60; }
   .data-table tr.ausente td { background: var(--danger-light); color: var(--danger); }
   .data-table tr.medio td { background: var(--accent-light); }
   .data-table .total-row td { font-weight: 700; border-top: 2px solid var(--primary); background: var(--accent-light); }
@@ -130,6 +72,7 @@
   .badge-aus { background: var(--danger-light); color: var(--danger); }
   .badge-medio { background: var(--accent-light); color: #8a6d10; }
   .badge-sab { background: #daeef3; color: #1a5276; }
+  .badge-ok { background: #27ae60; color: white; }
   .empty-msg { text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 30px 10px; }
   .btn { padding: 10px 18px; border: none; border-radius: 8px; font-family: inherit; font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: opacity 0.15s; }
   .btn:hover { opacity: 0.85; }
@@ -137,13 +80,8 @@
   .btn-primary { background: var(--primary); color: white; }
   .btn-accent { background: var(--accent); color: white; }
   .btn-sm { padding: 8px 14px; font-size: 0.78rem; }
-  .confirm-bar {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 14px 16px; background: var(--surface); border: 2px solid var(--primary);
-    border-radius: var(--radius); margin-bottom: 12px; flex-wrap: wrap; gap: 10px;
-  }
-  .confirm-bar.confirmed { border-color: var(--primary); background: var(--primary-light); }
-  .confirm-info { font-size: 0.78rem; color: var(--text-muted); }
+  .confirm-bar { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; background: var(--surface); border: 2px solid var(--border); border-radius: var(--radius); margin-bottom: 12px; flex-wrap: wrap; gap: 10px; }
+  .confirm-info { font-size: 0.82rem; color: var(--text); }
   .confirm-info strong { color: var(--primary); }
   .hidden { display: none !important; }
   .loading-overlay { position: fixed; inset: 0; background: rgba(255,255,255,0.92); display: flex; align-items: center; justify-content: center; z-index: 300; font-weight: 600; color: var(--primary); }
@@ -158,56 +96,31 @@
   .tab-btn { flex: 1; padding: 10px 8px; background: var(--bg); border: none; font-family: inherit; font-size: 0.78rem; font-weight: 600; cursor: pointer; color: var(--text-muted); transition: all 0.15s; text-align: center; }
   .tab-btn.active { background: var(--primary); color: white; }
   .tab-btn:not(.active):hover { background: var(--primary-light); }
-  @media (max-width: 600px) {
-    .kpi-grid { grid-template-columns: repeat(2, 1fr); }
-    .data-table { font-size: 0.72rem; }
-    .data-table th, .data-table td { padding: 6px 4px; }
-  }
+  @media (max-width: 600px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } .data-table { font-size: 0.72rem; } }
 </style>
 </head>
 <body>
-
 <div class="header">
   <h1>Control Diario — RRHH</h1>
   <small>Supervisión y aprobación de cargas diarias</small>
 </div>
-
-<div id="loadingOverlay" class="loading-overlay">
-  <div><span class="spinner"></span> Cargando datos...</div>
-</div>
-
+<div id="loadingOverlay" class="loading-overlay"><div><span class="spinner"></span> Cargando datos...</div></div>
 <div class="container">
-
-  <!-- Controles -->
   <div class="card">
     <div class="controls-row">
-      <div class="control-group" style="flex:1.2">
-        <label for="fecha">Fecha</label>
-        <input type="date" id="fecha">
-      </div>
-      <div class="control-group">
-        <label for="planta">Planta</label>
-        <select id="planta"><option value="">Todas</option></select>
-      </div>
-      <div class="control-group">
-        <label for="aprobador">Aprobador</label>
-        <input type="text" id="aprobador" placeholder="Tu nombre">
-      </div>
-      <div class="control-group" style="flex:0.5; align-self:end;">
-        <button class="btn btn-primary btn-sm" onclick="cargarDia()" style="width:100%">Consultar</button>
-      </div>
+      <div class="control-group" style="flex:1.2"><label for="fecha">Fecha</label><input type="date" id="fecha"></div>
+      <div class="control-group"><label for="planta">Planta</label><select id="planta"><option value="">Todas</option></select></div>
+      <div class="control-group"><label for="aprobador">Aprobador</label><input type="text" id="aprobador" placeholder="Tu nombre"></div>
+      <div class="control-group" style="flex:0.5;align-self:end"><button class="btn btn-primary btn-sm" onclick="cargarDia()" style="width:100%">Consultar</button></div>
     </div>
   </div>
 
-  <!-- Confirmación -->
+  <!-- Confirm bar -->
   <div id="confirmBar" class="confirm-bar hidden">
-    <div>
-      <div class="confirm-info" id="confirmInfo"></div>
-    </div>
-    <button class="btn btn-accent" id="btnConfirmar" onclick="confirmarAprobacion()">✓ Confirmar aprobación</button>
+    <div class="confirm-info" id="confirmInfo"></div>
+    <button class="btn btn-accent" id="btnConfirmar" onclick="confirmarAprobacion()">✓ Confirmar seleccionados</button>
   </div>
 
-  <!-- KPIs -->
   <div class="kpi-grid" id="kpiGrid" style="display:none">
     <div class="kpi"><div class="value" id="kpiPresentes">0</div><div class="label">Presentes</div></div>
     <div class="kpi danger"><div class="value" id="kpiAusentes">0</div><div class="label">Ausentes</div></div>
@@ -215,76 +128,48 @@
     <div class="kpi"><div class="value" id="kpiDestajo">$ 0</div><div class="label">Destajo</div></div>
     <div class="kpi accent"><div class="value" id="kpiTotal">$ 0</div><div class="label">Total día</div></div>
   </div>
-
-  <!-- Alertas -->
   <div id="alertsContainer"></div>
-
-  <!-- Tabs -->
   <div class="tabs" id="tabsContainer" style="display:none">
     <button class="tab-btn active" onclick="switchTab('asistencia')">Asistencia Jornales</button>
     <button class="tab-btn" onclick="switchTab('destajo')">Destajo Operarios</button>
     <button class="tab-btn" onclick="switchTab('resumen')">Resumen Empleados</button>
   </div>
 
-  <!-- Tab: Asistencia -->
   <div class="card" id="tabAsistencia" style="display:none">
-    <div class="section-header">
-      <span class="section-title">Asistencia Jornales</span>
-      <span class="section-badge" id="asisCount">0 registros</span>
-    </div>
+    <div class="section-header"><span class="section-title">Asistencia Jornales</span><span class="section-badge" id="asisCount">0</span></div>
     <div class="approve-bar">
-      <label><input type="checkbox" id="checkAllAsis" onchange="toggleCheckAll('asis', this.checked)"> Aprobar todos</label>
-      <span class="approve-status" id="asisApproveStatus">0 / 0 aprobados</span>
+      <label><input type="checkbox" id="checkAllAsis" onchange="toggleCheckAll('asis', this.checked)"> Seleccionar pendientes</label>
+      <span class="approve-status" id="asisApproveStatus"></span>
     </div>
-    <div id="asisTableContainer"><p class="empty-msg">Seleccioná una fecha y hacé click en Consultar</p></div>
+    <div id="asisTableContainer"><p class="empty-msg">Seleccioná una fecha</p></div>
   </div>
-
-  <!-- Tab: Destajo -->
   <div class="card" id="tabDestajo" style="display:none">
-    <div class="section-header">
-      <span class="section-title">Destajo Operarios</span>
-      <span class="section-badge" id="destCount">0 registros</span>
-    </div>
+    <div class="section-header"><span class="section-title">Destajo Operarios</span><span class="section-badge" id="destCount">0</span></div>
     <div class="approve-bar">
-      <label><input type="checkbox" id="checkAllDest" onchange="toggleCheckAll('dest', this.checked)"> Aprobar todos</label>
-      <span class="approve-status" id="destApproveStatus">0 / 0 aprobados</span>
+      <label><input type="checkbox" id="checkAllDest" onchange="toggleCheckAll('dest', this.checked)"> Seleccionar pendientes</label>
+      <span class="approve-status" id="destApproveStatus"></span>
     </div>
-    <div id="destTableContainer"><p class="empty-msg">Seleccioná una fecha y hacé click en Consultar</p></div>
+    <div id="destTableContainer"><p class="empty-msg">Seleccioná una fecha</p></div>
   </div>
-
-  <!-- Tab: Resumen -->
   <div class="card" id="tabResumen" style="display:none">
-    <div class="section-header">
-      <span class="section-title">Resumen por Empleado</span>
-      <span class="section-badge" id="resumenCount">0 empleados</span>
-    </div>
-    <div id="resumenTableContainer"><p class="empty-msg">Seleccioná una fecha y hacé click en Consultar</p></div>
+    <div class="section-header"><span class="section-title">Resumen por Empleado</span><span class="section-badge" id="resumenCount">0</span></div>
+    <div id="resumenTableContainer"><p class="empty-msg">Seleccioná una fecha</p></div>
   </div>
-
-  <a class="nav-link" href="RRHH_Jornales.html">← Ir a Asistencia Jornaleros</a>
-  <a class="nav-link" href="productividad.html">← Ir a Destajo Operarios</a>
+  <a class="nav-link" href="RRHH_Jornales.html">← Asistencia Jornaleros</a>
+  <a class="nav-link" href="productividad.html">← Destajo Operarios</a>
 </div>
-
 <div class="toast" id="toast"></div>
 
 <script>
 const API = 'https://script.google.com/macros/s/AKfycbzud3BqEJzJPVy4ehTnfOH_m_DfQv05Arx1aEhEgYEUz1V0cKZb0rwSU1ZjR8ZbIECN/exec';
 
-let allAsistencia = [];
-let allDestajo = [];
-let allAprobaciones = [];
-let filteredAsis = [];
-let filteredDest = [];
+let allAsistencia = [], allDestajo = [], approvedIds = new Set();
+let filteredAsis = [], filteredDest = [];
+let sortedAsis = [], sortedDest = [];
 
 document.getElementById('fecha').value = new Date().toISOString().slice(0, 10);
+document.getElementById('aprobador').value = localStorage.getItem('rrhh_aprobador') || '';
 
-// Recuperar nombre del aprobador del localStorage (solo para comodidad)
-const savedAprobador = localStorage.getItem('rrhh_aprobador') || '';
-document.getElementById('aprobador').value = savedAprobador;
-
-// ============================================================
-//  API
-// ============================================================
 async function fetchSheet(sheet) {
   const url = `${API}?action=get&sheet=${encodeURIComponent(sheet)}&_=${Date.now()}`;
   const resp = await fetch(url);
@@ -306,64 +191,45 @@ async function postBatch(sheet, rows) {
   return { ok: true };
 }
 
-// ============================================================
-//  INIT
-// ============================================================
 async function init() {
   try {
-    const [asis, dest, aprob] = await Promise.all([
+    let aprobData = [];
+    const [asis, dest] = await Promise.all([
       fetchSheet('ASISTENCIA JORNALES'),
-      fetchSheet('DESTAJO'),
-      fetchSheet('APROBACIONES').catch(() => ({ data: [] }))
+      fetchSheet('DESTAJO')
     ]);
+    try { const ap = await fetchSheet('APROBACIONES'); aprobData = ap.slice(1).filter(r => r[0]); } catch(e) {}
 
-    allAsistencia = (Array.isArray(asis) ? asis : []).slice(1).filter(r => r[0]);
-    allDestajo = (Array.isArray(dest) ? dest : []).slice(1).filter(r => r[0]);
-    // APROBACIONES puede no existir aún
-    if (Array.isArray(aprob)) {
-      allAprobaciones = aprob.slice(1).filter(r => r[0]);
-    } else if (aprob && Array.isArray(aprob.data)) {
-      allAprobaciones = aprob.data.slice(1).filter(r => r[0]);
-    } else {
-      allAprobaciones = [];
-    }
+    allAsistencia = asis.slice(1).filter(r => r[0]);
+    allDestajo = dest.slice(1).filter(r => r[0]);
 
-    const plantas = [...new Set(allAsistencia.map(r => String(r[4] || '').trim()).filter(Boolean))].sort();
+    // Build set of approved record IDs (col A = ID_Registro)
+    approvedIds = new Set(aprobData.map(r => String(r[0])));
+
+    const plantas = [...new Set(allAsistencia.map(r => String(r[4]||'').trim()).filter(Boolean))].sort();
     const sel = document.getElementById('planta');
-    plantas.forEach(p => {
-      const opt = document.createElement('option');
-      opt.value = p; opt.textContent = p;
-      sel.appendChild(opt);
-    });
+    plantas.forEach(p => { const o = document.createElement('option'); o.value = p; o.textContent = p; sel.appendChild(o); });
 
     document.getElementById('loadingOverlay').style.display = 'none';
     cargarDia();
   } catch (e) {
-    document.getElementById('loadingOverlay').innerHTML =
-      `<div style="color:var(--danger)">Error: ${e.message}<br><small>Recargá la página</small></div>`;
+    document.getElementById('loadingOverlay').innerHTML = `<div style="color:var(--danger)">Error: ${e.message}</div>`;
   }
 }
 init();
 
-// ============================================================
-//  CARGAR DIA
-// ============================================================
 function cargarDia() {
   const fecha = document.getElementById('fecha').value;
   const planta = document.getElementById('planta').value;
   if (!fecha) return;
 
   filteredAsis = allAsistencia.filter(r => {
-    const f = String(r[1] || '').trim().slice(0, 10);
+    const f = String(r[1]||'').trim().slice(0,10);
     if (f !== fecha) return false;
-    if (planta && String(r[4] || '').trim().toUpperCase() !== planta.toUpperCase()) return false;
+    if (planta && String(r[4]||'').trim().toUpperCase() !== planta.toUpperCase()) return false;
     return true;
   });
-
-  filteredDest = allDestajo.filter(r => {
-    const f = String(r[1] || '').trim().slice(0, 10);
-    return f === fecha;
-  });
+  filteredDest = allDestajo.filter(r => String(r[1]||'').trim().slice(0,10) === fecha);
 
   renderKPIs();
   renderAlerts();
@@ -377,152 +243,47 @@ function cargarDia() {
   switchTab('asistencia');
 }
 
-// ============================================================
-//  KPIs
-// ============================================================
 function fmtMoney(n) { return '$ ' + Math.round(n).toLocaleString('es-AR'); }
 
 function renderKPIs() {
-  const presentes = filteredAsis.filter(r => String(r[7] || '').toUpperCase() === 'SI').length;
-  const ausentes = filteredAsis.filter(r => String(r[8] || '').toUpperCase() === 'SI').length;
-  const totalJornales = filteredAsis.reduce((s, r) => s + (parseFloat(r[13]) || 0), 0);
-  const totalDestajo = filteredDest.reduce((s, r) => s + (parseFloat(r[6]) || 0), 0);
-  document.getElementById('kpiPresentes').textContent = presentes;
-  document.getElementById('kpiAusentes').textContent = ausentes;
-  document.getElementById('kpiJornales').textContent = fmtMoney(totalJornales);
-  document.getElementById('kpiDestajo').textContent = fmtMoney(totalDestajo);
-  document.getElementById('kpiTotal').textContent = fmtMoney(totalJornales + totalDestajo);
+  const pres = filteredAsis.filter(r => String(r[7]||'').toUpperCase() === 'SI').length;
+  const aus = filteredAsis.filter(r => String(r[8]||'').toUpperCase() === 'SI').length;
+  const totJ = filteredAsis.reduce((s,r) => s + (parseFloat(r[13])||0), 0);
+  const totD = filteredDest.reduce((s,r) => s + (parseFloat(r[6])||0), 0);
+  document.getElementById('kpiPresentes').textContent = pres;
+  document.getElementById('kpiAusentes').textContent = aus;
+  document.getElementById('kpiJornales').textContent = fmtMoney(totJ);
+  document.getElementById('kpiDestajo').textContent = fmtMoney(totD);
+  document.getElementById('kpiTotal').textContent = fmtMoney(totJ + totD);
 }
 
-// ============================================================
-//  ALERTAS
-// ============================================================
 function renderAlerts() {
-  const container = document.getElementById('alertsContainer');
-  container.innerHTML = '';
+  const c = document.getElementById('alertsContainer'); c.innerHTML = '';
   const fecha = document.getElementById('fecha').value;
   const planta = document.getElementById('planta').value;
-
-  const TODAS_PLANTAS = ['CICLO II', 'DELTA', 'ALBA', 'RECREO', 'CCP'];
-  const plantasConAsis = new Set(filteredAsis.map(r => String(r[4] || '').trim().toUpperCase()));
-
+  const TODAS = ['CICLO II','DELTA','ALBA','RECREO','CCP'];
+  const cargadas = new Set(filteredAsis.map(r => String(r[4]||'').trim().toUpperCase()));
   if (!planta) {
-    const faltantes = TODAS_PLANTAS.filter(p => !plantasConAsis.has(p));
-    if (faltantes.length > 0 && filteredAsis.length > 0) {
-      container.innerHTML += `<div class="alert alert-warning">⚠ Sin asistencia en: <strong>${faltantes.join(', ')}</strong></div>`;
-    }
+    const falt = TODAS.filter(p => !cargadas.has(p));
+    if (falt.length > 0 && filteredAsis.length > 0)
+      c.innerHTML += `<div class="alert alert-warning">⚠ Sin asistencia en: <strong>${falt.join(', ')}</strong></div>`;
   }
+  if (filteredAsis.length === 0 && filteredDest.length === 0)
+    c.innerHTML += `<div class="alert alert-danger">✗ No hay registros para ${fecha}</div>`;
+  else
+    c.innerHTML += `<div class="alert alert-success">✓ ${filteredAsis.length + filteredDest.length} registros cargados</div>`;
 
-  if (filteredAsis.length === 0 && filteredDest.length === 0) {
-    container.innerHTML += `<div class="alert alert-danger">✗ No hay registros para el ${fecha}${planta ? ' en ' + planta : ''}</div>`;
-  } else {
-    const totalRegs = filteredAsis.length + filteredDest.length;
-    container.innerHTML += `<div class="alert alert-success">✓ ${totalRegs} registros cargados para el ${fecha}${planta ? ' en ' + planta : ''}</div>`;
-  }
-
-  // Check if already approved
-  const aprobExist = getAprobacionExistente();
-  if (aprobExist) {
-    container.innerHTML += `<div class="alert alert-info">✔ Aprobado por <strong>${aprobExist[3]}</strong> el ${String(aprobExist[9]||'').slice(0, 16).replace('T', ' ')}</div>`;
-  }
+  // Count approved
+  const aprobAsis = filteredAsis.filter(r => approvedIds.has(String(r[0]))).length;
+  const aprobDest = filteredDest.filter(r => approvedIds.has(String(r[0]))).length;
+  const totalAprob = aprobAsis + aprobDest;
+  const totalRegs = filteredAsis.length + filteredDest.length;
+  if (totalAprob > 0)
+    c.innerHTML += `<div class="alert alert-info">✔ <strong>${totalAprob} / ${totalRegs}</strong> registros aprobados${totalAprob === totalRegs ? ' — <strong>TODO APROBADO</strong>' : ''}</div>`;
 }
 
-// ============================================================
-//  CONFIRMATION SYSTEM
-// ============================================================
-function getAprobacionExistente() {
-  const fecha = document.getElementById('fecha').value;
-  const planta = document.getElementById('planta').value || 'TODAS';
-  return allAprobaciones.find(r =>
-    String(r[1] || '') === fecha && String(r[2] || '').toUpperCase() === planta.toUpperCase()
-  );
-}
-
-function renderConfirmBar() {
-  const bar = document.getElementById('confirmBar');
-  const btn = document.getElementById('btnConfirmar');
-  const info = document.getElementById('confirmInfo');
-  const fecha = document.getElementById('fecha').value;
-
-  if (filteredAsis.length === 0 && filteredDest.length === 0) {
-    bar.classList.add('hidden');
-    return;
-  }
-
-  bar.classList.remove('hidden');
-
-  const aprobExist = getAprobacionExistente();
-  if (aprobExist) {
-    bar.classList.add('confirmed');
-    info.innerHTML = `<strong>✔ APROBADO</strong> por ${aprobExist[3]} — ${String(aprobExist[9]||'').slice(0, 16).replace('T', ' ')}`;
-    btn.textContent = '✓ Ya confirmado';
-    btn.disabled = true;
-  } else {
-    bar.classList.remove('confirmed');
-    const totalJ = filteredAsis.reduce((s, r) => s + (parseFloat(r[13]) || 0), 0);
-    const totalD = filteredDest.reduce((s, r) => s + (parseFloat(r[6]) || 0), 0);
-    info.innerHTML = `<strong>${filteredAsis.length}</strong> registros asistencia + <strong>${filteredDest.length}</strong> destajo = <strong>${fmtMoney(totalJ + totalD)}</strong>`;
-    btn.textContent = '✓ Confirmar aprobación';
-    btn.disabled = false;
-  }
-}
-
-async function confirmarAprobacion() {
-  const aprobador = document.getElementById('aprobador').value.trim();
-  if (!aprobador) {
-    showToast('Ingresá tu nombre en el campo Aprobador', 'error');
-    document.getElementById('aprobador').focus();
-    return;
-  }
-
-  // Guardar nombre para próximas veces
-  localStorage.setItem('rrhh_aprobador', aprobador);
-
-  const btn = document.getElementById('btnConfirmar');
-  btn.disabled = true;
-  btn.textContent = 'Guardando...';
-
-  const fecha = document.getElementById('fecha').value;
-  const planta = document.getElementById('planta').value || 'TODAS';
-  const totalAsis = filteredAsis.reduce((s, r) => s + (parseFloat(r[13]) || 0), 0);
-  const totalDest = filteredDest.reduce((s, r) => s + (parseFloat(r[6]) || 0), 0);
-  const ts = new Date().toISOString();
-
-  // ID único: fecha||planta
-  const id = fecha + '||' + planta;
-
-  // Columnas: ID, Fecha, Planta, Aprobador, Reg_Asistencia, Total_Asistencia,
-  //           Reg_Destajo, Total_Destajo, Total_General, Timestamp
-  const row = [
-    id, fecha, planta, aprobador,
-    filteredAsis.length, Math.round(totalAsis),
-    filteredDest.length, Math.round(totalDest),
-    Math.round(totalAsis + totalDest), ts
-  ];
-
-  try {
-    await postBatch('APROBACIONES', [row]);
-
-    // Agregar a cache local
-    allAprobaciones.push(row);
-
-    showToast('✓ Aprobación confirmada por ' + aprobador);
-    renderConfirmBar();
-    renderAlerts();
-  } catch (e) {
-    showToast('Error: ' + e.message, 'error');
-    btn.disabled = false;
-    btn.textContent = '✓ Confirmar aprobación';
-  }
-}
-
-// ============================================================
-//  TABS
-// ============================================================
 function switchTab(tab) {
-  document.querySelectorAll('.tab-btn').forEach((b, i) => {
-    b.classList.toggle('active', ['asistencia', 'destajo', 'resumen'][i] === tab);
-  });
+  document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', ['asistencia','destajo','resumen'][i] === tab));
   document.getElementById('tabAsistencia').style.display = tab === 'asistencia' ? '' : 'none';
   document.getElementById('tabDestajo').style.display = tab === 'destajo' ? '' : 'none';
   document.getElementById('tabResumen').style.display = tab === 'resumen' ? '' : 'none';
@@ -533,46 +294,47 @@ function switchTab(tab) {
 // ============================================================
 function renderAsistencia() {
   const container = document.getElementById('asisTableContainer');
-  document.getElementById('asisCount').textContent = filteredAsis.length + ' registros';
-  if (filteredAsis.length === 0) { container.innerHTML = '<p class="empty-msg">Sin registros de asistencia</p>'; return; }
+  document.getElementById('asisCount').textContent = filteredAsis.length + ' reg';
+  if (filteredAsis.length === 0) { container.innerHTML = '<p class="empty-msg">Sin registros</p>'; return; }
 
-  const sorted = [...filteredAsis].sort((a, b) => {
-    const pa = String(a[4] || ''), pb = String(b[4] || '');
-    return pa !== pb ? pa.localeCompare(pb) : String(a[3] || '').localeCompare(String(b[3] || ''));
+  sortedAsis = [...filteredAsis].sort((a,b) => {
+    const pa = String(a[4]||''), pb = String(b[4]||'');
+    return pa !== pb ? pa.localeCompare(pb) : String(a[3]||'').localeCompare(String(b[3]||''));
   });
 
   let html = `<div style="overflow-x:auto"><table class="data-table">
     <thead><tr><th class="check-col"></th><th>Planta</th><th>Leg</th><th>Empleado</th><th>Co</th><th>Tipo</th><th>Estado</th><th class="num">Jornal</th><th class="num">HE</th><th class="num">Total</th></tr></thead><tbody>`;
 
-  sorted.forEach((r, idx) => {
-    const presente = String(r[7] || '').toUpperCase() === 'SI';
-    const ausente = String(r[8] || '').toUpperCase() === 'SI';
-    const tipo = String(r[6] || '');
-    const isMedio = tipo === 'MEDIO_DIA';
-    const isSab = tipo === 'SABADO';
-    let rowClass = ausente ? 'ausente' : (isMedio ? 'medio' : '');
+  sortedAsis.forEach((r, idx) => {
+    const id = String(r[0]);
+    const isApproved = approvedIds.has(id);
+    const presente = String(r[7]||'').toUpperCase() === 'SI';
+    const ausente = String(r[8]||'').toUpperCase() === 'SI';
+    const tipo = String(r[6]||'');
+    const isMedio = tipo === 'MEDIO_DIA', isSab = tipo === 'SABADO';
+    let rowClass = isApproved ? 'approved' : (ausente ? 'ausente' : (isMedio ? 'medio' : ''));
     let badge = presente ? '<span class="badge badge-pres">PRES</span>' : (ausente ? '<span class="badge badge-aus">AUS</span>' : '');
     if (isMedio) badge = '<span class="badge badge-medio">½ DÍA</span>';
     if (isSab) badge = '<span class="badge badge-sab">SÁB</span>';
+    const okBadge = isApproved ? ' <span class="badge badge-ok">OK</span>' : '';
 
-    html += `<tr class="${rowClass}" data-group="asis" data-idx="${idx}">
-      <td class="check-col"><input type="checkbox" onchange="updateApproveCount('asis')"></td>
-      <td>${r[4] || ''}</td><td>${r[2] || ''}</td><td>${r[3] || ''}</td><td>${r[5] || ''}</td>
+    html += `<tr class="${rowClass}" data-group="asis" data-idx="${idx}" data-id="${id}">
+      <td class="check-col"><input type="checkbox" ${isApproved ? 'checked disabled' : ''} onchange="onCheckChange()"></td>
+      <td>${r[4]||''}</td><td>${r[2]||''}</td><td>${r[3]||''}${okBadge}</td><td>${r[5]||''}</td>
       <td>${tipo}</td><td>${badge}</td>
-      <td class="num">${Math.round(parseFloat(r[11]) || 0).toLocaleString('es-AR') || ''}</td>
-      <td class="num">${Math.round(parseFloat(r[12]) || 0).toLocaleString('es-AR') || ''}</td>
-      <td class="num"><strong>${Math.round(parseFloat(r[13]) || 0).toLocaleString('es-AR') || ''}</strong></td>
+      <td class="num">${Math.round(parseFloat(r[11])||0).toLocaleString('es-AR')}</td>
+      <td class="num">${Math.round(parseFloat(r[12])||0).toLocaleString('es-AR')}</td>
+      <td class="num"><strong>${Math.round(parseFloat(r[13])||0).toLocaleString('es-AR')}</strong></td>
     </tr>`;
   });
 
-  const totJ = sorted.reduce((s, r) => s + (parseFloat(r[11]) || 0), 0);
-  const totHE = sorted.reduce((s, r) => s + (parseFloat(r[12]) || 0), 0);
-  const totT = sorted.reduce((s, r) => s + (parseFloat(r[13]) || 0), 0);
+  const totJ = sortedAsis.reduce((s,r) => s+(parseFloat(r[11])||0), 0);
+  const totHE = sortedAsis.reduce((s,r) => s+(parseFloat(r[12])||0), 0);
+  const totT = sortedAsis.reduce((s,r) => s+(parseFloat(r[13])||0), 0);
   html += `<tr class="total-row"><td></td><td colspan="6" style="text-align:right">TOTAL</td>
     <td class="num">${Math.round(totJ).toLocaleString('es-AR')}</td>
     <td class="num">${Math.round(totHE).toLocaleString('es-AR')}</td>
-    <td class="num">${Math.round(totT).toLocaleString('es-AR')}</td>
-  </tr></tbody></table></div>`;
+    <td class="num">${Math.round(totT).toLocaleString('es-AR')}</td></tr></tbody></table></div>`;
   container.innerHTML = html;
   updateApproveCount('asis');
 }
@@ -582,24 +344,29 @@ function renderAsistencia() {
 // ============================================================
 function renderDestajo() {
   const container = document.getElementById('destTableContainer');
-  document.getElementById('destCount').textContent = filteredDest.length + ' registros';
-  if (filteredDest.length === 0) { container.innerHTML = '<p class="empty-msg">Sin registros de destajo</p>'; return; }
+  document.getElementById('destCount').textContent = filteredDest.length + ' reg';
+  if (filteredDest.length === 0) { container.innerHTML = '<p class="empty-msg">Sin registros</p>'; return; }
 
-  const sorted = [...filteredDest].sort((a, b) => String(a[3] || '').localeCompare(String(b[3] || '')));
+  sortedDest = [...filteredDest].sort((a,b) => String(a[3]||'').localeCompare(String(b[3]||'')));
 
   let html = `<div style="overflow-x:auto"><table class="data-table">
     <thead><tr><th class="check-col"></th><th>Leg</th><th>Operario</th><th>Actividad</th><th class="num">Uds</th><th class="num">Importe</th></tr></thead><tbody>`;
 
-  sorted.forEach((r, idx) => {
-    html += `<tr data-group="dest" data-idx="${idx}">
-      <td class="check-col"><input type="checkbox" onchange="updateApproveCount('dest')"></td>
-      <td>${r[2] || ''}</td><td>${r[3] || ''}</td><td>${r[4] || ''}</td>
-      <td class="num">${r[5] || ''}</td>
-      <td class="num"><strong>${Math.round(parseFloat(r[6]) || 0).toLocaleString('es-AR')}</strong></td>
+  sortedDest.forEach((r, idx) => {
+    const id = String(r[0]);
+    const isApproved = approvedIds.has(id);
+    const rowClass = isApproved ? 'approved' : '';
+    const okBadge = isApproved ? ' <span class="badge badge-ok">OK</span>' : '';
+
+    html += `<tr class="${rowClass}" data-group="dest" data-idx="${idx}" data-id="${id}">
+      <td class="check-col"><input type="checkbox" ${isApproved ? 'checked disabled' : ''} onchange="onCheckChange()"></td>
+      <td>${r[2]||''}</td><td>${r[3]||''}${okBadge}</td><td>${r[4]||''}</td>
+      <td class="num">${r[5]||''}</td>
+      <td class="num"><strong>${Math.round(parseFloat(r[6])||0).toLocaleString('es-AR')}</strong></td>
     </tr>`;
   });
 
-  const totD = sorted.reduce((s, r) => s + (parseFloat(r[6]) || 0), 0);
+  const totD = sortedDest.reduce((s,r) => s+(parseFloat(r[6])||0), 0);
   html += `<tr class="total-row"><td></td><td colspan="4" style="text-align:right">TOTAL</td>
     <td class="num">${Math.round(totD).toLocaleString('es-AR')}</td></tr></tbody></table></div>`;
   container.innerHTML = html;
@@ -607,82 +374,173 @@ function renderDestajo() {
 }
 
 // ============================================================
-//  RESUMEN POR EMPLEADO
+//  RESUMEN
 // ============================================================
 function renderResumen() {
   const container = document.getElementById('resumenTableContainer');
   const byEmp = {};
-
   filteredAsis.forEach(r => {
-    const n = String(r[3] || '').trim(); if (!n) return;
-    if (!byEmp[n]) byEmp[n] = { planta: String(r[4] || ''), jornales: 0, destajo: 0, estado: 'PRES' };
+    const n = String(r[3]||'').trim(); if (!n) return;
+    if (!byEmp[n]) byEmp[n] = { planta: String(r[4]||''), jornales: 0, destajo: 0, estado: 'PRES' };
     byEmp[n].jornales += parseFloat(r[13]) || 0;
-    if (String(r[8] || '').toUpperCase() === 'SI') byEmp[n].estado = 'AUS';
-    if (String(r[6] || '').toUpperCase() === 'MEDIO_DIA') byEmp[n].estado = '½ DÍA';
+    if (String(r[8]||'').toUpperCase() === 'SI') byEmp[n].estado = 'AUS';
+    if (String(r[6]||'').toUpperCase() === 'MEDIO_DIA') byEmp[n].estado = '½ DÍA';
   });
   filteredDest.forEach(r => {
-    const n = String(r[3] || '').trim(); if (!n) return;
+    const n = String(r[3]||'').trim(); if (!n) return;
     if (!byEmp[n]) byEmp[n] = { planta: 'CICLO II', jornales: 0, destajo: 0, estado: '—' };
     byEmp[n].destajo += parseFloat(r[6]) || 0;
   });
-
-  const emps = Object.entries(byEmp).sort((a, b) => a[0].localeCompare(b[0]));
-  document.getElementById('resumenCount').textContent = emps.length + ' empleados';
+  const emps = Object.entries(byEmp).sort((a,b) => a[0].localeCompare(b[0]));
+  document.getElementById('resumenCount').textContent = emps.length + ' emp';
   if (emps.length === 0) { container.innerHTML = '<p class="empty-msg">Sin datos</p>'; return; }
-
   let html = `<div style="overflow-x:auto"><table class="data-table">
     <thead><tr><th>Empleado</th><th>Planta</th><th>Estado</th><th class="num">Jornales</th><th class="num">Destajo</th><th class="num">Total</th></tr></thead><tbody>`;
-
-  let totJ = 0, totD = 0;
-  emps.forEach(([nombre, d]) => {
-    const total = d.jornales + d.destajo; totJ += d.jornales; totD += d.destajo;
+  let tJ = 0, tD = 0;
+  emps.forEach(([n, d]) => {
+    const t = d.jornales + d.destajo; tJ += d.jornales; tD += d.destajo;
     const bc = d.estado === 'AUS' ? 'badge-aus' : (d.estado === '½ DÍA' ? 'badge-medio' : 'badge-pres');
-    html += `<tr><td><strong>${nombre}</strong></td><td>${d.planta}</td>
-      <td><span class="badge ${bc}">${d.estado}</span></td>
+    html += `<tr><td><strong>${n}</strong></td><td>${d.planta}</td><td><span class="badge ${bc}">${d.estado}</span></td>
       <td class="num">${d.jornales ? Math.round(d.jornales).toLocaleString('es-AR') : ''}</td>
       <td class="num">${d.destajo ? Math.round(d.destajo).toLocaleString('es-AR') : ''}</td>
-      <td class="num"><strong>${Math.round(total).toLocaleString('es-AR')}</strong></td></tr>`;
+      <td class="num"><strong>${Math.round(t).toLocaleString('es-AR')}</strong></td></tr>`;
   });
   html += `<tr class="total-row"><td colspan="3" style="text-align:right">TOTAL</td>
-    <td class="num">${Math.round(totJ).toLocaleString('es-AR')}</td>
-    <td class="num">${Math.round(totD).toLocaleString('es-AR')}</td>
-    <td class="num">${Math.round(totJ + totD).toLocaleString('es-AR')}</td></tr></tbody></table></div>`;
+    <td class="num">${Math.round(tJ).toLocaleString('es-AR')}</td><td class="num">${Math.round(tD).toLocaleString('es-AR')}</td>
+    <td class="num">${Math.round(tJ+tD).toLocaleString('es-AR')}</td></tr></tbody></table></div>`;
   container.innerHTML = html;
 }
 
 // ============================================================
-//  APPROVAL CHECKBOXES
+//  APPROVAL SYSTEM
 // ============================================================
 function toggleCheckAll(group, checked) {
-  document.querySelectorAll(`tr[data-group="${group}"] input[type="checkbox"]`).forEach(cb => {
+  // Solo toggle los que NO están ya aprobados
+  document.querySelectorAll(`tr[data-group="${group}"] input[type="checkbox"]:not(:disabled)`).forEach(cb => {
     cb.checked = checked;
     cb.closest('tr').classList.toggle('checked', checked);
   });
-  updateApproveCount(group);
+  onCheckChange();
+}
+
+function onCheckChange() {
+  updateApproveCount('asis');
+  updateApproveCount('dest');
+  renderConfirmBar();
 }
 
 function updateApproveCount(group) {
   const all = document.querySelectorAll(`tr[data-group="${group}"] input[type="checkbox"]`);
   const checked = document.querySelectorAll(`tr[data-group="${group}"] input[type="checkbox"]:checked`);
-  all.forEach(cb => cb.closest('tr').classList.toggle('checked', cb.checked));
-  const total = all.length, done = checked.length;
+  const disabled = document.querySelectorAll(`tr[data-group="${group}"] input[type="checkbox"]:disabled`);
+  all.forEach(cb => {
+    const tr = cb.closest('tr');
+    if (!cb.disabled) tr.classList.toggle('checked', cb.checked);
+  });
+  const total = all.length, done = checked.length, already = disabled.length;
   const el = document.getElementById(group + 'ApproveStatus');
-  el.textContent = `${done} / ${total} aprobados`;
+  el.textContent = `${already} aprobados · ${done - already} nuevos seleccionados · ${total - done} pendientes`;
   el.className = 'approve-status' + (done === total && total > 0 ? ' done' : '');
   const ca = document.getElementById(group === 'asis' ? 'checkAllAsis' : 'checkAllDest');
-  ca.checked = done === total && total > 0;
-  ca.indeterminate = done > 0 && done < total;
+  const pendientes = total - already;
+  const nuevosChecked = done - already;
+  ca.checked = pendientes > 0 && nuevosChecked === pendientes;
+  ca.indeterminate = nuevosChecked > 0 && nuevosChecked < pendientes;
 }
 
-// ============================================================
-//  TOAST
-// ============================================================
+function getNewlyCheckedIds(group) {
+  const rows = document.querySelectorAll(`tr[data-group="${group}"] input[type="checkbox"]:checked:not(:disabled)`);
+  return Array.from(rows).map(cb => ({
+    id: cb.closest('tr').dataset.id,
+    idx: parseInt(cb.closest('tr').dataset.idx)
+  }));
+}
+
+function renderConfirmBar() {
+  const bar = document.getElementById('confirmBar');
+  const info = document.getElementById('confirmInfo');
+  const btn = document.getElementById('btnConfirmar');
+
+  const newAsis = getNewlyCheckedIds('asis');
+  const newDest = getNewlyCheckedIds('dest');
+  const totalNew = newAsis.length + newDest.length;
+
+  if (filteredAsis.length === 0 && filteredDest.length === 0) { bar.classList.add('hidden'); return; }
+
+  bar.classList.remove('hidden');
+
+  if (totalNew === 0) {
+    info.innerHTML = 'Seleccioná registros para aprobar';
+    btn.disabled = true;
+    btn.textContent = '✓ Confirmar seleccionados';
+  } else {
+    info.innerHTML = `<strong>${totalNew}</strong> registro${totalNew !== 1 ? 's' : ''} nuevo${totalNew !== 1 ? 's' : ''} para aprobar`;
+    btn.disabled = false;
+    btn.textContent = `✓ Confirmar ${totalNew} seleccionados`;
+  }
+}
+
+async function confirmarAprobacion() {
+  const aprobador = document.getElementById('aprobador').value.trim();
+  if (!aprobador) {
+    showToast('Ingresá tu nombre en Aprobador', 'error');
+    document.getElementById('aprobador').focus();
+    return;
+  }
+  localStorage.setItem('rrhh_aprobador', aprobador);
+
+  const btn = document.getElementById('btnConfirmar');
+  btn.disabled = true;
+  btn.textContent = 'Guardando...';
+
+  const fecha = document.getElementById('fecha').value;
+  const ts = new Date().toISOString();
+  const rows = [];
+
+  // Asistencia: cada registro aprobado → 1 fila en APROBACIONES
+  getNewlyCheckedIds('asis').forEach(({ id, idx }) => {
+    const r = sortedAsis[idx];
+    rows.push([
+      id, fecha, 'ASISTENCIA', String(r[3]||''), String(r[4]||''), aprobador,
+      Math.round(parseFloat(r[13])||0), ts
+    ]);
+  });
+
+  // Destajo
+  getNewlyCheckedIds('dest').forEach(({ id, idx }) => {
+    const r = sortedDest[idx];
+    rows.push([
+      id, fecha, 'DESTAJO', String(r[3]||''), 'CICLO II', aprobador,
+      Math.round(parseFloat(r[6])||0), ts
+    ]);
+  });
+
+  if (rows.length === 0) { btn.textContent = '✓ Confirmar seleccionados'; return; }
+
+  try {
+    await postBatch('APROBACIONES', rows);
+
+    // Agregar al set local
+    rows.forEach(r => approvedIds.add(String(r[0])));
+
+    showToast(`✓ ${rows.length} registros aprobados por ${aprobador}`);
+
+    // Re-render para marcar como aprobados
+    renderAsistencia();
+    renderDestajo();
+    renderAlerts();
+    renderConfirmBar();
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+    btn.disabled = false;
+    btn.textContent = '✓ Confirmar seleccionados';
+  }
+}
+
 function showToast(msg, type) {
   const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.className = 'toast show' + (type === 'error' ? ' error' : '');
-  clearTimeout(t._timer);
-  t._timer = setTimeout(() => t.className = 'toast', 3000);
+  t.textContent = msg; t.className = 'toast show' + (type === 'error' ? ' error' : '');
+  clearTimeout(t._timer); t._timer = setTimeout(() => t.className = 'toast', 3000);
 }
 </script>
 </body>
