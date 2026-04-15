@@ -576,6 +576,20 @@
     color: var(--danger);
     text-decoration: line-through;
   }
+  /* Medio día lun-vie (solo Robaina y Dible) */
+  .day-chip.medio-dia {
+    background: var(--accent-light);
+    border-color: var(--accent);
+    color: #8a6d10;
+  }
+  .day-chip.medio-dia::after {
+    content: '$25k ½';
+    display: block;
+    font-size: 0.55rem;
+    font-weight: 500;
+    margin-top: 1px;
+    color: #8a6d10;
+  }
   /* Sábados: chip diferenciado con estado visible */
   .day-chip.sabado {
     border-style: dashed;
@@ -855,6 +869,9 @@ function buildEmpleadosDePlanta(planta, fecha) {
     // Raimondi, Acosta y Esquivo no trabajan sábados.
     const legajosSabado = ['118', '119'];
     emp.tieneSabados = emp.usaQuincenal && emp.contratos.some(c => legajosSabado.includes(c.legajo));
+    // Media jornada lun-vie: mismos empleados que sábados (Robaina y Dible)
+    // Chips lun-vie tienen 3 estados: presente → medio día ($20k) → ausente
+    emp.tieneMedioJornada = emp.tieneSabados;
     emp.diasHabilesRef = dh;  // para mostrar en la UI
     emp.key = emp.nombre.toUpperCase().replace(/[^A-Z0-9]/g, '_');
     return emp;
@@ -1104,6 +1121,8 @@ function checkSelectAllState() {
 // Tarifa de sábados para CICLO II (se paga aparte del fijo quincenal)
 const SABADO_DIA_COMPLETO = 40000;
 const SABADO_MEDIO_DIA = 20000;
+// Tarifa de medio día lun-vie (Robaina y Dible, REEMPLAZA el jornal prorrateado del día)
+const MEDIO_DIA_LV = 25000;
 
 // Genera los chips de días de la quincena actual.
 // Lun-Vie: arrancan como PRESENTES (verde). El supervisor clickea para marcar ausencia.
@@ -1141,8 +1160,14 @@ function renderDaysChips(emp) {
       chip.className = 'day-chip sabado';
       chip.innerHTML = `Sáb<br>${i}`;
       chip.onclick = function() { toggleSabado(emp.key, fechaDia); };
+    } else if (emp.tieneMedioJornada) {
+      // Lun-Vie con opción medio día (Robaina/Dible): arranca presente
+      chip.className = 'day-chip selected';
+      chip.dataset.mediojornada = '1';
+      chip.innerHTML = `${diasNombre[dow]}<br>${i}`;
+      chip.onclick = function() { toggleDayMedio(emp.key, fechaDia); };
     } else {
-      // Lun-Vie: arranca como presente
+      // Lun-Vie normal: arranca como presente
       chip.className = 'day-chip selected';
       chip.innerHTML = `${diasNombre[dow]}<br>${i}`;
       chip.onclick = function() { toggleDay(emp.key, fechaDia); };
@@ -1167,9 +1192,14 @@ function renderDaysChips(emp) {
         }
       } else {
         const esAusente = String(regExistente[8] || '').toUpperCase() === 'SI';
+        const jornal = parseFloat(regExistente[11]) || 0;
         if (esAusente) {
           chip.classList.remove('selected');
           chip.classList.add('ausente');
+        } else if (emp.tieneMedioJornada && String(regExistente[6] || '').toUpperCase() === 'MEDIO_DIA') {
+          // Restaurar estado medio día
+          chip.classList.remove('selected');
+          chip.classList.add('medio-dia');
         }
       }
     }
@@ -1200,10 +1230,39 @@ function toggleDay(key, fecha) {
     chip.classList.add('selected');
   }
 
-  // Actualizar botón quincena completa (solo mira lun-vie)
   const btn = container.parentElement.querySelector('.btn-quincena');
   const diasSemana = container.querySelectorAll('.day-chip:not(.sabado)');
   const ausLV = Array.from(diasSemana).filter(c => c.classList.contains('ausente')).length;
+  if (btn) btn.classList.toggle('active', ausLV === 0);
+
+  updateQuincenalSummary(key);
+  updateTotales();
+}
+
+// Toggle lun-vie con medio día (Robaina/Dible):
+// presente → medio día ($20k) → ausente → presente
+function toggleDayMedio(key, fecha) {
+  const container = document.getElementById('days_' + key);
+  const chip = container.querySelector(`[data-fecha="${fecha}"]`);
+  if (!chip) return;
+
+  if (chip.classList.contains('selected')) {
+    // Presente → Medio día
+    chip.classList.remove('selected');
+    chip.classList.add('medio-dia');
+  } else if (chip.classList.contains('medio-dia')) {
+    // Medio día → Ausente
+    chip.classList.remove('medio-dia');
+    chip.classList.add('ausente');
+  } else {
+    // Ausente → Presente
+    chip.classList.remove('ausente');
+    chip.classList.add('selected');
+  }
+
+  const btn = container.parentElement.querySelector('.btn-quincena');
+  const diasSemana = container.querySelectorAll('.day-chip:not(.sabado)');
+  const ausLV = Array.from(diasSemana).filter(c => c.classList.contains('ausente') || c.classList.contains('medio-dia')).length;
   if (btn) btn.classList.toggle('active', ausLV === 0);
 
   updateQuincenalSummary(key);
@@ -1238,7 +1297,7 @@ function toggleQuincenaCompleta(key) {
   const diasSemana = container.querySelectorAll('.day-chip:not(.sabado)');
 
   diasSemana.forEach(c => {
-    c.classList.remove('ausente');
+    c.classList.remove('ausente', 'medio-dia');
     c.classList.add('selected');
   });
 
@@ -1260,23 +1319,28 @@ function updateQuincenalSummary(key) {
   const diasSemana = container.querySelectorAll('.day-chip:not(.sabado)');
   const totalLV = diasSemana.length;
   const presLV = Array.from(diasSemana).filter(c => c.classList.contains('selected')).length;
+  const medioLV = Array.from(diasSemana).filter(c => c.classList.contains('medio-dia')).length;
   const ausLV = Array.from(diasSemana).filter(c => c.classList.contains('ausente')).length;
 
   const montoQ = emp.contratos.reduce((s, c) => s + c.jornal, 0);
+  // Medio día REEMPLAZA el jornal prorrateado de ese día.
+  // Prorrateo = (días presentes completos / total días lun-vie) × monto quincenal
+  // Medio día = cantidad × $25.000 fijo
   const montoLV = totalLV > 0 ? (presLV / totalLV) * montoQ : 0;
+  const montoMedioLV = medioLV * MEDIO_DIA_LV;
 
   // Sábados: pago fijo aparte
   const sabCompletos = container.querySelectorAll('.day-chip.sab-completo').length;
   const sabMedios = container.querySelectorAll('.day-chip.sab-medio').length;
   const montoSab = (sabCompletos * SABADO_DIA_COMPLETO) + (sabMedios * SABADO_MEDIO_DIA);
 
-  const totalPres = presLV + sabCompletos + sabMedios;
+  const totalPres = presLV + medioLV + sabCompletos + sabMedios;
   const totalAus = ausLV;
 
   document.getElementById('qpres_' + key).textContent = totalPres;
   document.getElementById('qaus_' + key).textContent = totalAus;
 
-  const montoFinal = montoLV + montoSab;
+  const montoFinal = montoLV + montoMedioLV + montoSab;
   document.getElementById('qtotal_' + key).textContent = fmtMoney(montoFinal);
 
   // Botón quincena completa: solo mira lun-vie
@@ -1324,17 +1388,19 @@ function updateTotales() {
       const diasSemana = container.querySelectorAll('.day-chip:not(.sabado)');
       const totalLV = diasSemana.length;
       const presLV = Array.from(diasSemana).filter(c => c.classList.contains('selected')).length;
+      const medioLV = Array.from(diasSemana).filter(c => c.classList.contains('medio-dia')).length;
       const ausLV = Array.from(diasSemana).filter(c => c.classList.contains('ausente')).length;
       const montoQ = emp.contratos.reduce((s, c) => s + c.jornal, 0);
       const montoLV = totalLV > 0 ? (presLV / totalLV) * montoQ : 0;
+      const montoMedioLV = medioLV * MEDIO_DIA_LV;
 
       // Sábados
       const sabCompletos = container.querySelectorAll('.day-chip.sab-completo').length;
       const sabMedios = container.querySelectorAll('.day-chip.sab-medio').length;
       const montoSab = (sabCompletos * SABADO_DIA_COMPLETO) + (sabMedios * SABADO_MEDIO_DIA);
 
-      total += montoLV + montoSab;
-      pres += presLV + sabCompletos + sabMedios;
+      total += montoLV + montoMedioLV + montoSab;
+      pres += presLV + medioLV + sabCompletos + sabMedios;
       aus += ausLV;
     } else {
       const row = document.getElementById('row_' + emp.key);
@@ -1377,10 +1443,11 @@ async function guardar() {
       const totalDiasLV = diasSemana.length;
       if (totalDiasLV === 0) return;
 
-      // Solo procesar este empleado si tiene al menos 1 día presente o 1 sábado trabajado
+      // Solo procesar este empleado si tiene al menos 1 día presente/medio o 1 sábado trabajado
       const presLV = Array.from(diasSemana).filter(c => c.classList.contains('selected')).length;
+      const medioLV = Array.from(diasSemana).filter(c => c.classList.contains('medio-dia')).length;
       const sabTrabajados = container.querySelectorAll('.day-chip.sab-completo, .day-chip.sab-medio').length;
-      if (presLV === 0 && sabTrabajados === 0) return;  // no tocado, saltar
+      if (presLV === 0 && medioLV === 0 && sabTrabajados === 0) return;
 
       const allChips = container.querySelectorAll('.day-chip');
       allChips.forEach(chip => {
@@ -1408,20 +1475,38 @@ async function guardar() {
           });
         } else {
           const presente = chip.classList.contains('selected');
+          const medioDia = chip.classList.contains('medio-dia');
           const ausente = chip.classList.contains('ausente');
-          if (!presente && !ausente) return;
+          if (!presente && !medioDia && !ausente) return;
 
-          emp.contratos.forEach(contrato => {
-            const jornalCobrado = presente ? contrato.jornal / totalDiasLV : 0;
-            const id = contrato.legajo + '||' + fechaDia + '||' + contrato.company + '||' + planta;
-            rowsToSave.push([
-              id, fechaDia, contrato.legajo, emp.nombre, planta, contrato.company, contrato.tipoPago,
-              presente ? 'SI' : 'NO', ausente ? 'SI' : 'NO',
-              'NO', 0,
-              Math.round(jornalCobrado * 100) / 100, 0, Math.round(jornalCobrado * 100) / 100,
-              ua, ts
-            ]);
-          });
+          if (medioDia) {
+            // Medio día lun-vie: tarifa fija aparte, proporcional por company
+            emp.contratos.forEach(contrato => {
+              const pesoCompany = emp.contratos.length > 1
+                ? contrato.jornal / emp.contratos.reduce((s, c) => s + (c.jornal || 1), 0)
+                : 1;
+              const jornalCompany = Math.round(MEDIO_DIA_LV * pesoCompany * 100) / 100;
+              const id = contrato.legajo + '||' + fechaDia + '||' + contrato.company + '||' + planta;
+              rowsToSave.push([
+                id, fechaDia, contrato.legajo, emp.nombre, planta, contrato.company, 'MEDIO_DIA',
+                'SI', 'NO', 'NO', 0,
+                jornalCompany, 0, jornalCompany, ua, ts
+              ]);
+            });
+          } else {
+            // Presente completo o Ausente
+            emp.contratos.forEach(contrato => {
+              const jornalCobrado = presente ? contrato.jornal / totalDiasLV : 0;
+              const id = contrato.legajo + '||' + fechaDia + '||' + contrato.company + '||' + planta;
+              rowsToSave.push([
+                id, fechaDia, contrato.legajo, emp.nombre, planta, contrato.company, contrato.tipoPago,
+                presente ? 'SI' : 'NO', ausente ? 'SI' : 'NO',
+                'NO', 0,
+                Math.round(jornalCobrado * 100) / 100, 0, Math.round(jornalCobrado * 100) / 100,
+                ua, ts
+              ]);
+            });
+          }
         }
       });
     } else {
