@@ -252,7 +252,8 @@ async function fetchSheet(sheet) {
 }
 
 async function deleteRecord(sheet, id) {
-  const url = API + '?action=delete&sheet=' + encodeURIComponent(sheet) + '&id=' + encodeURIComponent(id) + '&_=' + Date.now();
+  const payload = JSON.stringify({ sheet, id });
+  const url = API + '?action=delete&data=' + encodeURIComponent(payload) + '&_=' + Date.now();
   const r = await fetch(url); const j = await r.json();
   if (!j.ok) throw new Error(j.error || 'Error al eliminar');
   return j;
