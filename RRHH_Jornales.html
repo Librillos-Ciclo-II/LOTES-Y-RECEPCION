@@ -154,6 +154,45 @@
       Si hay 40 filas, hace 3 llamadas secuenciales de 15+15+10.
       El botón muestra progreso: "Guardando 15 de 40..."
 
+  v1.9  2026-04-16  Medio día lun-vie para Robaina y Dible
+    - Los chips de lunes a viernes de Robaina (118) y Dible (119)
+      ahora tienen 3 estados: presente → medio día → ausente.
+    - Medio día lun-vie: $25.000 fijo, REEMPLAZA el prorrateo del
+      día (no se suma). Tipo_Pago='MEDIO_DIA' al guardar.
+    - Nueva constante MEDIO_DIA_LV = 25000.
+    - Nueva función toggleDayMedio() para el ciclo de 3 estados.
+    - Nueva propiedad emp.tieneMedioJornada (mismos legajos que sábados).
+    - CSS: chip medio-dia con fondo amarillo y label "$25k ½".
+    - updateQuincenalSummary y updateTotales incluyen montoMedioLV.
+    - guardar(): días medio-dia generan filas con Tipo_Pago='MEDIO_DIA'.
+    - toggleQuincenaCompleta() también limpia estado medio-dia.
+    - Restauración de estado al cargar detecta MEDIO_DIA en col 6.
+
+  v2.0  2026-04-16  Toggle quincena + rango personalizado
+    - "✓ Quincena completa" ahora es un toggle real: si todos los
+      lun-vie están presentes, un click los pone todos ausentes.
+      Si hay algún ausente/medio-dia, los pone todos presentes.
+    - Nuevo checkbox "Usar rango personalizado de quincena" visible
+      solo cuando la planta tiene empleados FIJO_QUINCENAL.
+    - Dos datepickers (Desde / Hasta) que permiten definir un rango
+      libre de fechas (ej: 31/03 a 15/04 para quincenas que cruzan mes).
+    - renderDaysChips() refactorizado: usa fechasDelRango (array de Date)
+      en vez de for loop con índices. Soporta rango custom y automático.
+    - diasHabilesQuincena() actualizada: si hay rango custom activo, cuenta
+      los días hábiles de ese rango (para prorrateo correcto).
+    - Los datepickers se pre-cargan con el rango automático de la quincena
+      al activar el checkbox por primera vez.
+
+  v2.1  2026-04-16  Yañez en panel quincenal con chips completos
+    - YAÑEZ XIMENA PAOLA (138) ahora usa el panel quincenal de CICLO II
+      con chips de lun-vie + sábados + medio día, igual que Robaina/Dible.
+    - Nueva constante legajosQuincenalForzado = ['138'] para empleados
+      DIARIO que igualmente usan el panel quincenal.
+    - Su jornal DIARIO ($36.363,36/día) se mantiene sin cambios: cada día
+      presente paga el jornal completo (no se prorratea como FIJO_QUINCENAL).
+    - Fix en updateQuincenalSummary/updateTotales/guardar: diferencia entre
+      DIARIO (jornal × días presentes) y FIJO_QUINCENAL (monto / totalDiasLV).
+
   ============================================================
 -->
 <style>
@@ -901,13 +940,15 @@ function buildEmpleadosDePlanta(planta, fecha) {
     // Modo quincenal (panel de días) solo aplica para CICLO II.
     // Las demás plantas (ALBA, etc.) aunque sean FIJO_QUINCENAL usan el modo
     // diario normal con prorrateo — el supervisor carga día por día.
-    emp.usaQuincenal = emp.esFijoQuincenal && emp.planta === 'CICLO II';
-    // Sábados solo aplican a Robaina (118) y Dible (119) en Ciclo II.
-    // Raimondi, Acosta y Esquivo no trabajan sábados.
-    const legajosSabado = ['118', '119'];
+    // v2.1: Yañez (138) es DIARIO pero usa panel quincenal como Robaina/Dible
+    const legajosQuincenalForzado = ['138'];
+    const forzarQuincenal = emp.planta === 'CICLO II' && emp.contratos.some(c => legajosQuincenalForzado.includes(c.legajo));
+    emp.usaQuincenal = (emp.esFijoQuincenal && emp.planta === 'CICLO II') || forzarQuincenal;
+    // Sábados y medio día lun-vie: Robaina (118), Dible (119) y Yañez (138)
+    const legajosSabado = ['118', '119', '138'];
     emp.tieneSabados = emp.usaQuincenal && emp.contratos.some(c => legajosSabado.includes(c.legajo));
-    // Media jornada lun-vie: mismos empleados que sábados (Robaina y Dible)
-    // Chips lun-vie tienen 3 estados: presente → medio día ($20k) → ausente
+    // Media jornada lun-vie: mismos empleados que sábados
+    // Chips lun-vie tienen 3 estados: presente → medio día ($25k) → ausente
     emp.tieneMedioJornada = emp.tieneSabados;
     emp.diasHabilesRef = dh;  // para mostrar en la UI
     emp.key = emp.nombre.toUpperCase().replace(/[^A-Z0-9]/g, '_');
@@ -1401,10 +1442,13 @@ function updateQuincenalSummary(key) {
   const ausLV = Array.from(diasSemana).filter(c => c.classList.contains('ausente')).length;
 
   const montoQ = emp.contratos.reduce((s, c) => s + c.jornal, 0);
-  // Medio día REEMPLAZA el jornal prorrateado de ese día.
-  // Prorrateo = (días presentes completos / total días lun-vie) × monto quincenal
-  // Medio día = cantidad × $25.000 fijo
-  const montoLV = totalLV > 0 ? (presLV / totalLV) * montoQ : 0;
+  // DIARIO: jornal completo × días presentes
+  // FIJO_QUINCENAL: monto quincenal prorrateado = (presentes / total) × monto
+  const esDiario = emp.contratos.some(c => c.tipoPago === 'DIARIO');
+  const montoLV = esDiario
+    ? presLV * montoQ
+    : (totalLV > 0 ? (presLV / totalLV) * montoQ : 0);
+  // Medio día: $25.000 fijo, reemplaza el jornal del día
   const montoMedioLV = medioLV * MEDIO_DIA_LV;
 
   // Sábados: pago fijo aparte
@@ -1469,7 +1513,10 @@ function updateTotales() {
       const medioLV = Array.from(diasSemana).filter(c => c.classList.contains('medio-dia')).length;
       const ausLV = Array.from(diasSemana).filter(c => c.classList.contains('ausente')).length;
       const montoQ = emp.contratos.reduce((s, c) => s + c.jornal, 0);
-      const montoLV = totalLV > 0 ? (presLV / totalLV) * montoQ : 0;
+      const esDiario = emp.contratos.some(c => c.tipoPago === 'DIARIO');
+      const montoLV = esDiario
+        ? presLV * montoQ
+        : (totalLV > 0 ? (presLV / totalLV) * montoQ : 0);
       const montoMedioLV = medioLV * MEDIO_DIA_LV;
 
       // Sábados
@@ -1574,7 +1621,10 @@ async function guardar() {
           } else {
             // Presente completo o Ausente
             emp.contratos.forEach(contrato => {
-              const jornalCobrado = presente ? contrato.jornal / totalDiasLV : 0;
+              // DIARIO: jornal completo por día presente
+              // FIJO_QUINCENAL: monto quincenal prorrateado por totalDiasLV
+              const esDiario = contrato.tipoPago === 'DIARIO';
+              const jornalCobrado = presente ? (esDiario ? contrato.jornal : contrato.jornal / totalDiasLV) : 0;
               const id = contrato.legajo + '||' + fechaDia + '||' + contrato.company + '||' + planta;
               rowsToSave.push([
                 id, fechaDia, contrato.legajo, emp.nombre, planta, contrato.company, contrato.tipoPago,
