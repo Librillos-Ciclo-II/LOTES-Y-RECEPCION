@@ -1,68 +1,18 @@
 <!--
-=============================================================
-  SANTA FAZ — FORMULARIO BETA
-  Repo: librillos-ciclo-ii/LOTES-Y-RECEPCION
-  URL:  https://librillos-ciclo-ii.github.io/LOTES-Y-RECEPCION/beta.html
-  Apps Script Beta: AKfycbyUriV9ehnNUCpIbZZkRVfXEMBTKjLRYhOfAD4hSa-kKF3XJc5vQdClxU1dOSDfLM_A
-=============================================================
+SANTA FAZ — FORMULARIO BETA v1.4
+URL: https://librillos-ciclo-ii.github.io/LOTES-Y-RECEPCION/beta.html
+Apps Script Beta: AKfycbyUriV9ehnNUCpIbZZkRVfXEMBTKjLRYhOfAD4hSa-kKF3XJc5vQdClxU1dOSDfLM_A
 
-  CHANGELOG
-  ---------
-
-  v1.0 — Base productivo
-    - Tab 1: Recepción MP (frigorífico, fecha, unidades, tambores, comentarios)
-    - Tab 2: Registro de lote clasificado (categorías AAA-D, kgs, observaciones)
-    - Validación duplicados por Frigorifico+Fecha
-    - Lotes parciales con barra de progreso
-    - User Agent capturado silenciosamente
-
-  v1.1 — Performance (beta)
-    - Endpoint get_all: una sola llamada trae RECEPCIONES + LOTES + CONFIG
-    - Cache separado cacheTsRec / cacheTsLot (TTL 60s independientes)
-    - invalidateCache('rec'/'lot'/'all') selectivo
-    - initHeaders corre solo una vez (_headersChecked flag)
-    - f2Buscar usa Promise.all en paralelo
-    - Fondo celeste + banner BETA para distinguir del productivo
-
-  v1.2 — Modificación T+1
-    - Botón "Modificar recepción del día anterior" en Tab 1
-    - Permite cambiar Unidades, Tambores y Comentarios hasta 48hs del registro
-    - Si hay lotes parciales, actualiza Total_Lote automáticamente
-    - Acción update_recepcion + update_total_lote en Apps Script
-
-  v1.3 — Cierre con diferencia
-    - Botón "Cerrar lote con diferencia" para faltantes Y sobrantes
-    - Hasta 0.5%: confirmación simple
-    - 0.5%-5%: contraseña Supervisor (CONFIG B1)
-    - Más de 5%: contraseña Administrador (CONFIG B2)
-    - Contraseñas configurables en solapa CONFIG del Google Sheet
-
-  v1.4 — FCL Tracking + Fixes  ← VERSIÓN ACTUAL
-    - FIX: renderLista usa cache de initHeaders (no fuerza 2do fetch)
-    - FIX: initHeaders con fallback a llamadas individuales si get_all falla
-    - FIX: manejo de errores visible en lugar de "Cargando..." infinito
-    - Card verde en Tab 2 mostrando FCL actual, % y kgs restantes
-    - Cálculo automático: FCL = FCL_NUM_INICIO + floor(kgs_acum / capacidad)
-    - Parámetros en CONFIG del Google Sheet (filas 4-7):
-        B4=FCL_NUM_INICIO(11) B5=FCL_FECHA_INICIO(2026-04-13)
-        B6=FCL_KGS_INICIO(13880) B7=FCL_CAPACIDAD_KG(28000)
-    - FCL se graba en LOTES al cerrar batch (columna FCL)
-    - FIX: renderLotesRecientes duplicada eliminada (rompía Tab 2)
-    - FIX: showTab ahora llama renderFCLCard al abrir Tab 2
-    - Card verde en Tab 2 mostrando FCL actual, % y kgs restantes
-    - Cálculo automático: FCL = FCL_NUM_INICIO + floor(kgs_acum / capacidad)
-    - Parámetros configurables en CONFIG (filas 4-7):
-        B4 = FCL_NUM_INICIO   (default: 11)
-        B5 = FCL_FECHA_INICIO (default: 2026-04-13)
-        B6 = FCL_KGS_INICIO   (default: 13880)
-        B7 = FCL_CAPACIDAD_KG (default: 28000)
-    - FCL se graba en columna FCL de la solapa LOTES al cerrar un batch
-    - Barra de progreso: verde <70% / naranja 70-90% / rojo >90%
-
-  PRÓXIMO
-    - Pasar FCL validado a productivo
-    - Integrar FCL en LOTES_Nuevo.xlsx (columna nueva)
-=============================================================
+CHANGELOG
+  v1.0  Base productivo (Tab1 recepcion, Tab2 lotes, validaciones)
+  v1.1  Cierre con diferencia (0.5% confirmacion, 0.5-5% supervisor, >5% admin)
+  v1.2  Modificacion T+1 de recepciones
+  v1.3  Performance: apiGetAll, cache separado TTL 60s
+  v1.4  FCL Tracking: card con FCL actual, %, kgs restantes
+        CONFIG rows 4-7: FCL_NUM_INICIO(11) FCL_FECHA_INICIO(2026-04-13)
+                         FCL_KGS_INICIO(13880) FCL_CAPACIDAD_KG(28000)
+        FCL grabado en col LOTES al cerrar batch
+        Beta: fondo celeste + banner version
 -->
 <!DOCTYPE html>
 <html lang="es">
@@ -121,9 +71,7 @@ input:focus,select:focus{outline:none;border-color:#0078d4}
 </style>
 </head>
 <body style="background:#e0f2fe">
-<div style="background:#0284c7;color:#fff;text-align:center;padding:6px;font-size:13px;font-weight:600;letter-spacing:1px;position:sticky;top:0;z-index:999">
-  ENTORNO BETA v1.4 — los cambios se guardan en el Sheet real
-</div>
+<div style="background:#0284c7;color:#fff;text-align:center;padding:6px;font-size:13px;font-weight:600;letter-spacing:1px;position:sticky;top:0;z-index:999">ENTORNO BETA v1.4 — los cambios se guardan en el Sheet real</div>
 <div class="app">
 
 <div class="nav">
@@ -314,7 +262,6 @@ input:focus,select:focus{outline:none;border-color:#0078d4}
     </div>
 
     <button class="btn-main" id="f2-btn" onclick="f2GuardarConControl()" disabled style="display:none">Guardar</button>
-    <button class="btn-sec" id="f2-btn-forzar" onclick="f2ForzarCierre()" style="display:none;margin-top:8px;color:#d97706;border-color:#fde68a">Cerrar lote con diferencia</button>
     <button class="btn-sec" id="f2-btn-forzar" onclick="f2ForzarCierre()" style="display:none;margin-top:8px;color:#d97706;border-color:#fde68a">
       Cerrar lote con diferencia
     </button>
@@ -325,7 +272,6 @@ input:focus,select:focus{outline:none;border-color:#0078d4}
     <div id="f2-resumen-items"><p style="font-size:12px;color:#999">Cargando...</p></div>
   </div>
 
-  <div class="card" id="f2-resumen-card" style="margin-top:8px;display:none"><p style="font-size:13px;font-weight:600;margin-bottom:8px">Lotes registrados recientes</p><div id="f2-resumen-items"><p style="font-size:12px;color:#999">Cargando...</p></div></div>
   <div id="f2-success" class="hidden">
     <div class="success-wrap">
       <div class="chk" id="f2-chk" style="background:#f0fdf4">
@@ -373,32 +319,6 @@ input:focus,select:focus{outline:none;border-color:#0078d4}
   </div>
 </div>
 
-<!-- MODAL confirmar cierre con diferencia pequeña -->
-<div id="modal-confirmar" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
-  <div style="background:#fff;border-radius:12px;padding:24px;max-width:360px;width:90%;margin:auto">
-    <p style="font-size:16px;font-weight:600;margin-bottom:8px;color:#1a1a1a" id="modal-titulo">¿Cerrar lote?</p>
-    <p style="font-size:14px;color:#666;margin-bottom:20px" id="modal-detalle"></p>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <button onclick="modalCancelar()" style="padding:11px;border-radius:8px;cursor:pointer;background:#fff;border:1px solid #ddd;font-size:14px">Cancelar</button>
-      <button onclick="modalConfirmar()" style="padding:11px;border-radius:8px;cursor:pointer;background:#16a34a;border:none;color:#fff;font-size:14px;font-weight:600">Cerrar lote</button>
-    </div>
-  </div>
-</div>
-<!-- MODAL contraseña -->
-<div id="modal-pass" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
-  <div style="background:#fff;border-radius:12px;padding:24px;max-width:360px;width:90%;margin:auto">
-    <p style="font-size:16px;font-weight:600;margin-bottom:4px;color:#1a1a1a">Autorización requerida — <span id="pass-nivel">Supervisor</span></p>
-    <p style="font-size:13px;color:#666;margin-bottom:4px" id="pass-detalle"></p>
-    <p style="font-size:12px;color:#991b1b;margin-bottom:14px">Diferencia supera el umbral — requiere autorización.</p>
-    <input type="password" id="pass-input" placeholder="Contraseña" style="width:100%;font-size:15px;margin-bottom:4px">
-    <p style="font-size:12px;color:#991b1b;display:none" id="pass-error">Contraseña incorrecta</p>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px">
-      <button onclick="passCancelar()" style="padding:11px;border-radius:8px;cursor:pointer;background:#fff;border:1px solid #ddd;font-size:14px">Cancelar</button>
-      <button onclick="passConfirmar()" style="padding:11px;border-radius:8px;cursor:pointer;background:#dc2626;border:none;color:#fff;font-size:14px;font-weight:600">Autorizar</button>
-    </div>
-  </div>
-</div>
-
 <script>
 const API = 'https://script.google.com/macros/s/AKfycbyUriV9ehnNUCpIbZZkRVfXEMBTKjLRYhOfAD4hSa-kKF3XJc5vQdClxU1dOSDfLM_A/exec';
 const CATS = ['AAA','AA','A','B','C','D'];
@@ -429,75 +349,41 @@ async function apiGet(sheet){
   return d.ok ? d.values : [];
 }
 
-async function apiGetAll(){
-  const r = await fetch(API+'?action=get_all');
-  const d = await r.json();
-  return d.ok ? d : null;
-}
-
-let _headersChecked = false;
 async function initHeaders(){
-  if(_headersChecked) return;
-  let d = null;
-  try { d = await apiGetAll(); } catch(e) { console.error('get_all failed:', e); }
-  if(!d) {
-    // Fallback: llamadas individuales si get_all falla
-    try {
-      const [r1, r2] = await Promise.all([apiGet('RECEPCIONES'), apiGet('LOTES')]);
-      cacheRec = r1.slice(1).filter(r=>r[0]);
-      cacheLot = r2.slice(1).filter(r=>r[0]);
-      cacheTsRec = Date.now(); cacheTsLot = Date.now();
-      _headersChecked = true;
-    } catch(e2) { console.error('Fallback also failed:', e2); }
-    return;
+  // Check if RECEPCIONES has headers, if not add them
+  const rows = await apiGet('RECEPCIONES');
+  if(!rows.length || rows[0][0] !== 'ID'){
+    await apiPost('RECEPCIONES', HDR_REC);
   }
-  const rows  = d.recepciones || [];
-  const rows2 = d.lotes       || [];
-  if(d.config) cachedConfig = {
-    passSupervisor: d.config.passSupervisor||'1234',
-    passAdmin: d.config.passAdmin||'admin1234',
-    fclNumInicio:   d.config.fclNumInicio   || 11,
-    fclFechaInicio: d.config.fclFechaInicio || '2026-04-13',
-    fclKgsInicio:   d.config.fclKgsInicio   || 13880,
-    fclCapacidadKg: d.config.fclCapacidadKg || 28000,
-  };
-  const fixes = [];
-  if(!rows.length  || rows[0][0]  !== 'ID')            fixes.push(apiPost('RECEPCIONES', HDR_REC));
-  if(!rows2.length || rows2[0][0] !== 'ID_Recepcion')  fixes.push(apiPost('LOTES', HDR_LOT));
-  if(fixes.length) await Promise.all(fixes);
-  cacheRec = rows.length  && rows[0][0]==='ID'           ? rows.slice(1).filter(r=>r[0])  : rows.filter(r=>r[0]);
-  cacheLot = rows2.length && rows2[0][0]==='ID_Recepcion'? rows2.slice(1).filter(r=>r[0]) : rows2.filter(r=>r[0]);
-  cacheTsRec = Date.now(); cacheTsLot = Date.now();
-  _headersChecked = true;
+  const rows2 = await apiGet('LOTES');
+  if(!rows2.length || rows2[0][0] !== 'ID_Recepcion'){
+    await apiPost('LOTES', HDR_LOT);
+  }
 }
 
 // ── CACHE local para búsquedas rápidas ───────────────────────────────────────
 let cacheRec = null;
 let cacheLot = null;
-let cacheTsRec = 0;
-let cacheTsLot = 0;
-const CACHE_TTL = 60000; // 30 segundos
+let cacheTs  = 0;
+const CACHE_TTL = 30000; // 30 segundos
 
 async function getRecepciones(force=false){
-  if(!force && cacheRec && Date.now()-cacheTsRec < CACHE_TTL) return cacheRec;
+  if(!force && cacheRec && Date.now()-cacheTs < CACHE_TTL) return cacheRec;
   const rows = await apiGet('RECEPCIONES');
   cacheRec = rows.slice(1).filter(r=>r[0]);
-  cacheTsRec = Date.now();
+  cacheTs = Date.now();
   return cacheRec;
 }
 
 async function getLotes(force=false){
-  if(!force && cacheLot && Date.now()-cacheTsLot < CACHE_TTL) return cacheLot;
+  if(!force && cacheLot && Date.now()-cacheTs < CACHE_TTL) return cacheLot;
   const rows = await apiGet('LOTES');
   cacheLot = rows.slice(1).filter(r=>r[0]);
-  cacheTsLot = Date.now();
+  cacheTs = Date.now();
   return cacheLot;
 }
 
-function invalidateCache(which='all'){
-  if(which==='rec'||which==='all'){ cacheRec=null; cacheTsRec=0; }
-  if(which==='lot'||which==='all'){ cacheLot=null; cacheTsLot=0; }
-}
+function invalidateCache(){ cacheRec=null; cacheLot=null; }
 
 async function buscarRecepcion(fgo, fecha){
   const rows = await getRecepciones();
@@ -526,10 +412,35 @@ function showTab(n){
   document.getElementById('nav1').classList.toggle('active',n===1);
   document.getElementById('nav2').classList.toggle('active',n===2);
   if(n===1) renderLista();
-  if(n===2) { renderLotesRecientes().catch(e=>console.error(e)); renderFCLCard(); }
+  if(n===2) renderLotesRecientes();
 }
 
-
+async function renderLotesRecientes(){
+  const card=document.getElementById('f2-resumen-card');
+  const el=document.getElementById('f2-resumen-items');
+  if(!card) return; card.style.display='block';
+  invalidateCache();
+  const rows=await getLotes(true);
+  if(!rows||!rows.length){el.innerHTML='<p style="font-size:12px;color:#999">Sin lotes aún</p>';return;}
+  const mapa={}; rows.forEach(r=>{const k=r[1]+'||'+String(r[2]).slice(0,10); mapa[k]=r;});
+  const lista=Object.values(mapa).reverse().slice(0,10);
+  el.innerHTML=lista.map(r=>{
+    const cerrado=String(r[5])==='1'||r[5]===true||r[5]==='TRUE';
+    const acum=Number(r[7])||0, total=Number(r[8])||1;
+    const pct=Math.min(100,Math.round(acum/total*100));
+    const color=cerrado?'#16a34a':'#d97706';
+    const badge=cerrado
+      ?'<span style="font-size:10px;background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;border-radius:4px;padding:1px 6px;margin-left:6px">CERRADO</span>'
+      :'<span style="font-size:10px;background:#fffbeb;color:#92400e;border:1px solid #fde68a;border-radius:4px;padding:1px 6px;margin-left:6px">PARCIAL</span>';
+    return '<div style="padding:9px 0;border-bottom:1px solid #f0f0f0">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'+
+        '<div><strong style="font-size:13px">'+r[1]+'</strong><span style="font-size:12px;color:#888;margin-left:6px">'+fmt(r[2])+'</span>'+badge+'</div>'+
+        '<span style="font-size:12px;font-weight:600">'+acum+'/'+total+' un</span></div>'+
+      '<div style="height:5px;background:#eee;border-radius:3px;overflow:hidden">'+
+        '<div style="height:100%;width:'+pct+'%;background:'+color+';border-radius:3px"></div></div>'+
+      '<div style="font-size:11px;color:#888;margin-top:3px">Clasif: '+fmt(r[3])+'</div></div>';
+  }).join('');
+}
 
 function setBtnLoading(id, loading, txt){
   const b = document.getElementById(id);
@@ -620,10 +531,9 @@ function f1Nuevo(){
 
 async function renderLista(){
   const el = document.getElementById('f1-lista');
-  if(!cacheRec) el.innerHTML='<p style="font-size:12px;color:#999">Cargando...</p>';
-  try {
-    const rows = await getRecepciones();
-    if(!rows.length){el.innerHTML='<p style="font-size:12px;color:#999">Sin registros aún</p>';return;}
+  el.innerHTML='<p style="font-size:12px;color:#999">Cargando...</p>';
+  const rows = await getRecepciones(true);
+  if(!rows.length){el.innerHTML='<p style="font-size:12px;color:#999">Sin registros aún</p>';return;}
   const recientes = [...rows].reverse().slice(0,8);
   el.innerHTML = recientes.map(r=>`
     <div class="recep-row">
@@ -642,6 +552,7 @@ async function renderLista(){
 // ── FORMULARIO 2 ─────────────────────────────────────────────────────────────
 document.getElementById('f2-fc').value = today();
 let f2Rec = null, f2Estado = null;
+let cachedConfig = null;
 
 async function f2Buscar(){
   const fgo   = document.getElementById('f2-fgo').value;
@@ -656,7 +567,8 @@ async function f2Buscar(){
   info.innerHTML='<p style="font-size:13px;color:#666;padding:8px 0"><span class="spinner" style="border-color:rgba(0,0,0,.2);border-top-color:#666"></span>Buscando lote...</p>';
 
   invalidateCache();
-  const [allLotes, recRows] = await Promise.all([getLotes(), getRecepciones()]);
+  const allLotes = await getLotes(true);
+  const recRows  = await getRecepciones(true);
   const recFound = recRows.find(r=>r[1]===fgo && String(r[2]).slice(0,10)===fecha);
   f2Rec = recFound ? {id:recFound[0], fgo:recFound[1], fecha:String(recFound[2]).slice(0,10),
     unid:Number(recFound[3]), kgs:recFound[4], kg_unid:recFound[5],
@@ -810,7 +722,7 @@ async function f2Guardar(forceClose=false){
   const ua=navigator.userAgent.slice(0,200);
   const row=[f2Rec.id,fgo,fi,fc,np,esFinal?1:0,ue,an,tl,
     ...CATS.map(c=>gv('u-'+c)), ...CATS.map(c=>gv('k-'+c)),
-    totK,obs,esFinal?`FCL ${getCurrentFCL().num}`:'',obs,ua,new Date().toISOString()];
+    totK,obs,ua,getCurrentFCL?`FCL ${getCurrentFCL().num}`:'',navigator.userAgent.slice(0,200),new Date().toISOString()];
   const res = await apiPost('LOTES', row);
   if(!res.ok){ alert('Error al guardar. Intentá de nuevo.'); setBtnLoading('f2-btn',false,txtOrig); return; }
   invalidateCache();
@@ -861,34 +773,185 @@ function f2Nuevo(){
 
 // ── FORZAR CIERRE CON DIFERENCIA ─────────────────────────────────────────────
 // Umbrales: <=0.5% confirmación simple | 0.5%-5% supervisor | >5% administrador
+function f2ForzarCierre() {
+  if (!f2Rec) return;
+  const tl   = Number(f2Rec.unid);
+  const ap   = Number(f2Estado ? f2Estado.acum : 0);
+  const ue   = gv('f2-unid');
+  const an   = ap + ue;
+  const diff = an - tl;
+  const pct  = tl > 0 ? Math.abs(diff) / tl * 100 : 0;
+  const signo  = diff > 0 ? 'sobrantes' : 'faltantes';
+  const detalle= `Diferencia: ${pct.toFixed(2)}% (${Math.abs(diff)} unidades ${signo})`;
+
+  if (pct <= 0.5) {
+    // Confirmación simple
+    document.getElementById('modal-titulo').textContent  = '¿Cerrar lote con diferencia?';
+    document.getElementById('modal-detalle').textContent = detalle;
+    document.getElementById('modal-confirmar').style.display = 'flex';
+    pendingGuardar = () => f2Guardar(true);
+  } else if (pct <= 5) {
+    // Contraseña supervisor
+    document.getElementById('pass-nivel').textContent   = 'Supervisor';
+    document.getElementById('pass-detalle').textContent = detalle;
+    document.getElementById('pass-input').value = '';
+    document.getElementById('pass-error').style.display = 'none';
+    document.getElementById('modal-pass').style.display = 'flex';
+    passNivel = 'supervisor';
+    pendingGuardar = () => f2Guardar(true);
+  } else {
+    // Contraseña administrador
+    document.getElementById('pass-nivel').textContent   = 'Administrador';
+    document.getElementById('pass-detalle').textContent = detalle;
+    document.getElementById('pass-input').value = '';
+    document.getElementById('pass-error').style.display = 'none';
+    document.getElementById('modal-pass').style.display = 'flex';
+    passNivel = 'admin';
+    pendingGuardar = () => f2Guardar(true);
+  }
+}
+
 // ── CONFIG ────────────────────────────────────────────────────────────────────
 let cachedConfig = null;
 let passNivel = 'supervisor';
-// ── MODIFICAR RECEPCIÓN (F1) ──────────────────────────────────────────────────
-let f1mRec = null;
-
-// ── CIERRE CON DIFERENCIA ─────────────────────────────────────────────────────
-let pendingGuardar = null; // función guardada para ejecutar tras confirmación
-
-let cachedConfig = null;
-let passNivel = 'supervisor';
 async function getConfig() {
-  if (cachedConfig) return cachedConfig;
+  if(cachedConfig) return cachedConfig;
   try {
     const r = await fetch(API + '?action=get_config');
     const d = await r.json();
     cachedConfig = {
-      passSupervisor: d.passSupervisor||d.pass||'1234',
-      passAdmin:      d.passAdmin||'admin1234',
+      passSupervisor: d.passSupervisor || d.pass || '1234',
+      passAdmin:      d.passAdmin || 'admin1234',
       fclNumInicio:   d.fclNumInicio   || 11,
       fclFechaInicio: d.fclFechaInicio || '2026-04-13',
       fclKgsInicio:   d.fclKgsInicio   || 13880,
       fclCapacidadKg: d.fclCapacidadKg || 28000,
     };
-  } catch(e) { cachedConfig = {passSupervisor:'1234',passAdmin:'admin1234',fclNumInicio:11,fclFechaInicio:'2026-04-13',fclKgsInicio:13880,fclCapacidadKg:28000}; }
+  } catch(e) {
+    cachedConfig = {passSupervisor:'1234',passAdmin:'admin1234',
+      fclNumInicio:11,fclFechaInicio:'2026-04-13',fclKgsInicio:13880,fclCapacidadKg:28000};
+  }
   return cachedConfig;
 }
 
+// ── MODIFICAR RECEPCIÓN (F1) ──────────────────────────────────────────────────
+let f1mRec = null;
+
+function f1ModToggle() {
+  const form = document.getElementById('f1-mod-form');
+  const btn  = document.getElementById('f1-mod-toggle-btn');
+  const show = form.style.display === 'none';
+  form.style.display = show ? 'block' : 'none';
+  btn.textContent = show ? 'Ocultar modificación' : 'Modificar recepción del día anterior';
+  if (show) {
+    // Pre-fill yesterday's date
+    const d = new Date(); d.setDate(d.getDate()-1);
+    document.getElementById('f1m-fecha').value = d.toISOString().slice(0,10);
+  }
+}
+
+async function f1mBuscar() {
+  const fgo   = document.getElementById('f1m-fgo').value;
+  const fecha = document.getElementById('f1m-fecha').value;
+  document.getElementById('f1m-found').style.display    = 'none';
+  document.getElementById('f1m-notfound').style.display = 'none';
+  document.getElementById('f1m-btn').disabled = true;
+  f1mRec = null;
+  if (!fgo || !fecha) return;
+
+  // Validar que sea T+1: fecha del registro debe ser ayer o hoy
+  // Buscamos la recepción y verificamos su timestamp
+  invalidateCache();
+  const rows = await getRecepciones(true);
+  const found = rows.find(r => r[1]===fgo && String(r[2]).slice(0,10)===fecha);
+
+  if (!found) {
+    document.getElementById('f1m-notfound').style.display = 'block'; return;
+  }
+
+  // Verificar T+1: timestamp de la recepción (col 8 = índice 8)
+  const ts = found[8] || found[7]; // UserAgent is col 7, Timestamp col 8
+  const tsDate = ts ? new Date(ts) : null;
+  const now = new Date();
+  const diffHoras = tsDate ? (now - tsDate) / (1000*3600) : 999;
+
+  if (diffHoras > 48) {
+    document.getElementById('f1m-notfound').style.display = 'block'; return;
+  }
+
+  f1mRec = {id: found[0], fgo: found[1], fecha: String(found[2]).slice(0,10),
+             unid: Number(found[3]), tambores: found[4], comentarios: found[5]};
+
+  document.getElementById('f1m-unid').value        = f1mRec.unid || '';
+  document.getElementById('f1m-tambores').value    = f1mRec.tambores || '';
+  document.getElementById('f1m-comentarios').value = f1mRec.comentarios || '';
+
+  // Verificar si hay lotes parciales asociados
+  const lotes = await getLotes(true);
+  const tieneParc = lotes.some(l => l[0] === f1mRec.id);
+  document.getElementById('f1m-lotes-aviso').style.display = tieneParc ? 'block' : 'none';
+
+  document.getElementById('f1m-found').style.display    = 'block';
+  document.getElementById('f1m-notfound').style.display = 'none';
+  f1mCheck();
+}
+
+function f1mCheck() {
+  const unid = gv('f1m-unid');
+  document.getElementById('f1m-btn').disabled = !f1mRec || unid <= 0;
+}
+
+async function f1mGuardar() {
+  if (!f1mRec) return;
+  document.getElementById('f1m-btn').disabled = true;
+  document.getElementById('f1m-btn').textContent = 'Guardando...';
+
+  const unid       = Math.round(gv('f1m-unid'));
+  const tambores   = gv('f1m-tambores') || '';
+  const comentarios= document.getElementById('f1m-comentarios').value.trim();
+
+  // 1. Actualizar RECEPCIONES
+  const dataRec = encodeURIComponent(JSON.stringify({id: f1mRec.id, unidades: unid, tambores, comentarios}));
+  const r1 = await fetch(API + '?action=update_recepcion&data=' + dataRec);
+  const d1 = await r1.json();
+  if (!d1.ok) { alert('Error al actualizar: ' + d1.error); document.getElementById('f1m-btn').disabled=false; document.getElementById('f1m-btn').textContent='Confirmar modificación'; return; }
+
+  // 2. Si cambiaron las unidades, actualizar Total_Lote en LOTES
+  if (unid !== f1mRec.unid) {
+    const dataLot = encodeURIComponent(JSON.stringify({id_recepcion: f1mRec.id, nuevo_total: unid}));
+    await fetch(API + '?action=update_total_lote&data=' + dataLot);
+  }
+
+  invalidateCache();
+  const msg = document.getElementById('f1m-msg');
+  msg.className = 'msg ok';
+  msg.textContent = 'Recepción actualizada: ' + f1mRec.fgo + ' ' + fmt(f1mRec.fecha) + ' → ' + unid + ' unidades.';
+  document.getElementById('f1m-btn').textContent = 'Confirmar modificación';
+  document.getElementById('f1m-btn').disabled = false;
+  renderLista();
+}
+
+
+function modalCancelar(){
+  document.getElementById('modal-confirmar').style.display='none';
+  pendingGuardar=null;
+}
+function modalConfirmar(){
+  document.getElementById('modal-confirmar').style.display='none';
+  if(pendingGuardar) pendingGuardar();
+}
+function passCancelar(){
+  document.getElementById('modal-pass').style.display='none';
+  pendingGuardar=null;
+}
+async function passConfirmar(){
+  const input=document.getElementById('pass-input').value;
+  const cfg=await getConfig();
+  const expected=passNivel==='admin'?cfg.passAdmin:cfg.passSupervisor;
+  if(input!==expected){document.getElementById('pass-error').style.display='block';return;}
+  document.getElementById('modal-pass').style.display='none';
+  if(pendingGuardar) pendingGuardar();
+}
 // ── FCL TRACKING ─────────────────────────────────────────────────────────────
 function getCurrentFCL() {
   const cfg    = cachedConfig || {};
@@ -899,148 +962,65 @@ function getCurrentFCL() {
   const lotes  = cacheLot || [];
   let kgs_acum = kgs0;
   for(const row of lotes){
-    const ef=row[5]; const fi_raw=row[2]; const kgs_tot=parseFloat(row[21])||0;
-    if(!ef||!fi_raw||kgs_tot<=0) continue;
-    const fi_date=new Date(String(fi_raw).slice(0,10));
-    if(fi_date>=fecha0) kgs_acum+=kgs_tot;
+    if(!row[5] || !row[2]) continue;
+    const kgs_tot = parseFloat(row[21]) || 0;
+    if(kgs_tot <= 0) continue;
+    const fi_date = new Date(String(row[2]).slice(0,10));
+    if(fi_date >= fecha0) kgs_acum += kgs_tot;
   }
-  const offset    = Math.floor(kgs_acum/cap);
-  const num       = num0+offset;
-  const kgs_en    = kgs_acum%cap;
-  const kgs_rest  = cap-kgs_en;
-  const pct       = Math.round(kgs_en/cap*100);
-  return {num,kgs_acum,kgs_en:Math.round(kgs_en),kgs_rest:Math.round(kgs_rest),pct,cap};
+  const offset   = Math.floor(kgs_acum / cap);
+  const num      = num0 + offset;
+  const kgs_en   = Math.round(kgs_acum % cap);
+  const kgs_rest = Math.round(cap - kgs_en);
+  const pct      = Math.round(kgs_en / cap * 100);
+  return {num, kgs_en, kgs_rest, pct, cap};
 }
 
-function renderFCLCard(){
-  const el=document.getElementById('fcl-card');
-  if(!el||!cachedConfig) return;
-  const f=getCurrentFCL();
-  const colorBar=f.pct>=90?'#dc2626':f.pct>=70?'#d97706':'#16a34a';
-  el.innerHTML=`
+function renderFCLCard() {
+  const el = document.getElementById('fcl-card');
+  if(!el) return;
+  if(!cachedConfig) { el.style.display='none'; return; }
+  const f = getCurrentFCL();
+  const color = f.pct >= 90 ? '#dc2626' : f.pct >= 70 ? '#d97706' : '#16a34a';
+  el.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <div><span style="font-size:16px;font-weight:600;color:#1a1a1a">FCL ${f.num}</span>
-        <span style="font-size:12px;color:#666;margin-left:8px">${Math.round(f.kgs_en).toLocaleString()} / ${f.cap.toLocaleString()} kgs</span>
+      <div><span style="font-size:16px;font-weight:600">FCL ${f.num}</span>
+        <span style="font-size:12px;color:#666;margin-left:8px">${f.kgs_en.toLocaleString()} / ${f.cap.toLocaleString()} kgs</span>
       </div>
-      <span style="font-size:13px;font-weight:600;color:${colorBar}">${f.pct}%</span>
+      <span style="font-size:13px;font-weight:600;color:${color}">${f.pct}%</span>
     </div>
     <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;margin-bottom:6px">
-      <div style="height:100%;width:${Math.min(100,f.pct)}%;background:${colorBar};border-radius:4px"></div>
+      <div style="height:100%;width:${Math.min(100,f.pct)}%;background:${color};border-radius:4px"></div>
     </div>
-    <div style="font-size:12px;color:#666">Faltan <strong>${f.kgs_rest.toLocaleString()} kgs</strong> para FCL ${f.num+1}</div>`;
-  el.style.display='block';
+    <div style="font-size:12px;color:#555">Faltan <strong>${f.kgs_rest.toLocaleString()} kgs</strong> para FCL ${f.num+1}</div>`;
+  el.style.display = 'block';
 }
-
-// ── CIERRE CON DIFERENCIA ─────────────────────────────────────────────────────
-let pendingGuardar = null;
-
-function f2ForzarCierre(){
-  if(!f2Rec) return;
-  const tl=Number(f2Rec.unid),ap=Number(f2Estado?f2Estado.acum:0),ue=gv('f2-unid'),an=ap+ue;
-  const diff=an-tl,pct=tl>0?Math.abs(diff)/tl*100:0;
-  const signo=diff>0?'sobrantes':'faltantes';
-  const detalle=`Diferencia: ${pct.toFixed(2)}% (${Math.abs(diff)} unidades ${signo})`;
-  if(pct<=0.5){
-    document.getElementById('modal-titulo').textContent='¿Cerrar lote con diferencia?';
-    document.getElementById('modal-detalle').textContent=detalle;
-    document.getElementById('modal-confirmar').style.display='flex';
-    pendingGuardar=()=>f2Guardar(true);
-  } else if(pct<=5){
-    document.getElementById('pass-nivel').textContent='Supervisor';
-    document.getElementById('pass-detalle').textContent=detalle;
-    document.getElementById('pass-input').value='';
-    document.getElementById('pass-error').style.display='none';
-    document.getElementById('modal-pass').style.display='flex';
-    passNivel='supervisor'; pendingGuardar=()=>f2Guardar(true);
-  } else {
-    document.getElementById('pass-nivel').textContent='Administrador';
-    document.getElementById('pass-detalle').textContent=detalle;
-    document.getElementById('pass-input').value='';
-    document.getElementById('pass-error').style.display='none';
-    document.getElementById('modal-pass').style.display='flex';
-    passNivel='admin'; pendingGuardar=()=>f2Guardar(true);
-  }
-}
-function modalCancelar(){document.getElementById('modal-confirmar').style.display='none';pendingGuardar=null;}
-function modalConfirmar(){document.getElementById('modal-confirmar').style.display='none';if(pendingGuardar)pendingGuardar();}
-function passCancelar(){document.getElementById('modal-pass').style.display='none';pendingGuardar=null;}
-async function passConfirmar(){
-  const input=document.getElementById('pass-input').value;
-  const cfg=await getConfig();
-  const expected=passNivel==='admin'?cfg.passAdmin:cfg.passSupervisor;
-  if(input!==expected){document.getElementById('pass-error').style.display='block';return;}
-  document.getElementById('modal-pass').style.display='none';
-  if(pendingGuardar)pendingGuardar();
-}
-async function f2GuardarConControl(){f2Guardar();}
-
-// ── MODIFICAR RECEPCIÓN T+1 ───────────────────────────────────────────────────
-let f1mRec=null;
-function f1ModToggle(){
-  const form=document.getElementById('f1-mod-form'),btn=document.getElementById('f1-mod-section').querySelector('button');
-  const show=form.style.display==='none'; form.style.display=show?'block':'none';
-  btn.textContent=show?'Ocultar':'Modificar recepción del día anterior';
-  if(show){ const d=new Date(); d.setDate(d.getDate()-1); document.getElementById('f1m-fecha').value=d.toISOString().slice(0,10); }
-}
-async function f1mBuscar(){
-  const fgo=document.getElementById('f1m-fgo').value,fecha=document.getElementById('f1m-fecha').value;
-  document.getElementById('f1m-found').style.display='none';
-  document.getElementById('f1m-notfound').style.display='none';
-  document.getElementById('f1m-btn').disabled=true; f1mRec=null;
-  if(!fgo||!fecha) return;
-  const rows=await getRecepciones(true);
-  const found=rows.find(r=>r[1]===fgo&&String(r[2]).slice(0,10)===fecha);
-  if(!found){document.getElementById('f1m-notfound').style.display='block';return;}
-  const ts=found[7]||found[6]; const tsDate=ts?new Date(ts):null;
-  if(tsDate&&(Date.now()-tsDate)>48*3600000){document.getElementById('f1m-notfound').style.display='block';return;}
-  f1mRec={id:found[0],fgo:found[1],fecha:String(found[2]).slice(0,10),unid:Number(found[3]),tambores:found[4],comentarios:found[5]};
-  document.getElementById('f1m-unid').value=f1mRec.unid||'';
-  document.getElementById('f1m-tambores').value=f1mRec.tambores||'';
-  document.getElementById('f1m-comentarios').value=f1mRec.comentarios||'';
-  const lotes=await getLotes();
-  document.getElementById('f1m-lotes-aviso').style.display=lotes.some(l=>l[0]===f1mRec.id)?'block':'none';
-  document.getElementById('f1m-found').style.display='block'; f1mCheck();
-}
-function f1mCheck(){ document.getElementById('f1m-btn').disabled=!f1mRec||gv('f1m-unid')<=0; }
-async function f1mGuardar(){
-  if(!f1mRec) return;
-  document.getElementById('f1m-btn').disabled=true;
-  document.getElementById('f1m-btn').textContent='Guardando...';
-  const unid=Math.round(gv('f1m-unid')),tambores=gv('f1m-tambores')||'',comentarios=document.getElementById('f1m-comentarios').value.trim();
-  const r1=await fetch(API+'?action=update_recepcion&data='+encodeURIComponent(JSON.stringify({id:f1mRec.id,unidades:unid,tambores,comentarios})));
-  const d1=await r1.json();
-  if(!d1.ok){alert('Error: '+d1.error);document.getElementById('f1m-btn').disabled=false;document.getElementById('f1m-btn').textContent='Confirmar modificación';return;}
-  if(unid!==f1mRec.unid){await fetch(API+'?action=update_total_lote&data='+encodeURIComponent(JSON.stringify({id_recepcion:f1mRec.id,nuevo_total:unid})));}
-  invalidateCache('rec');
-  const msg=document.getElementById('f1m-msg');
-  msg.className='msg ok'; msg.textContent=`Actualizado: ${f1mRec.fgo} ${f1mRec.fecha} → ${unid} unidades.`;
-  document.getElementById('f1m-btn').textContent='Confirmar modificación'; document.getElementById('f1m-btn').disabled=false;
-  renderLista();
-}
-
-async function renderLotesRecientes(){
-  const card=document.getElementById('f2-resumen-card'),el=document.getElementById('f2-resumen-items');
-  if(!card) return; card.style.display='block';
-  const rows=await getLotes();
-  if(!rows||!rows.length){el.innerHTML='<p style="font-size:12px;color:#999">Sin lotes aún</p>';return;}
-  const mapa={}; rows.forEach(r=>{const k=r[1]+'||'+String(r[2]).slice(0,10); mapa[k]=r;});
-  const lista=Object.values(mapa).reverse().slice(0,10);
-  el.innerHTML=lista.map(r=>{
-    const cerrado=String(r[5])==='1'||r[5]===true||r[5]==='TRUE';
-    const acum=Number(r[7])||0,total=Number(r[8])||1,pct=Math.min(100,Math.round(acum/total*100));
-    const color=cerrado?'#16a34a':'#d97706';
-    const badge=cerrado?'<span style="font-size:10px;background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;border-radius:4px;padding:1px 6px;margin-left:6px">CERRADO</span>':'<span style="font-size:10px;background:#fffbeb;color:#92400e;border:1px solid #fde68a;border-radius:4px;padding:1px 6px;margin-left:6px">PARCIAL</span>';
-    return '<div style="padding:9px 0;border-bottom:1px solid #f0f0f0"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><div><strong style="font-size:13px">'+r[1]+'</strong><span style="font-size:12px;color:#888;margin-left:6px">'+fmt(r[2])+'</span>'+badge+'</div><span style="font-size:12px;font-weight:600">'+acum+'/'+total+' un</span></div><div style="height:5px;background:#eee;border-radius:3px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+color+';border-radius:3px"></div></div><div style="font-size:11px;color:#888;margin-top:3px">Clasif: '+fmt(r[3])+'</div></div>';
-  }).join('');
-}
-
-initHeaders()
-  .then(()=>{ renderLista(); })
-  .catch(e=>{
-    console.error('Init failed:', e);
-    const el=document.getElementById('f1-lista');
-    if(el) el.innerHTML='<p style="font-size:12px;color:#dc2626">Error de conexión. Recargá la página.</p>';
-  });
+initHeaders().then(()=>{ renderLista(); getConfig(); }).catch(e=>console.error(e));
 </script>
+
+<!-- Modal: confirmar cierre con diferencia pequeña -->
+<div id="modal-confirmar" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:12px;padding:24px;max-width:360px;width:90%;margin:auto">
+    <p style="font-size:16px;font-weight:600;margin-bottom:8px" id="modal-titulo">¿Cerrar lote?</p>
+    <p style="font-size:14px;color:#666;margin-bottom:20px" id="modal-detalle"></p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <button onclick="modalCancelar()" style="padding:11px;border-radius:8px;cursor:pointer;border:1px solid #ddd;background:#fff;font-size:14px">Cancelar</button>
+      <button onclick="modalConfirmar()" style="padding:11px;border-radius:8px;cursor:pointer;border:none;background:#16a34a;color:#fff;font-size:14px;font-weight:600">Cerrar lote</button>
+    </div>
+  </div>
+</div>
+<!-- Modal: contraseña supervisor/admin -->
+<div id="modal-pass" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:12px;padding:24px;max-width:360px;width:90%;margin:auto">
+    <p style="font-size:16px;font-weight:600;margin-bottom:4px">Autorización — <span id="pass-nivel">Supervisor</span></p>
+    <p style="font-size:13px;color:#666;margin-bottom:4px" id="pass-detalle"></p>
+    <input type="password" id="pass-input" placeholder="Contraseña" style="width:100%;font-size:15px;padding:10px;border:1px solid #ddd;border-radius:8px;margin-top:10px;box-sizing:border-box">
+    <p style="font-size:12px;color:#dc2626;display:none;margin-top:4px" id="pass-error">Contraseña incorrecta</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px">
+      <button onclick="passCancelar()" style="padding:11px;border-radius:8px;cursor:pointer;border:1px solid #ddd;background:#fff;font-size:14px">Cancelar</button>
+      <button onclick="passConfirmar()" style="padding:11px;border-radius:8px;cursor:pointer;border:none;background:#dc2626;color:#fff;font-size:14px;font-weight:600">Autorizar</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
