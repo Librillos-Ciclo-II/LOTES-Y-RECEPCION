@@ -1,1026 +1,147 @@
-<!--
-SANTA FAZ — FORMULARIO BETA v1.4
-URL: https://librillos-ciclo-ii.github.io/LOTES-Y-RECEPCION/beta.html
-Apps Script Beta: AKfycbyUriV9ehnNUCpIbZZkRVfXEMBTKjLRYhOfAD4hSa-kKF3XJc5vQdClxU1dOSDfLM_A
+// ------------------------------------------------------------
+// SantaFaz_AppsScript — Backend Google Apps Script
+// Sheet: SantaFaz_Lotes (ID abajo)
+// ------------------------------------------------------------
+// CHANGELOG
+// v1.0  Base: get, post
+// v1.1  update_recepcion, update_total_lote, get_config
+// v1.2  get_all (una sola llamada: RECEPCIONES+LOTES+CONFIG)
+// v1.3  initConfig() global con FCL params en CONFIG (filas 4-7)
+//       FCL_NUM_INICIO(B4) FCL_FECHA_INICIO(B5) FCL_KGS_INICIO(B6) FCL_CAPACIDAD_KG(B7)
+// ------------------------------------------------------------
 
-CHANGELOG
-  v1.0  Base productivo (Tab1 recepcion, Tab2 lotes, validaciones)
-  v1.1  Cierre con diferencia (0.5% confirmacion, 0.5-5% supervisor, >5% admin)
-  v1.2  Modificacion T+1 de recepciones
-  v1.3  Performance: apiGetAll, cache separado TTL 60s
-  v1.4  FCL Tracking: card con FCL actual, %, kgs restantes
-        CONFIG rows 4-7: FCL_NUM_INICIO(11) FCL_FECHA_INICIO(2026-04-13)
-                         FCL_KGS_INICIO(13880) FCL_CAPACIDAD_KG(28000)
-        FCL grabado en col LOTES al cerrar batch
-        Beta: fondo celeste + banner version
--->
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>Santa Faz — Lotes</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f5;color:#1a1a1a;font-size:16px}
-.app{max-width:480px;margin:0 auto;padding:12px}
-.card{background:#fff;border:1px solid #e5e5e5;border-radius:12px;padding:16px 18px;margin-bottom:12px}
-.label{font-size:13px;color:#666;margin-bottom:6px;display:block}
-.req{color:#e53e3e;margin-left:2px}
-input,select{width:100%;font-size:16px;padding:10px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;color:#1a1a1a;-webkit-appearance:none;appearance:none}
-input:focus,select:focus{outline:none;border-color:#0078d4}
-.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.cat-table{width:100%;border-collapse:collapse;font-size:14px}
-.cat-table th{font-size:12px;font-weight:600;color:#666;text-align:left;padding:6px 8px;border-bottom:1px solid #eee}
-.cat-table td{padding:5px 6px;border-bottom:1px solid #f0f0f0}
-.cat-table input{font-size:14px;padding:6px 8px;text-align:right}
-.badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600}
-.bAAA{background:#EEEDFE;color:#3C3489}.bAA{background:#E1F5EE;color:#085041}
-.bA{background:#E6F1FB;color:#0C447C}.bB{background:#FAEEDA;color:#633806}
-.bC{background:#FAECE7;color:#712B13}.bD{background:#F1EFE8;color:#444441}
-.totales{background:#f9f9f9;border-radius:8px;padding:12px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px;border:1px solid #eee}
-.tot-item{text-align:center}
-.tot-val{font-size:18px;font-weight:600}
-.tot-lbl{font-size:11px;color:#888;margin-top:2px}
-.msg{font-size:13px;padding:9px 12px;border-radius:8px;margin-top:10px;display:none;line-height:1.4}
-.msg.ok{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;display:block}
-.msg.err{background:#fef2f2;color:#991b1b;border:1px solid #fecaca;display:block}
-.msg.warn{background:#fffbeb;color:#92400e;border:1px solid #fde68a;display:block}
-.msg.info{background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;display:block}
-.btn-main{width:100%;padding:14px;font-size:16px;font-weight:600;border-radius:10px;cursor:pointer;margin-top:4px;border:none;background:#0078d4;color:#fff}
-.btn-main:disabled{opacity:0.4;cursor:not-allowed}
-.btn-sec{width:100%;padding:11px;font-size:14px;border-radius:10px;cursor:pointer;background:#fff;border:1px solid #ddd;color:#1a1a1a;margin-top:8px}
-.nav{display:grid;grid-template-columns:1fr 1fr;gap:0;margin-bottom:14px;border:1px solid #e5e5e5;border-radius:10px;overflow:hidden}
-.nav-btn{padding:11px;font-size:14px;font-weight:500;cursor:pointer;background:#f5f5f5;color:#888;border:none}
-.nav-btn.active{background:#fff;color:#1a1a1a;font-weight:600}
-.nav-btn:first-child{border-right:1px solid #e5e5e5}
-.hidden{display:none}
-.recep-row{display:flex;justify-content:space-between;align-items:flex-start;padding:9px 0;border-bottom:1px solid #f0f0f0;font-size:13px}
-.recep-row:last-child{border-bottom:none}
-.found-card{border:2px solid #16a34a;border-radius:10px;padding:12px 14px;margin-bottom:12px;background:#f0fdf4}
-.lote-ab{border:2px solid #d97706;border-radius:10px;padding:12px 14px;margin-bottom:12px;background:#fffbeb}
-.progress-bar{height:8px;background:#e5e5e5;border-radius:4px;margin:8px 0;overflow:hidden}
-.progress-fill{height:100%;border-radius:4px;background:#16a34a;transition:width .3s}
-.progress-fill.over{background:#dc2626}
-.sr{display:flex;justify-content:space-between;font-size:12px;color:#666}
-.sv{font-weight:600;color:#1a1a1a}
-.success-wrap{text-align:center;padding:2rem 1rem}
-.chk{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px}
-.spinner{display:inline-block;width:18px;height:18px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:6px}
-@keyframes spin{to{transform:rotate(360deg)}}
-</style>
-</head>
-<body style="background:#e0f2fe">
-<div style="background:#0284c7;color:#fff;text-align:center;padding:6px;font-size:13px;font-weight:600;letter-spacing:1px;position:sticky;top:0;z-index:999">ENTORNO BETA v1.4 — los cambios se guardan en el Sheet real</div>
-<div class="app">
+const SHEET_ID = '1p21HTd8i1zHLRYLIXiIsLVFgNh0uAUWG-vf0_ag5z_k';
 
-<div class="nav">
-  <button class="nav-btn active" id="nav1" onclick="showTab(1)">1 — Recepción MP</button>
-  <button class="nav-btn" id="nav2" onclick="showTab(2)">2 — Registro de lote</button>
-</div>
 
-<!-- ══════════════ FORMULARIO 1 ══════════════ -->
-<div id="tab1">
-  <div id="f1-form">
-    <div class="card">
-      <p style="font-size:16px;font-weight:600;margin-bottom:4px">Recepción de materia prima</p>
-      <p style="font-size:13px;color:#666">Registrar al momento de ingreso en Santa Faz</p>
-    </div>
-    <div class="card">
-      <div class="row2" style="margin-bottom:12px">
-        <div>
-          <label class="label">Frigorífico <span class="req">*</span></label>
-          <select id="f1-fgo" onchange="f1Check()">
-            <option value="">— Seleccionar —</option>
-            <option>DELTA</option><option>RECREO</option><option>ALBA</option>
-            <option>SANTA INES</option><option>C.PARANA</option><option>SUIPACHA</option>
-          </select>
-        </div>
-        <div>
-          <label class="label">Fecha de ingreso <span class="req">*</span></label>
-          <input type="date" id="f1-fecha" onchange="f1Check()">
-        </div>
-      </div>
-      <div class="row2" style="margin-bottom:12px">
-        <div>
-          <label class="label">Cantidad de unidades <span class="req">*</span></label>
-          <input type="number" id="f1-unid" min="1" step="1" placeholder="ej. 800" oninput="f1Check();f1KgCalc()" onkeypress="return event.charCode>=48&&event.charCode<=57">
-        </div>
-        <div>
-          <label class="label">Kgs (opcional)</label>
-          <input type="text" id="f1-kgs" placeholder="ej. 12450,5" oninput="f1KgCalc()">
-        </div>
-      </div>
-      <div style="margin-bottom:12px;padding:8px 12px;background:#f9f9f9;border-radius:8px;display:none" id="f1-kg-unid-wrap">
-        <span style="font-size:12px;color:#666">Kg. por unidad promedio: </span>
-        <strong style="font-size:13px" id="f1-kg-unid">—</strong>
-      </div>
-      <div style="margin-bottom:12px">
-        <label class="label">Cantidad de tambores (opcional)</label>
-        <input type="number" id="f1-tambores" min="0" placeholder="ej. 12">
-      </div>
-      <div>
-        <label class="label">Comentarios (opcional)</label>
-        <input type="text" id="f1-comentarios" placeholder="Ej: vino el camión sin frío...">
-      </div>
-      <div class="msg" id="f1-msg"></div>
-    </div>
-    <button class="btn-main" id="f1-btn" onclick="f1Guardar()" disabled>Registrar ingreso</button>
-
-    <!-- MODIFICAR RECEPCIÓN T+1 -->
-    <div id="f1-mod-section" style="margin-top:16px">
-      <button class="btn-sec" onclick="f1ModToggle()" id="f1-mod-toggle-btn" style="color:#d97706;border-color:#fde68a">
-        Modificar recepción del día anterior
-      </button>
-      <div id="f1-mod-form" style="display:none;margin-top:12px">
-        <div class="card" style="border-color:#fde68a;background:#fffbeb">
-          <p style="font-size:13px;font-weight:600;color:#92400e;margin-bottom:12px">Modificar recepción — solo disponible hasta las 23:59 del día siguiente al registro</p>
-          <div class="row2" style="margin-bottom:12px">
-            <div>
-              <label class="label">Frigorífico <span class="req">*</span></label>
-              <select id="f1m-fgo" onchange="f1mBuscar()">
-                <option value="">— Seleccionar —</option>
-                <option>DELTA</option><option>RECREO</option><option>ALBA</option>
-                <option>SANTA INES</option><option>C.PARANA</option><option>SUIPACHA</option>
-              </select>
-            </div>
-            <div>
-              <label class="label">Fecha de ingreso <span class="req">*</span></label>
-              <input type="date" id="f1m-fecha" onchange="f1mBuscar()">
-            </div>
-          </div>
-          <div id="f1m-found" style="display:none">
-            <div style="margin-bottom:12px">
-              <label class="label">Unidades <span class="req">*</span></label>
-              <input type="number" id="f1m-unid" min="1" placeholder="ej. 800" oninput="f1mCheck()">
-            </div>
-            <div style="margin-bottom:12px">
-              <label class="label">Tambores (opcional)</label>
-              <input type="number" id="f1m-tambores" min="0" placeholder="ej. 12">
-            </div>
-            <div style="margin-bottom:12px">
-              <label class="label">Comentarios (opcional)</label>
-              <input type="text" id="f1m-comentarios" placeholder="Ej: reconteo muestra diferencia...">
-            </div>
-            <div id="f1m-lotes-aviso" style="display:none" class="msg warn">
-              Este lote tiene cargas parciales registradas. Se actualizará el Total_Lote en todos los registros.
-            </div>
-            <div class="msg" id="f1m-msg"></div>
-            <button class="btn-main" id="f1m-btn" onclick="f1mGuardar()" disabled style="background:#d97706;border-color:#d97706">
-              Confirmar modificación
-            </button>
-          </div>
-          <div id="f1m-notfound" style="display:none">
-            <p style="font-size:13px;color:#991b1b">No se encontró recepción para ese frigorífico y fecha, o ya pasó el plazo de modificación (T+1).</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div id="f1-success" class="hidden">
-    <div class="success-wrap">
-      <div class="chk" style="background:#f0fdf4">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </div>
-      <p style="font-size:17px;font-weight:600;margin-bottom:6px">Ingreso registrado</p>
-      <p style="font-size:14px;color:#666;margin-bottom:20px" id="f1-s-det"></p>
-      <div style="background:#f9f9f9;border-radius:8px;padding:12px;margin-bottom:20px;font-size:13px;text-align:left" id="f1-s-res"></div>
-      <button class="btn-sec" onclick="f1Nuevo()">Registrar otro ingreso</button>
-      <button class="btn-sec" onclick="showTab(2)" style="color:#0078d4;border-color:#bfdbfe;margin-top:8px">Ir a registro de lote →</button>
-    </div>
-  </div>
-
-  <div class="card" style="margin-top:8px">
-    <p style="font-size:13px;font-weight:600;margin-bottom:8px">Ingresos recientes</p>
-    <div id="f1-lista"><p style="font-size:12px;color:#999">Cargando...</p></div>
-  </div>
-</div>
-
-<!-- ══════════════ FORMULARIO 2 ══════════════ -->
-<div id="tab2" class="hidden">
-  <div id="f2-form">
-    <div id="fcl-card" style="display:none;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 16px;margin-bottom:16px"></div>
-    <div class="card">
-      <p style="font-size:16px;font-weight:600;margin-bottom:4px">Registro de lote clasificado</p>
-      <p style="font-size:13px;color:#666">Completar al finalizar clasificación y empaque</p>
-    </div>
-    <div class="card">
-      <div class="row2">
-        <div>
-          <label class="label">Frigorífico <span class="req">*</span></label>
-          <select id="f2-fgo" onchange="f2Buscar()">
-            <option value="">— Seleccionar —</option>
-            <option>DELTA</option><option>RECREO</option><option>ALBA</option>
-            <option>SANTA INES</option><option>C.PARANA</option><option>SUIPACHA</option>
-          </select>
-        </div>
-        <div>
-          <label class="label">Fecha ingreso del lote <span class="req">*</span></label>
-          <input type="date" id="f2-fecha" onchange="f2Buscar()">
-        </div>
-      </div>
-    </div>
-
-    <div id="f2-info"></div>
-    <div id="f2-parcial"></div>
-
-    <div class="card" id="f2-campos" style="display:none">
-      <div style="margin-bottom:12px">
-        <label class="label">Fecha de clasificación <span class="req">*</span></label>
-        <input type="date" id="f2-fc" onchange="f2Recalc()">
-      </div>
-      <div>
-        <label class="label">Unidades clasificadas en esta carga <span class="req">*</span></label>
-        <input type="number" id="f2-unid" min="1" placeholder="ej. 200" oninput="f2Recalc()">
-      </div>
-    </div>
-
-    <div class="card" id="f2-cats" style="display:none">
-      <p style="font-size:14px;font-weight:600;margin-bottom:12px">Clasificación por categoría</p>
-      <table class="cat-table">
-        <thead><tr><th style="width:50px">Cat.</th><th>Unidades</th><th>Kgs salados</th></tr></thead>
-        <tbody>
-          <tr><td><span class="badge bAAA">AAA</span></td><td><input type="number" id="u-AAA" min="0" placeholder="0" oninput="f2Recalc()"></td><td><input type="number" id="k-AAA" min="0" step="0.1" placeholder="0.0" oninput="f2Recalc()"></td></tr>
-          <tr><td><span class="badge bAA">AA</span></td><td><input type="number" id="u-AA" min="0" placeholder="0" oninput="f2Recalc()"></td><td><input type="number" id="k-AA" min="0" step="0.1" placeholder="0.0" oninput="f2Recalc()"></td></tr>
-          <tr><td><span class="badge bA">A</span></td><td><input type="number" id="u-A" min="0" placeholder="0" oninput="f2Recalc()"></td><td><input type="number" id="k-A" min="0" step="0.1" placeholder="0.0" oninput="f2Recalc()"></td></tr>
-          <tr><td><span class="badge bB">B</span></td><td><input type="number" id="u-B" min="0" placeholder="0" oninput="f2Recalc()"></td><td><input type="number" id="k-B" min="0" step="0.1" placeholder="0.0" oninput="f2Recalc()"></td></tr>
-          <tr><td><span class="badge bC">C</span></td><td><input type="number" id="u-C" min="0" placeholder="0" oninput="f2Recalc()"></td><td><input type="number" id="k-C" min="0" step="0.1" placeholder="0.0" oninput="f2Recalc()"></td></tr>
-          <tr><td><span class="badge bD">D</span></td><td><input type="number" id="u-D" min="0" placeholder="0" oninput="f2Recalc()"></td><td><input type="number" id="k-D" min="0" step="0.1" placeholder="0.0" oninput="f2Recalc()"></td></tr>
-        </tbody>
-      </table>
-      <div class="totales" style="grid-template-columns:1fr 1fr">
-        <div class="tot-item"><div class="tot-val" id="tot-u">0</div><div class="tot-lbl">Unidades salidas</div></div>
-        <div class="tot-item"><div class="tot-val" id="tot-k">0.0</div><div class="tot-lbl">Kgs salados</div></div>
-      </div>
-      <div class="msg" id="f2-msg"></div>
-    </div>
-
-    <div class="card" id="f2-obs-card" style="display:none">
-      <label class="label">Observaciones (opcional)</label>
-      <input type="text" id="f2-obs" placeholder="Ej: daño en curado...">
-    </div>
-
-    <button class="btn-main" id="f2-btn" onclick="f2GuardarConControl()" disabled style="display:none">Guardar</button>
-    <button class="btn-sec" id="f2-btn-forzar" onclick="f2ForzarCierre()" style="display:none;margin-top:8px;color:#d97706;border-color:#fde68a">
-      Cerrar lote con diferencia
-    </button>
-  </div>
-
-  <div class="card" id="f2-resumen-card" style="margin-top:8px;display:none">
-    <p style="font-size:13px;font-weight:600;margin-bottom:8px">Lotes registrados recientes</p>
-    <div id="f2-resumen-items"><p style="font-size:12px;color:#999">Cargando...</p></div>
-  </div>
-
-  <div id="f2-success" class="hidden">
-    <div class="success-wrap">
-      <div class="chk" id="f2-chk" style="background:#f0fdf4">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path id="f2-chk-p" d="M5 13l4 4L19 7" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </div>
-      <p style="font-size:17px;font-weight:600;margin-bottom:6px" id="f2-s-tit"></p>
-      <p style="font-size:14px;color:#666;margin-bottom:16px" id="f2-s-sub"></p>
-      <div id="f2-s-prog" style="display:none;margin-bottom:16px">
-        <div class="progress-bar"><div class="progress-fill" id="f2-s-pf"></div></div>
-        <div class="sr"><span id="f2-s-ac"></span><span id="f2-s-to"></span></div>
-        <p id="f2-s-df" style="display:none;font-size:12px;margin-top:6px"></p>
-      </div>
-      <div style="background:#f9f9f9;border-radius:8px;padding:12px;margin-bottom:20px;font-size:13px;text-align:left" id="f2-s-res"></div>
-      <button class="btn-sec" onclick="f2Nuevo()">Cargar otro lote</button>
-    </div>
-  </div>
-</div>
-
-</div><!-- /app -->
-
-<!-- MODAL: confirmar cierre con diferencia pequeña -->
-<div id="modal-confirmar" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
-  <div style="background:#fff;border-radius:12px;padding:24px;max-width:360px;width:90%;margin:auto">
-    <p style="font-size:16px;font-weight:600;margin-bottom:8px;color:#1a1a1a" id="modal-titulo">¿Cerrar lote?</p>
-    <p style="font-size:14px;color:#666;margin-bottom:20px" id="modal-detalle"></p>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <button onclick="modalCancelar()" style="padding:11px;border-radius:8px;cursor:pointer;background:#fff;border:1px solid #ddd;font-size:14px">Cancelar</button>
-      <button onclick="modalConfirmar()" id="modal-ok-btn" style="padding:11px;border-radius:8px;cursor:pointer;background:#16a34a;border:none;color:#fff;font-size:14px;font-weight:600">Cerrar lote</button>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL: contraseña supervisor -->
-<div id="modal-pass" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
-  <div style="background:#fff;border-radius:12px;padding:24px;max-width:360px;width:90%;margin:auto">
-    <p style="font-size:16px;font-weight:600;margin-bottom:4px;color:#1a1a1a">Autorización requerida — <span id="pass-nivel">Supervisor</span></p>
-    <p style="font-size:13px;color:#666;margin-bottom:4px" id="pass-detalle"></p>
-    <p style="font-size:12px;color:#991b1b;margin-bottom:14px" id="pass-nivel-msg">Requiere autorización del <span id="pass-nivel2">supervisor</span>.</p>
-    <input type="password" id="pass-input" placeholder="Contraseña del supervisor" style="width:100%;font-size:15px;margin-bottom:4px">
-    <p style="font-size:12px;color:#991b1b;display:none" id="pass-error">Contraseña incorrecta</p>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px">
-      <button onclick="passCancelar()" style="padding:11px;border-radius:8px;cursor:pointer;background:#fff;border:1px solid #ddd;font-size:14px">Cancelar</button>
-      <button onclick="passConfirmar()" style="padding:11px;border-radius:8px;cursor:pointer;background:#dc2626;border:none;color:#fff;font-size:14px;font-weight:600">Autorizar cierre</button>
-    </div>
-  </div>
-</div>
-
-<script>
-const API = 'https://script.google.com/macros/s/AKfycbyUriV9ehnNUCpIbZZkRVfXEMBTKjLRYhOfAD4hSa-kKF3XJc5vQdClxU1dOSDfLM_A/exec';
-const CATS = ['AAA','AA','A','B','C','D'];
-const HDR_REC  = ['ID','Frigorifico','Fecha','Unidades','Tambores','Comentarios','Timestamp'];
-const HDR_LOT  = ['ID_Recepcion','Frigorifico','Fecha_Ingreso','Fecha_Clasif','Num_Parcial',
-  'Es_Final','Unid_Esta_Carga','Unid_Acum','Total_Lote',
-  'AAA_unid','AA_unid','A_unid','B_unid','C_unid','D_unid',
-  'AAA_kgs','AA_kgs','A_kgs','B_kgs','C_kgs','D_kgs',
-  'Total_Kgs','Rendimiento','Observaciones','FCL','UserAgent','Timestamp'];
-
-function gv(id){const v=document.getElementById(id).value.replace(',','.');return parseFloat(v)||0;}
-function today(){return new Date().toISOString().slice(0,10);}
-function fmt(v){if(!v)return '';const s=String(v).slice(0,10);const p=s.split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:s;}
-function rKey(f,d){return f+'||'+d;}
-
-// ── API ──────────────────────────────────────────────────────────────────────
-async function apiPost(sheet, row){
-  // Use GET with encoded data to avoid CORS preflight issues
-  const payload = encodeURIComponent(JSON.stringify({sheet, row}));
-  const r = await fetch(API+'?action=post&data='+payload);
-  const d = await r.json();
-  return d;
-}
-
-async function apiGet(sheet){
-  const r = await fetch(API+'?action=get&sheet='+encodeURIComponent(sheet));
-  const d = await r.json();
-  return d.ok ? d.values : [];
-}
-
-async function initHeaders(){
-  // Check if RECEPCIONES has headers, if not add them
-  const rows = await apiGet('RECEPCIONES');
-  if(!rows.length || rows[0][0] !== 'ID'){
-    await apiPost('RECEPCIONES', HDR_REC);
+// ── Inicializa/completa solapa CONFIG (llamar sin arg para ejecución manual) ──
+function initConfig(sheet) {
+  const ss2 = SpreadsheetApp.openById(SHEET_ID);
+  if (!sheet) {
+    sheet = ss2.getSheetByName('CONFIG') || ss2.insertSheet('CONFIG');
   }
-  const rows2 = await apiGet('LOTES');
-  if(!rows2.length || rows2[0][0] !== 'ID_Recepcion'){
-    await apiPost('LOTES', HDR_LOT);
+  if (!sheet.getRange('A1').getValue()) {
+    sheet.getRange('A1').setValue('PASS_SUPERVISOR');
+    sheet.getRange('B1').setValue('1234');
+    sheet.getRange('A2').setValue('PASS_ADMIN');
+    sheet.getRange('B2').setValue('admin1234');
+    sheet.getRange('A3').setValue('--- Cambiar contraseñas en col B ---');
+    sheet.getRange('A3').setFontColor('#999999');
   }
-}
-
-// ── CACHE local para búsquedas rápidas ───────────────────────────────────────
-let cacheRec = null;
-let cacheLot = null;
-let cacheTs  = 0;
-const CACHE_TTL = 30000; // 30 segundos
-
-async function getRecepciones(force=false){
-  if(!force && cacheRec && Date.now()-cacheTs < CACHE_TTL) return cacheRec;
-  const rows = await apiGet('RECEPCIONES');
-  cacheRec = rows.slice(1).filter(r=>r[0]);
-  cacheTs = Date.now();
-  return cacheRec;
-}
-
-async function getLotes(force=false){
-  if(!force && cacheLot && Date.now()-cacheTs < CACHE_TTL) return cacheLot;
-  const rows = await apiGet('LOTES');
-  cacheLot = rows.slice(1).filter(r=>r[0]);
-  cacheTs = Date.now();
-  return cacheLot;
-}
-
-function invalidateCache(){ cacheRec=null; cacheLot=null; }
-
-async function buscarRecepcion(fgo, fecha){
-  const rows = await getRecepciones();
-  const found = rows.find(r=>r[1]===fgo && String(r[2]).slice(0,10)===fecha);
-  if(!found) return null;
-  return {id:found[0], fgo:found[1], fecha:String(found[2]).slice(0,10),
-    unid:Number(found[3]), kgs:found[4], kg_unid:found[5],
-    tambores:found[6], comentarios:found[7]};
-}
-
-async function buscarLotesAbiertos(fgo, fecha){
-  const rows = await getLotes();
-  // Cargas de este lote que NO son finales
-  const cargas = rows.filter(r=>r[1]===fgo && String(r[2]).slice(0,10)===fecha && r[5]!=1 && r[5]!=='TRUE' && r[5]!==true);
-  if(!cargas.length) return null;
-  const acum  = cargas.reduce((s,r)=>s+Number(r[6]),0);
-  const total = Number(cargas[cargas.length-1][8]);
-  return {acum, total, numParcial:cargas.length+1,
-    cargas:cargas.map(r=>({unid:r[6], fecha:String(r[3]).slice(0,10)}))};
-}
-
-// ── UI ────────────────────────────────────────────────────────────────────────
-function showTab(n){
-  document.getElementById('tab1').classList.toggle('hidden',n!==1);
-  document.getElementById('tab2').classList.toggle('hidden',n!==2);
-  document.getElementById('nav1').classList.toggle('active',n===1);
-  document.getElementById('nav2').classList.toggle('active',n===2);
-  if(n===1) renderLista();
-  if(n===2) renderLotesRecientes();
-}
-
-async function renderLotesRecientes(){
-  const card=document.getElementById('f2-resumen-card');
-  const el=document.getElementById('f2-resumen-items');
-  if(!card) return; card.style.display='block';
-  invalidateCache();
-  const rows=await getLotes(true);
-  if(!rows||!rows.length){el.innerHTML='<p style="font-size:12px;color:#999">Sin lotes aún</p>';return;}
-  const mapa={}; rows.forEach(r=>{const k=r[1]+'||'+String(r[2]).slice(0,10); mapa[k]=r;});
-  const lista=Object.values(mapa).reverse().slice(0,10);
-  el.innerHTML=lista.map(r=>{
-    const cerrado=String(r[5])==='1'||r[5]===true||r[5]==='TRUE';
-    const acum=Number(r[7])||0, total=Number(r[8])||1;
-    const pct=Math.min(100,Math.round(acum/total*100));
-    const color=cerrado?'#16a34a':'#d97706';
-    const badge=cerrado
-      ?'<span style="font-size:10px;background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;border-radius:4px;padding:1px 6px;margin-left:6px">CERRADO</span>'
-      :'<span style="font-size:10px;background:#fffbeb;color:#92400e;border:1px solid #fde68a;border-radius:4px;padding:1px 6px;margin-left:6px">PARCIAL</span>';
-    return '<div style="padding:9px 0;border-bottom:1px solid #f0f0f0">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'+
-        '<div><strong style="font-size:13px">'+r[1]+'</strong><span style="font-size:12px;color:#888;margin-left:6px">'+fmt(r[2])+'</span>'+badge+'</div>'+
-        '<span style="font-size:12px;font-weight:600">'+acum+'/'+total+' un</span></div>'+
-      '<div style="height:5px;background:#eee;border-radius:3px;overflow:hidden">'+
-        '<div style="height:100%;width:'+pct+'%;background:'+color+';border-radius:3px"></div></div>'+
-      '<div style="font-size:11px;color:#888;margin-top:3px">Clasif: '+fmt(r[3])+'</div></div>';
-  }).join('');
-}
-
-function setBtnLoading(id, loading, txt){
-  const b = document.getElementById(id);
-  b.disabled = loading;
-  b.innerHTML = loading ? '<span class="spinner"></span>'+txt : txt;
-}
-
-// ── FORMULARIO 1 ─────────────────────────────────────────────────────────────
-document.getElementById('f1-fecha').value = today();
-
-function f1KgCalc(){
-  const kgsRaw = document.getElementById('f1-kgs').value.replace(',','.');
-  const kgs    = parseFloat(kgsRaw) || 0;
-  const unid   = gv('f1-unid');
-  const wrap   = document.getElementById('f1-kg-unid-wrap');
-  const label  = document.getElementById('f1-kg-unid');
-  if(kgs > 0 && unid > 0){
-    wrap.style.display = 'block';
-    label.textContent  = (kgs / unid).toFixed(3) + ' kg/un';
-  } else {
-    wrap.style.display = 'none';
-    label.textContent  = '—';
+  if (!sheet.getRange('A4').getValue()) {
+    sheet.getRange('A4').setValue('FCL_NUM_INICIO');
+    sheet.getRange('B4').setValue(11);
+    sheet.getRange('A5').setValue('FCL_FECHA_INICIO');
+    sheet.getRange('B5').setValue('2026-04-13');
+    sheet.getRange('A6').setValue('FCL_KGS_INICIO');
+    sheet.getRange('B6').setValue(13880);
+    sheet.getRange('A7').setValue('FCL_CAPACIDAD_KG');
+    sheet.getRange('B7').setValue(28000);
+    sheet.getRange('A1:A7').setFontWeight('bold');
   }
+  Logger.log('CONFIG OK: FCL_NUM=' + sheet.getRange('B4').getValue() +
+             ' | FECHA=' + sheet.getRange('B5').getValue() +
+             ' | KGS=' + sheet.getRange('B6').getValue() +
+             ' | CAP=' + sheet.getRange('B7').getValue());
 }
 
-function f1Check(){
-  const ok = document.getElementById('f1-fgo').value &&
-             document.getElementById('f1-fecha').value &&
-             gv('f1-unid') > 0;
-  document.getElementById('f1-btn').disabled = !ok;
-}
-
-async function f1Guardar(){
-  setBtnLoading('f1-btn', true, 'Verificando...');
-  const fgo   = document.getElementById('f1-fgo').value;
-  const fecha = document.getElementById('f1-fecha').value;
-  const unid  = Math.round(gv('f1-unid'));
-  const tamb  = gv('f1-tambores') || '';
-  const com   = document.getElementById('f1-comentarios').value.trim();
-  const id    = rKey(fgo, fecha);
-  const ts    = new Date().toISOString();
-
-  // Verificar duplicado
-  const existe = await buscarRecepcion(fgo, fecha);
-  if(existe){
-    const msg = document.getElementById('f1-msg');
-    msg.className='msg err';
-    msg.textContent='Ya existe un ingreso de '+fgo+' para la fecha '+fecha+' ('+existe.unid+' unidades). No se permiten duplicados.';
-    setBtnLoading('f1-btn', false, 'Registrar ingreso');
-    document.getElementById('f1-btn').disabled=false;
-    return;
-  }
-  setBtnLoading('f1-btn', true, 'Guardando...');
-
-  const kgsRaw  = document.getElementById('f1-kgs').value.replace(',','.');
-  const kgs     = parseFloat(kgsRaw) || '';
-  const kg_unid = (kgs && unid) ? parseFloat((kgs/unid).toFixed(4)) : '';
-  const ua1=navigator.userAgent.slice(0,200);
-  const res = await apiPost('RECEPCIONES', [id,fgo,fecha,unid,kgs,kg_unid,tamb,com,ua1,ts]);
-  if(!res.ok){ alert('Error al guardar. Intentá de nuevo.'); setBtnLoading('f1-btn',false,'Registrar ingreso'); return; }
-
-  invalidateCache();
-  document.getElementById('f1-s-det').textContent = fgo+' — '+fmt(fecha)+' · '+unid+' unidades'+(kgs?' · '+kgs+' kgs':'')+(tamb?' · '+tamb+' tambores':'');
-  let html = row2('Frigorífico',fgo)+row2('Fecha',fmt(fecha))+row2('Unidades',unid);
-  if(tamb)  html+=row2('Tambores',tamb);
-  if(com)   html+=row2('Comentarios',com);
-  document.getElementById('f1-s-res').innerHTML = '<table style="width:100%;font-size:13px;border-collapse:collapse">'+html+'</table>';
-  document.getElementById('f1-form').classList.add('hidden');
-  document.getElementById('f1-success').classList.remove('hidden');
-  renderLista();
-}
-
-function row2(lbl,val){
-  return `<tr><td style="color:#666;padding:3px 0">${lbl}</td><td style="text-align:right;font-weight:600;padding:3px 0">${val}</td></tr>`;
-}
-
-function f1Nuevo(){
-  document.getElementById('f1-form').classList.remove('hidden');
-  document.getElementById('f1-success').classList.add('hidden');
-  document.getElementById('f1-fgo').value='';
-  document.getElementById('f1-fecha').value=today();
-  ['f1-unid','f1-kgs','f1-tambores','f1-comentarios'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('f1-kg-unid-wrap').style.display='none';
-  document.getElementById('f1-msg').className='msg';
-  document.getElementById('f1-btn').disabled=true;
-  document.getElementById('f1-btn').textContent='Registrar ingreso';
-}
-
-async function renderLista(){
-  const el = document.getElementById('f1-lista');
-  el.innerHTML='<p style="font-size:12px;color:#999">Cargando...</p>';
-  const rows = await getRecepciones(true);
-  if(!rows.length){el.innerHTML='<p style="font-size:12px;color:#999">Sin registros aún</p>';return;}
-  const recientes = [...rows].reverse().slice(0,8);
-  el.innerHTML = recientes.map(r=>`
-    <div class="recep-row">
-      <div>
-        <strong>${r[1]}</strong>
-        <span style="font-size:12px;color:#888;margin-left:6px">${fmt(r[2])}</span>
-        ${r[5]?`<br><span style="font-size:11px;color:#999">${r[5]}</span>`:''}
-      </div>
-      <div style="text-align:right;flex-shrink:0;margin-left:12px">
-        <strong>${r[3]} un</strong>
-        ${r[4]?`<br><span style="font-size:11px;color:#999">${r[4]} tamb.</span>`:''}
-      </div>
-    </div>`).join('');
-}
-
-// ── FORMULARIO 2 ─────────────────────────────────────────────────────────────
-document.getElementById('f2-fc').value = today();
-let f2Rec = null, f2Estado = null;
-let cachedConfig = null;
-
-async function f2Buscar(){
-  const fgo   = document.getElementById('f2-fgo').value;
-  const fecha = document.getElementById('f2-fecha').value;
-  const info  = document.getElementById('f2-info');
-  const parc  = document.getElementById('f2-parcial');
-  info.innerHTML=''; parc.innerHTML='';
-  ['f2-campos','f2-cats','f2-obs-card','f2-btn'].forEach(id=>document.getElementById(id).style.display='none');
-  f2Rec=null; f2Estado=null;
-  if(!fgo||!fecha) return;
-
-  info.innerHTML='<p style="font-size:13px;color:#666;padding:8px 0"><span class="spinner" style="border-color:rgba(0,0,0,.2);border-top-color:#666"></span>Buscando lote...</p>';
-
-  invalidateCache();
-  const allLotes = await getLotes(true);
-  const recRows  = await getRecepciones(true);
-  const recFound = recRows.find(r=>r[1]===fgo && String(r[2]).slice(0,10)===fecha);
-  f2Rec = recFound ? {id:recFound[0], fgo:recFound[1], fecha:String(recFound[2]).slice(0,10),
-    unid:Number(recFound[3]), kgs:recFound[4], kg_unid:recFound[5],
-    tambores:recFound[6], comentarios:recFound[7]} : null;
-  const filasLote = allLotes.filter(r=>r[1]===fgo && String(r[2]).slice(0,10)===fecha);
-  const yaCerrado = filasLote.some(r=>String(r[5])==='1'||r[5]===true||r[5]==='TRUE');
-  if(yaCerrado && f2Rec){
-    info.innerHTML='<div class="found-card"><p style="font-size:12px;font-weight:600;color:#166534;margin-bottom:6px">Lote cerrado</p>'+
-      '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px"><span style="color:#555">Total del lote</span><strong>'+f2Rec.unid+' unidades</strong></div>'+
-      '<div style="background:#dcfce7;border-radius:6px;padding:8px 10px;font-size:12px;color:#166534">Lote completo y cerrado. No se pueden agregar más cargas.</div></div>';
-    setStatus && setStatus('Conectado',false); return;
-  }
-  const cargasParciales = filasLote.filter(r=>String(r[5])!=='1'&&r[5]!==true&&r[5]!=='TRUE');
-  f2Estado = cargasParciales.length ? {
-    acum:cargasParciales.reduce((s,r)=>s+Number(r[6]),0), total:Number(f2Rec?f2Rec.unid:0),
-    numParcial:cargasParciales.length+1, cargas:cargasParciales.map(r=>({unid:Number(r[6]),fecha:String(r[3]).slice(0,10)}))
-  } : null;
-
-  if(!f2Rec){
-    info.innerHTML=`<div class="card" style="border-color:#fca5a5">
-      <p style="font-size:13px;color:#991b1b;font-weight:600">Recepción no encontrada</p>
-      <p style="font-size:12px;color:#666;margin-top:4px">No hay ingreso de <strong>${fgo}</strong> con fecha <strong>${fecha}</strong>.<br>Registralo primero en Recepción MP.</p>
-      <button onclick="showTab(1)" style="margin-top:10px;font-size:12px;color:#0078d4;background:none;border:none;cursor:pointer;padding:0">← Ir a Recepción MP</button>
-    </div>`;
-    return;
-  }
-
-  let fhtml=`<div class="found-card">
-    <p style="font-size:12px;font-weight:600;color:#166534;margin-bottom:6px">Recepción encontrada</p>
-    <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px">
-      <span style="color:#555">Total del lote</span><strong>${f2Rec.unid} unidades</strong>
-    </div>`;
-  if(f2Rec.kgs) fhtml+=`<div style="font-size:12px;color:#666">Kgs recibidos: <strong>${String(f2Rec.kgs).replace('.',',')} kg</strong></div>`;
-  if(f2Rec.kg_unid) fhtml+=`<div style="font-size:12px;color:#666">Kg. promedio por unidad: <strong>${String(f2Rec.kg_unid).replace('.',',')} kg/un</strong></div>`;
-  if(f2Rec.tambores) fhtml+=`<div style="font-size:12px;color:#666">Tambores: ${f2Rec.tambores}</div>`;
-  if(f2Rec.comentarios) fhtml+=`<div style="font-size:12px;color:#666;margin-top:2px">Obs recepción: ${f2Rec.comentarios}</div>`;
-  fhtml+='</div>';
-  info.innerHTML=fhtml;
-
-  if(f2Estado){
-    const pct=Math.min(100,Math.round(f2Estado.acum/f2Estado.total*100));
-    const over=f2Estado.acum>f2Estado.total;
-    parc.innerHTML=`<div class="lote-ab">
-      <p style="font-size:13px;font-weight:600;color:#92400e;margin-bottom:6px">Lote parcial — carga N° ${f2Estado.numParcial}</p>
-      <div class="progress-bar"><div class="progress-fill ${over?'over':''}" style="width:${pct}%"></div></div>
-      <div class="sr">
-        <span>Clasificadas: <span class="sv">${f2Estado.acum} un</span></span>
-        <span>Total: <span class="sv">${f2Estado.total} un</span></span>
-      </div>
-      <div style="margin-top:5px;font-size:12px;color:#666">
-        ${over?`<span style="color:#dc2626;font-weight:600">Superado en ${f2Estado.acum-f2Estado.total} un</span>`:`Faltan: <span class="sv">${f2Estado.total-f2Estado.acum} un</span>`}
-      </div>
-      <div style="margin-top:6px;font-size:11px;color:#888">
-        ${f2Estado.cargas.map((c,i)=>`Carga ${i+1}: ${c.unid} un · ${fmt(c.fecha)}`).join(' &nbsp;·&nbsp; ')}
-      </div>
-    </div>`;
-  }
-
-  ['f2-campos','f2-cats','f2-obs-card','f2-btn'].forEach(id=>document.getElementById(id).style.display='block');
-  f2Recalc();
-}
-
-function f2Recalc(){
-  if(!f2Rec) return;
-  let totU=0,totK=0;
-  CATS.forEach(c=>{totU+=gv('u-'+c);totK+=gv('k-'+c);});
-  document.getElementById('tot-u').textContent=totU;
-  document.getElementById('tot-k').textContent=totK.toFixed(1);
-  const tl=Number(f2Rec.unid), ap=Number(f2Estado?f2Estado.acum:0), ue=gv('f2-unid'), an=ap+ue;
-
-  const msg=document.getElementById('f2-msg');
-  msg.className='msg'; msg.textContent='';
-  const fc=document.getElementById('f2-fc').value, fi=document.getElementById('f2-fecha').value;
-  if(fc&&fi&&fc<fi){msg.className='msg err';msg.textContent='La fecha de clasificación no puede ser anterior al ingreso.';f2ValidarBtn();return;}
-  if(ue>0&&tl>0){
-    if(an===tl){msg.className='msg ok';msg.textContent='Lote completo — '+tl+' unidades clasificadas.';}
-    else if(an>tl){msg.className='msg err';msg.textContent='Superás el total en '+(an-tl)+' un. Verificar.';}
-    else{msg.className='msg info';msg.textContent='Carga N°'+(f2Estado?f2Estado.numParcial:1)+' — quedan '+(tl-an)+' unidades por clasificar.';}
-  } else if(totU>0){msg.className='msg ok';msg.textContent='Listo para guardar.';}
-  const catErr=catError();
-  if(catErr){msg.className='msg err';msg.textContent=catErr;}
-  if(an>tl&&tl>0){msg.className='msg err';msg.textContent='Las unidades ('+an+') superan el total del lote ('+tl+').';}
-  f2ValidarBtn();
-}
-
-function catError(){
-  let sumU=0;
-  for(const cat of CATS){
-    const u=gv('u-'+cat), k=gv('k-'+cat);
-    if(u<0||k<0) return 'No se permiten valores negativos.';
-    if(u>0&&k===0) return 'Categoría '+cat+': si hay unidades debe haber kgs.';
-    if(k>0&&u===0) return 'Categoría '+cat+': si hay kgs debe haber unidades.';
-    sumU+=u;
-  }
-  const ue=gv('f2-unid');
-  if(ue>0&&sumU>0&&sumU!==ue) return 'Suma de categorías ('+sumU+') ≠ unidades clasificadas ('+ue+').';
-  return null;
-}
-
-function f2ValidarBtn(){
-  if(!f2Rec){document.getElementById('f2-btn').disabled=true;return;}
-  const fc=document.getElementById('f2-fc').value;
-  const fi=document.getElementById('f2-fecha').value;
-  const ue=gv('f2-unid');
-  const ap=Number(f2Estado?f2Estado.acum:0);
-  const tl=Number(f2Rec.unid);
-  const an=ap+ue;
-  const totU=CATS.reduce((s,cat)=>s+gv('u-'+cat),0);
-  const err=catError();
-  const ok=fc&&fi&&fc>=fi&&ue>0&&totU>0&&!err;
-  document.getElementById('f2-btn').disabled=!ok;
-  if(ok){
-    if(an===tl){
-      document.getElementById('f2-btn').textContent='Guardar — cerrar lote';
-      document.getElementById('f2-btn').disabled=false;
-    } else if(an<tl){
-      document.getElementById('f2-btn').textContent='Guardar parcial N°'+(f2Estado?f2Estado.numParcial:1);
-      document.getElementById('f2-btn').disabled=false;
-    } else {
-      // an > tl: solo permitir mediante forzar
-      document.getElementById('f2-btn').textContent='Guardar';
-      document.getElementById('f2-btn').disabled=true;
-    }
-  } else {
-    document.getElementById('f2-btn').textContent='Guardar';
-  }
-  // Botón forzar cierre: visible siempre que haya diferencia y el form sea válido
-  const btnForzar = document.getElementById('f2-btn-forzar');
-  if(btnForzar){
-    const showForzar = ok && tl>0 && an>0 && an!==tl;
-    btnForzar.style.display = showForzar ? 'block' : 'none';
-    if(showForzar){
-      const pctDiff = Math.abs(an-tl)/tl*100;
-      const signo = an>tl ? 'sobrantes' : 'faltantes';
-      btnForzar.textContent = `Cerrar lote con diferencia (${pctDiff.toFixed(1)}% — ${Math.abs(an-tl)} un ${signo})`;
-    }
-  }
-}
-
-async function f2Guardar(forceClose=false){
-  const txtOrig = document.getElementById('f2-btn').textContent;
-  setBtnLoading('f2-btn', true, 'Guardando...');
-  const fgo=document.getElementById('f2-fgo').value;
-  const fi=document.getElementById('f2-fecha').value;
-  const fc=document.getElementById('f2-fc').value;
-  const ue=gv('f2-unid'), obs=document.getElementById('f2-obs').value;
-  const tl=f2Rec.unid, ap=f2Estado?f2Estado.acum:0, an=ap+ue;
-  const esFinal=(an===tl||forceClose), diff=an-tl, np=f2Estado?f2Estado.numParcial:1;
-  let totU=0,totK=0;
-  CATS.forEach(c=>{totU+=gv('u-'+c);totK+=gv('k-'+c);});
-  const ua=navigator.userAgent.slice(0,200);
-  const row=[f2Rec.id,fgo,fi,fc,np,esFinal?1:0,ue,an,tl,
-    ...CATS.map(c=>gv('u-'+c)), ...CATS.map(c=>gv('k-'+c)),
-    totK,obs,ua,getCurrentFCL?`FCL ${getCurrentFCL().num}`:'',navigator.userAgent.slice(0,200),new Date().toISOString()];
-  const res = await apiPost('LOTES', row);
-  if(!res.ok){ alert('Error al guardar. Intentá de nuevo.'); setBtnLoading('f2-btn',false,txtOrig); return; }
-  invalidateCache();
-  const dias=Math.round((new Date(fc)-new Date(fi))/(1000*86400));
-  const chk=document.getElementById('f2-chk'), chkp=document.getElementById('f2-chk-p');
-  if(esFinal&&diff!==0){chk.style.background='#fffbeb';chkp.setAttribute('stroke','#d97706');}
-  else if(esFinal){chk.style.background='#f0fdf4';chkp.setAttribute('stroke','#16a34a');}
-  else{chk.style.background='#eff6ff';chkp.setAttribute('stroke','#1d4ed8');}
-  document.getElementById('f2-s-tit').textContent=esFinal?(diff===0?'Lote completo':'Lote cerrado con diferencia'):'Parcial N°'+np+' guardado';
-  document.getElementById('f2-s-sub').textContent=fgo+' · Ingreso: '+fi+' → Clasif.: '+fc+' ('+dias+' días)';
-  const pd=document.getElementById('f2-s-prog'); pd.style.display='block';
-  const pct=Math.min(100,Math.round(an/tl*100));
-  document.getElementById('f2-s-pf').style.width=pct+'%';
-  document.getElementById('f2-s-pf').className='progress-fill'+(an>tl?' over':'');
-  document.getElementById('f2-s-ac').innerHTML='Clasificadas: <strong>'+an+' un</strong>';
-  document.getElementById('f2-s-to').innerHTML='Total: <strong>'+tl+' un</strong>';
-  const dv=document.getElementById('f2-s-df');
-  if(esFinal&&diff!==0){dv.style.display='block';dv.style.color='#92400e';dv.textContent=(diff>0?'Excedente de '+diff+' un.':'Faltaron '+Math.abs(diff)+' un.')+' Verificar con encargado.';}
-  else if(!esFinal){dv.style.display='block';dv.style.color='#666';dv.textContent='Quedan '+(tl-an)+' unidades por clasificar.';}
-  else{dv.style.display='none';}
-  let resHtml='<table style="width:100%;border-collapse:collapse"><tr><th style="text-align:left;font-size:11px;color:#888;padding:0 8px 5px 0">Cat.</th><th style="text-align:right;font-size:11px;color:#888;padding:0 8px 5px">Unid.</th><th style="text-align:right;font-size:11px;color:#888">Kgs</th></tr>';
-  CATS.forEach(c=>{const u=gv('u-'+c),k=gv('k-'+c);if(u>0||k>0)resHtml+=`<tr><td><span class="badge b${c}">${c}</span></td><td style="text-align:right;padding:3px 8px">${u}</td><td style="text-align:right;padding:3px">${k.toFixed(1)}</td></tr>`;});
-  resHtml+=`<tr style="border-top:1px solid #eee"><td style="padding:5px 0;font-weight:600">Total</td><td style="text-align:right;padding:5px 8px;font-weight:600">${totU}</td><td style="text-align:right;font-weight:600">${totK.toFixed(1)}</td></tr>`;
-
-  if(obs) resHtml+=`<tr><td style="font-size:11px;color:#888">Obs.</td><td colspan="2" style="text-align:right;font-size:11px;color:#888">${obs}</td></tr>`;
-  resHtml+='</table>';
-  document.getElementById('f2-s-res').innerHTML=resHtml;
-  document.getElementById('f2-form').classList.add('hidden');
-  document.getElementById('f2-success').classList.remove('hidden');
-}
-
-function f2Nuevo(){
-  document.getElementById('f2-form').classList.remove('hidden');
-  document.getElementById('f2-success').classList.add('hidden');
-  document.getElementById('f2-fgo').value='';
-  document.getElementById('f2-fecha').value='';
-  document.getElementById('f2-unid').value='';
-  document.getElementById('f2-obs').value='';
-  CATS.forEach(c=>{document.getElementById('u-'+c).value='';document.getElementById('k-'+c).value='';});
-  ['f2-info','f2-parcial'].forEach(id=>document.getElementById(id).innerHTML='');
-  ['f2-campos','f2-cats','f2-obs-card','f2-btn'].forEach(id=>document.getElementById(id).style.display='none');
-  f2Rec=null; f2Estado=null;
-  document.getElementById('f2-fc').value=today();
-  document.getElementById('f2-btn').textContent='Guardar';
-}
-
-// ── INIT ──────────────────────────────────────────────────────────────────────
-
-// ── FORZAR CIERRE CON DIFERENCIA ─────────────────────────────────────────────
-// Umbrales: <=0.5% confirmación simple | 0.5%-5% supervisor | >5% administrador
-function f2ForzarCierre() {
-  if (!f2Rec) return;
-  const tl   = Number(f2Rec.unid);
-  const ap   = Number(f2Estado ? f2Estado.acum : 0);
-  const ue   = gv('f2-unid');
-  const an   = ap + ue;
-  const diff = an - tl;
-  const pct  = tl > 0 ? Math.abs(diff) / tl * 100 : 0;
-  const signo  = diff > 0 ? 'sobrantes' : 'faltantes';
-  const detalle= `Diferencia: ${pct.toFixed(2)}% (${Math.abs(diff)} unidades ${signo})`;
-
-  if (pct <= 0.5) {
-    // Confirmación simple
-    document.getElementById('modal-titulo').textContent  = '¿Cerrar lote con diferencia?';
-    document.getElementById('modal-detalle').textContent = detalle;
-    document.getElementById('modal-confirmar').style.display = 'flex';
-    pendingGuardar = () => f2Guardar(true);
-  } else if (pct <= 5) {
-    // Contraseña supervisor
-    document.getElementById('pass-nivel').textContent   = 'Supervisor';
-    document.getElementById('pass-detalle').textContent = detalle;
-    document.getElementById('pass-input').value = '';
-    document.getElementById('pass-error').style.display = 'none';
-    document.getElementById('modal-pass').style.display = 'flex';
-    passNivel = 'supervisor';
-    pendingGuardar = () => f2Guardar(true);
-  } else {
-    // Contraseña administrador
-    document.getElementById('pass-nivel').textContent   = 'Administrador';
-    document.getElementById('pass-detalle').textContent = detalle;
-    document.getElementById('pass-input').value = '';
-    document.getElementById('pass-error').style.display = 'none';
-    document.getElementById('modal-pass').style.display = 'flex';
-    passNivel = 'admin';
-    pendingGuardar = () => f2Guardar(true);
-  }
-}
-
-// ── CONFIG ────────────────────────────────────────────────────────────────────
-let cachedConfig = null;
-let passNivel = 'supervisor';
-async function getConfig() {
-  if(cachedConfig) return cachedConfig;
+function doGet(e) {
   try {
-    const r = await fetch(API + '?action=get_config');
-    const d = await r.json();
-    cachedConfig = {
-      passSupervisor: d.passSupervisor || d.pass || '1234',
-      passAdmin:      d.passAdmin || 'admin1234',
-      fclNumInicio:   d.fclNumInicio   || 11,
-      fclFechaInicio: d.fclFechaInicio || '2026-04-13',
-      fclKgsInicio:   d.fclKgsInicio   || 13880,
-      fclCapacidadKg: d.fclCapacidadKg || 28000,
-    };
-  } catch(e) {
-    cachedConfig = {passSupervisor:'1234',passAdmin:'admin1234',
-      fclNumInicio:11,fclFechaInicio:'2026-04-13',fclKgsInicio:13880,fclCapacidadKg:28000};
+    const action = e.parameter.action;
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+
+    // ── GET ──────────────────────────────────────────────────────────────────
+    if (action === 'get') {
+      const sheet = ss.getSheetByName(e.parameter.sheet);
+      if (!sheet) return resp({ok:false, error:'Sheet not found: '+e.parameter.sheet});
+      return resp({ok:true, values: sheet.getDataRange().getValues()});
+    }
+
+    // ── GET_ALL — una sola llamada trae todo (elimina cold start duplicado) ──
+    if (action === 'get_all') {
+      const shRec = ss.getSheetByName('RECEPCIONES');
+      const shLot = ss.getSheetByName('LOTES');
+      let shCfg = ss.getSheetByName('CONFIG');
+      if (!shCfg) shCfg = ss.insertSheet('CONFIG');
+      initConfig(shCfg);
+      const recepciones = shRec ? shRec.getDataRange().getValues() : [];
+      const lotes       = shLot ? shLot.getDataRange().getValues() : [];
+      const config = {
+        passSupervisor: String(shCfg.getRange('B1').getValue() || '1234'),
+        passAdmin:      String(shCfg.getRange('B2').getValue() || 'admin1234'),
+        fclNumInicio:   Number(shCfg.getRange('B4').getValue()) || 11,
+        fclFechaInicio: String(shCfg.getRange('B5').getValue() || '2026-04-13'),
+        fclKgsInicio:   Number(shCfg.getRange('B6').getValue()) || 13880,
+        fclCapacidadKg: Number(shCfg.getRange('B7').getValue()) || 28000,
+      };
+      return resp({ok:true, recepciones, lotes, config});
+    }
+
+    // ── POST (append row) ────────────────────────────────────────────────────
+    if (action === 'post') {
+      const data = JSON.parse(decodeURIComponent(e.parameter.data));
+      const sheet = ss.getSheetByName(data.sheet);
+      if (!sheet) return resp({ok:false, error:'Sheet not found: '+data.sheet});
+      sheet.appendRow(data.row);
+      return resp({ok:true});
+    }
+
+    // ── UPDATE RECEPCION (modificar fila por ID) ─────────────────────────────
+    if (action === 'update_recepcion') {
+      const data = JSON.parse(decodeURIComponent(e.parameter.data));
+      const sheet = ss.getSheetByName('RECEPCIONES');
+      const values = sheet.getDataRange().getValues();
+      let rowIdx = -1;
+      for (let i = 1; i < values.length; i++) {
+        if (values[i][0] === data.id) { rowIdx = i + 1; break; }
+      }
+      if (rowIdx === -1) return resp({ok:false, error:'Recepcion no encontrada: '+data.id});
+      // Cols: D=Unidades(4), E=Tambores(5), F=Comentarios(6)
+      sheet.getRange(rowIdx, 4).setValue(data.unidades);
+      sheet.getRange(rowIdx, 5).setValue(data.tambores || '');
+      sheet.getRange(rowIdx, 6).setValue(data.comentarios || '');
+      return resp({ok:true});
+    }
+
+    // ── UPDATE TOTAL_LOTE en LOTES (cuando se modifica recepción) ────────────
+    if (action === 'update_total_lote') {
+      const data = JSON.parse(decodeURIComponent(e.parameter.data));
+      const sheet = ss.getSheetByName('LOTES');
+      const values = sheet.getDataRange().getValues();
+      let updated = 0;
+      for (let i = 1; i < values.length; i++) {
+        if (values[i][0] === data.id_recepcion) {
+          // Col I = Total_Lote (índice 8, col 9)
+          sheet.getRange(i + 1, 9).setValue(data.nuevo_total);
+          updated++;
+        }
+      }
+      return resp({ok:true, updated});
+    }
+
+    // ── GET CONFIG ────────────────────────────────────────────────────────────────
+    if (action === 'get_config') {
+      let sheet = ss.getSheetByName('CONFIG');
+      if (!sheet) sheet = ss.insertSheet('CONFIG');
+      initConfig(sheet);
+      const passSupervisor  = String(sheet.getRange('B1').getValue());
+      const passAdmin       = String(sheet.getRange('B2').getValue());
+      const fclNumInicio    = Number(sheet.getRange('B4').getValue()) || 11;
+      const fclFechaInicio  = String(sheet.getRange('B5').getValue() || '2026-04-13');
+      const fclKgsInicio    = Number(sheet.getRange('B6').getValue()) || 13880;
+      const fclCapacidadKg  = Number(sheet.getRange('B7').getValue()) || 28000;
+      return resp({ok:true, passSupervisor, passAdmin, pass: passSupervisor,
+                   fclNumInicio, fclFechaInicio, fclKgsInicio, fclCapacidadKg});
+    }
+
+    return resp({ok:false, error:'Unknown action: '+action});
+
+  } catch(err) {
+    return resp({ok:false, error:err.toString()});
   }
-  return cachedConfig;
 }
 
-// ── MODIFICAR RECEPCIÓN (F1) ──────────────────────────────────────────────────
-let f1mRec = null;
-
-function f1ModToggle() {
-  const form = document.getElementById('f1-mod-form');
-  const btn  = document.getElementById('f1-mod-toggle-btn');
-  const show = form.style.display === 'none';
-  form.style.display = show ? 'block' : 'none';
-  btn.textContent = show ? 'Ocultar modificación' : 'Modificar recepción del día anterior';
-  if (show) {
-    // Pre-fill yesterday's date
-    const d = new Date(); d.setDate(d.getDate()-1);
-    document.getElementById('f1m-fecha').value = d.toISOString().slice(0,10);
-  }
+function resp(obj) {
+  return ContentService
+    .createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
 }
-
-async function f1mBuscar() {
-  const fgo   = document.getElementById('f1m-fgo').value;
-  const fecha = document.getElementById('f1m-fecha').value;
-  document.getElementById('f1m-found').style.display    = 'none';
-  document.getElementById('f1m-notfound').style.display = 'none';
-  document.getElementById('f1m-btn').disabled = true;
-  f1mRec = null;
-  if (!fgo || !fecha) return;
-
-  // Validar que sea T+1: fecha del registro debe ser ayer o hoy
-  // Buscamos la recepción y verificamos su timestamp
-  invalidateCache();
-  const rows = await getRecepciones(true);
-  const found = rows.find(r => r[1]===fgo && String(r[2]).slice(0,10)===fecha);
-
-  if (!found) {
-    document.getElementById('f1m-notfound').style.display = 'block'; return;
-  }
-
-  // Verificar T+1: timestamp de la recepción (col 8 = índice 8)
-  const ts = found[8] || found[7]; // UserAgent is col 7, Timestamp col 8
-  const tsDate = ts ? new Date(ts) : null;
-  const now = new Date();
-  const diffHoras = tsDate ? (now - tsDate) / (1000*3600) : 999;
-
-  if (diffHoras > 48) {
-    document.getElementById('f1m-notfound').style.display = 'block'; return;
-  }
-
-  f1mRec = {id: found[0], fgo: found[1], fecha: String(found[2]).slice(0,10),
-             unid: Number(found[3]), tambores: found[4], comentarios: found[5]};
-
-  document.getElementById('f1m-unid').value        = f1mRec.unid || '';
-  document.getElementById('f1m-tambores').value    = f1mRec.tambores || '';
-  document.getElementById('f1m-comentarios').value = f1mRec.comentarios || '';
-
-  // Verificar si hay lotes parciales asociados
-  const lotes = await getLotes(true);
-  const tieneParc = lotes.some(l => l[0] === f1mRec.id);
-  document.getElementById('f1m-lotes-aviso').style.display = tieneParc ? 'block' : 'none';
-
-  document.getElementById('f1m-found').style.display    = 'block';
-  document.getElementById('f1m-notfound').style.display = 'none';
-  f1mCheck();
-}
-
-function f1mCheck() {
-  const unid = gv('f1m-unid');
-  document.getElementById('f1m-btn').disabled = !f1mRec || unid <= 0;
-}
-
-async function f1mGuardar() {
-  if (!f1mRec) return;
-  document.getElementById('f1m-btn').disabled = true;
-  document.getElementById('f1m-btn').textContent = 'Guardando...';
-
-  const unid       = Math.round(gv('f1m-unid'));
-  const tambores   = gv('f1m-tambores') || '';
-  const comentarios= document.getElementById('f1m-comentarios').value.trim();
-
-  // 1. Actualizar RECEPCIONES
-  const dataRec = encodeURIComponent(JSON.stringify({id: f1mRec.id, unidades: unid, tambores, comentarios}));
-  const r1 = await fetch(API + '?action=update_recepcion&data=' + dataRec);
-  const d1 = await r1.json();
-  if (!d1.ok) { alert('Error al actualizar: ' + d1.error); document.getElementById('f1m-btn').disabled=false; document.getElementById('f1m-btn').textContent='Confirmar modificación'; return; }
-
-  // 2. Si cambiaron las unidades, actualizar Total_Lote en LOTES
-  if (unid !== f1mRec.unid) {
-    const dataLot = encodeURIComponent(JSON.stringify({id_recepcion: f1mRec.id, nuevo_total: unid}));
-    await fetch(API + '?action=update_total_lote&data=' + dataLot);
-  }
-
-  invalidateCache();
-  const msg = document.getElementById('f1m-msg');
-  msg.className = 'msg ok';
-  msg.textContent = 'Recepción actualizada: ' + f1mRec.fgo + ' ' + fmt(f1mRec.fecha) + ' → ' + unid + ' unidades.';
-  document.getElementById('f1m-btn').textContent = 'Confirmar modificación';
-  document.getElementById('f1m-btn').disabled = false;
-  renderLista();
-}
-
-
-function modalCancelar(){
-  document.getElementById('modal-confirmar').style.display='none';
-  pendingGuardar=null;
-}
-function modalConfirmar(){
-  document.getElementById('modal-confirmar').style.display='none';
-  if(pendingGuardar) pendingGuardar();
-}
-function passCancelar(){
-  document.getElementById('modal-pass').style.display='none';
-  pendingGuardar=null;
-}
-async function passConfirmar(){
-  const input=document.getElementById('pass-input').value;
-  const cfg=await getConfig();
-  const expected=passNivel==='admin'?cfg.passAdmin:cfg.passSupervisor;
-  if(input!==expected){document.getElementById('pass-error').style.display='block';return;}
-  document.getElementById('modal-pass').style.display='none';
-  if(pendingGuardar) pendingGuardar();
-}
-// ── FCL TRACKING ─────────────────────────────────────────────────────────────
-function getCurrentFCL() {
-  const cfg    = cachedConfig || {};
-  const num0   = cfg.fclNumInicio   || 11;
-  const fecha0 = new Date(cfg.fclFechaInicio || '2026-04-13');
-  const kgs0   = cfg.fclKgsInicio   || 13880;
-  const cap    = cfg.fclCapacidadKg || 28000;
-  const lotes  = cacheLot || [];
-  let kgs_acum = kgs0;
-  for(const row of lotes){
-    if(!row[5] || !row[2]) continue;
-    const kgs_tot = parseFloat(row[21]) || 0;
-    if(kgs_tot <= 0) continue;
-    const fi_date = new Date(String(row[2]).slice(0,10));
-    if(fi_date >= fecha0) kgs_acum += kgs_tot;
-  }
-  const offset   = Math.floor(kgs_acum / cap);
-  const num      = num0 + offset;
-  const kgs_en   = Math.round(kgs_acum % cap);
-  const kgs_rest = Math.round(cap - kgs_en);
-  const pct      = Math.round(kgs_en / cap * 100);
-  return {num, kgs_en, kgs_rest, pct, cap};
-}
-
-function renderFCLCard() {
-  const el = document.getElementById('fcl-card');
-  if(!el) return;
-  if(!cachedConfig) { el.style.display='none'; return; }
-  const f = getCurrentFCL();
-  const color = f.pct >= 90 ? '#dc2626' : f.pct >= 70 ? '#d97706' : '#16a34a';
-  el.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <div><span style="font-size:16px;font-weight:600">FCL ${f.num}</span>
-        <span style="font-size:12px;color:#666;margin-left:8px">${f.kgs_en.toLocaleString()} / ${f.cap.toLocaleString()} kgs</span>
-      </div>
-      <span style="font-size:13px;font-weight:600;color:${color}">${f.pct}%</span>
-    </div>
-    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;margin-bottom:6px">
-      <div style="height:100%;width:${Math.min(100,f.pct)}%;background:${color};border-radius:4px"></div>
-    </div>
-    <div style="font-size:12px;color:#555">Faltan <strong>${f.kgs_rest.toLocaleString()} kgs</strong> para FCL ${f.num+1}</div>`;
-  el.style.display = 'block';
-}
-initHeaders().then(()=>{ renderLista(); getConfig(); }).catch(e=>console.error(e));
-</script>
-
-<!-- Modal: confirmar cierre con diferencia pequeña -->
-<div id="modal-confirmar" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
-  <div style="background:#fff;border-radius:12px;padding:24px;max-width:360px;width:90%;margin:auto">
-    <p style="font-size:16px;font-weight:600;margin-bottom:8px" id="modal-titulo">¿Cerrar lote?</p>
-    <p style="font-size:14px;color:#666;margin-bottom:20px" id="modal-detalle"></p>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <button onclick="modalCancelar()" style="padding:11px;border-radius:8px;cursor:pointer;border:1px solid #ddd;background:#fff;font-size:14px">Cancelar</button>
-      <button onclick="modalConfirmar()" style="padding:11px;border-radius:8px;cursor:pointer;border:none;background:#16a34a;color:#fff;font-size:14px;font-weight:600">Cerrar lote</button>
-    </div>
-  </div>
-</div>
-<!-- Modal: contraseña supervisor/admin -->
-<div id="modal-pass" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
-  <div style="background:#fff;border-radius:12px;padding:24px;max-width:360px;width:90%;margin:auto">
-    <p style="font-size:16px;font-weight:600;margin-bottom:4px">Autorización — <span id="pass-nivel">Supervisor</span></p>
-    <p style="font-size:13px;color:#666;margin-bottom:4px" id="pass-detalle"></p>
-    <input type="password" id="pass-input" placeholder="Contraseña" style="width:100%;font-size:15px;padding:10px;border:1px solid #ddd;border-radius:8px;margin-top:10px;box-sizing:border-box">
-    <p style="font-size:12px;color:#dc2626;display:none;margin-top:4px" id="pass-error">Contraseña incorrecta</p>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px">
-      <button onclick="passCancelar()" style="padding:11px;border-radius:8px;cursor:pointer;border:1px solid #ddd;background:#fff;font-size:14px">Cancelar</button>
-      <button onclick="passConfirmar()" style="padding:11px;border-radius:8px;cursor:pointer;border:none;background:#dc2626;color:#fff;font-size:14px;font-weight:600">Autorizar</button>
-    </div>
-  </div>
-</div>
-</body>
-</html>
