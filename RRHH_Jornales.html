@@ -670,6 +670,23 @@
       <label>Fecha de asistencia *</label>
       <input type="date" id="fecha" required>
     </div>
+    <div class="field" id="rangoToggleField" style="display:none">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.85rem">
+        <input type="checkbox" id="rangoCustomChk" onchange="toggleRangoCustom()" style="width:16px;height:16px;cursor:pointer">
+        Usar rango personalizado de quincena
+      </label>
+      <small style="color:var(--text-muted);font-size:0.75rem;display:block;margin-top:2px">Útil si la quincena no cierra los días 15 / fin de mes (ej: del 31 al 15)</small>
+    </div>
+    <div id="rangoCustomFields" style="display:none">
+      <div class="field">
+        <label>Desde *</label>
+        <input type="date" id="rangoDesde" onchange="onRangoChange()">
+      </div>
+      <div class="field">
+        <label>Hasta *</label>
+        <input type="date" id="rangoHasta" onchange="onRangoChange()">
+      </div>
+    </div>
   </div>
 
   <div id="companiesContainer"></div>
@@ -706,19 +723,39 @@ let registrosDia = {};        // {id: row} registros ya existentes del día+plan
 // ============================================================
 
 // Calcula días hábiles reales (lunes-viernes) de la quincena que contiene la fecha.
+// Si hay rango personalizado activo, usa el rango custom (desde/hasta).
 // Q1: días 1-15, Q2: días 16-fin de mes. Cuenta solo lunes a viernes.
-// Nota: no contempla feriados. Si hay que descontarlos, se hace manualmente.
 function diasHabilesQuincena(fechaISO) {
+  // Verificar rango personalizado
+  const rangoChk = document.getElementById('rangoCustomChk');
+  if (rangoChk && rangoChk.checked) {
+    const desdeStr = document.getElementById('rangoDesde').value;
+    const hastaStr = document.getElementById('rangoHasta').value;
+    if (desdeStr && hastaStr) {
+      const dDesde = new Date(desdeStr + 'T00:00:00');
+      const dHasta = new Date(hastaStr + 'T00:00:00');
+      let count = 0;
+      const cur = new Date(dDesde);
+      while (cur <= dHasta) {
+        const dow = cur.getDay();
+        if (dow !== 0 && dow !== 6) count++;
+        cur.setDate(cur.getDate() + 1);
+      }
+      return count || 1;
+    }
+  }
+
+  // Rango automático
   if (!fechaISO) return 10;
   const [y, m, d] = fechaISO.split('-').map(Number);
   const dia = d;
-  const ultimoDia = new Date(y, m, 0).getDate();  // último día del mes
+  const ultimoDia = new Date(y, m, 0).getDate();
   const desde = dia <= 15 ? 1 : 16;
   const hasta = dia <= 15 ? 15 : ultimoDia;
 
   let count = 0;
   for (let i = desde; i <= hasta; i++) {
-    const dow = new Date(y, m - 1, i).getDay();  // 0=dom, 6=sab
+    const dow = new Date(y, m - 1, i).getDay();
     if (dow !== 0 && dow !== 6) count++;
   }
   return count;
@@ -1130,11 +1167,37 @@ const MEDIO_DIA_LV = 25000;
 function renderDaysChips(emp) {
   const fecha = document.getElementById('fecha').value;
   if (!fecha) return;
-  const [y, m] = fecha.split('-').map(Number);
-  const d = parseInt(fecha.split('-')[2]);
-  const ultimoDia = new Date(y, m, 0).getDate();
-  const desde = d <= 15 ? 1 : 16;
-  const hasta = d <= 15 ? 15 : ultimoDia;
+
+  // Verificar si hay rango custom activo
+  const rangoCustom = document.getElementById('rangoCustomChk');
+  const usaCustom = rangoCustom && rangoCustom.checked;
+  const desdeCustom = document.getElementById('rangoDesde').value;
+  const hastaCustom = document.getElementById('rangoHasta').value;
+
+  let fechasDelRango = [];
+
+  if (usaCustom && desdeCustom && hastaCustom) {
+    // Rango personalizado: iterar día por día desde -> hasta
+    const dDesde = new Date(desdeCustom + 'T00:00:00');
+    const dHasta = new Date(hastaCustom + 'T00:00:00');
+    if (dHasta < dDesde) return;
+
+    const cur = new Date(dDesde);
+    while (cur <= dHasta) {
+      fechasDelRango.push(new Date(cur));
+      cur.setDate(cur.getDate() + 1);
+    }
+  } else {
+    // Rango automático: quincena que contiene la fecha
+    const [y, m] = fecha.split('-').map(Number);
+    const d = parseInt(fecha.split('-')[2]);
+    const ultimoDia = new Date(y, m, 0).getDate();
+    const desde = d <= 15 ? 1 : 16;
+    const hasta = d <= 15 ? 15 : ultimoDia;
+    for (let i = desde; i <= hasta; i++) {
+      fechasDelRango.push(new Date(y, m - 1, i));
+    }
+  }
 
   const container = document.getElementById('days_' + emp.key);
   if (!container) return;
@@ -1142,12 +1205,16 @@ function renderDaysChips(emp) {
 
   const diasNombre = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 
-  for (let i = desde; i <= hasta; i++) {
-    const dow = new Date(y, m - 1, i).getDay();
-    if (dow === 0) continue;  // nunca domingos
-    if (dow === 6 && !emp.tieneSabados) continue;  // sábados solo si tiene flag
+  fechasDelRango.forEach(dateObj => {
+    const dow = dateObj.getDay();
+    if (dow === 0) return;  // nunca domingos
+    if (dow === 6 && !emp.tieneSabados) return;  // sábados solo si tiene flag
 
-    const fechaDia = `${y}-${String(m).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
+    const yy = dateObj.getFullYear();
+    const mm = String(dateObj.getMonth() + 1).padStart(2,'0');
+    const dd = String(dateObj.getDate()).padStart(2,'0');
+    const fechaDia = `${yy}-${mm}-${dd}`;
+    const i = dateObj.getDate();
     const esSabado = dow === 6;
     const chip = document.createElement('button');
     chip.type = 'button';
@@ -1156,18 +1223,15 @@ function renderDaysChips(emp) {
     chip.dataset.sabado = esSabado ? '1' : '0';
 
     if (esSabado) {
-      // Sábado: arranca como "no trabajó" (sin estado especial)
       chip.className = 'day-chip sabado';
       chip.innerHTML = `Sáb<br>${i}`;
       chip.onclick = function() { toggleSabado(emp.key, fechaDia); };
     } else if (emp.tieneMedioJornada) {
-      // Lun-Vie con opción medio día (Robaina/Dible): arranca presente
       chip.className = 'day-chip selected';
       chip.dataset.mediojornada = '1';
       chip.innerHTML = `${diasNombre[dow]}<br>${i}`;
       chip.onclick = function() { toggleDayMedio(emp.key, fechaDia); };
     } else {
-      // Lun-Vie normal: arranca como presente
       chip.className = 'day-chip selected';
       chip.innerHTML = `${diasNombre[dow]}<br>${i}`;
       chip.onclick = function() { toggleDay(emp.key, fechaDia); };
@@ -1205,7 +1269,7 @@ function renderDaysChips(emp) {
     }
 
     container.appendChild(chip);
-  }
+  });
 
   // Marcar botón quincena completa si todos los lun-vie están presentes
   const btn = container.parentElement.querySelector('.btn-quincena');
@@ -1291,18 +1355,32 @@ function toggleSabado(key, fecha) {
   updateTotales();
 }
 
-// Resetea todos los lun-vie a presente (no toca sábados)
+// Toggle: si todos los lun-vie están presentes → marcar todos ausentes
+// Caso contrario → marcar todos presentes
+// (no toca sábados)
 function toggleQuincenaCompleta(key) {
   const container = document.getElementById('days_' + key);
   const diasSemana = container.querySelectorAll('.day-chip:not(.sabado)');
 
-  diasSemana.forEach(c => {
-    c.classList.remove('ausente', 'medio-dia');
-    c.classList.add('selected');
-  });
+  // Detectar estado actual: ¿todos los lun-vie están como "presente"?
+  const todosPresentes = Array.from(diasSemana).every(c => c.classList.contains('selected'));
+
+  if (todosPresentes) {
+    // Todos presentes → marcar todos ausentes
+    diasSemana.forEach(c => {
+      c.classList.remove('selected', 'medio-dia');
+      c.classList.add('ausente');
+    });
+  } else {
+    // Hay ausentes/medio día → marcar todos presentes
+    diasSemana.forEach(c => {
+      c.classList.remove('ausente', 'medio-dia');
+      c.classList.add('selected');
+    });
+  }
 
   const btn = container.parentElement.querySelector('.btn-quincena');
-  if (btn) btn.classList.add('active');
+  if (btn) btn.classList.toggle('active', !todosPresentes);
 
   updateQuincenalSummary(key);
   updateTotales();
@@ -1600,9 +1678,62 @@ document.getElementById('planta').addEventListener('change', function() {
     return;
   }
   empleados = buildEmpleadosDePlanta(planta, fecha);
+
+  // Mostrar toggle de rango personalizado solo si la planta tiene empleados quincenales
+  const tieneQuincenal = empleados.some(e => e.usaQuincenal);
+  document.getElementById('rangoToggleField').style.display = tieneQuincenal ? '' : 'none';
+  if (!tieneQuincenal) {
+    // Ocultar también los inputs de rango si no aplica
+    document.getElementById('rangoCustomChk').checked = false;
+    document.getElementById('rangoCustomFields').style.display = 'none';
+  }
+
   filterByDateAndPlanta();
   render();
 });
+
+// ============================================================
+//  RANGO PERSONALIZADO DE QUINCENA
+// ============================================================
+function toggleRangoCustom() {
+  const checked = document.getElementById('rangoCustomChk').checked;
+  document.getElementById('rangoCustomFields').style.display = checked ? '' : 'none';
+
+  if (checked) {
+    // Pre-cargar fechas según la quincena que contiene la fecha actual
+    const fecha = document.getElementById('fecha').value;
+    if (fecha) {
+      const [y, m, d] = fecha.split('-').map(Number);
+      const ultimoDia = new Date(y, m, 0).getDate();
+      const desde = d <= 15 ? 1 : 16;
+      const hasta = d <= 15 ? 15 : ultimoDia;
+      const desdeStr = `${y}-${String(m).padStart(2,'0')}-${String(desde).padStart(2,'0')}`;
+      const hastaStr = `${y}-${String(m).padStart(2,'0')}-${String(hasta).padStart(2,'0')}`;
+      if (!document.getElementById('rangoDesde').value) document.getElementById('rangoDesde').value = desdeStr;
+      if (!document.getElementById('rangoHasta').value) document.getElementById('rangoHasta').value = hastaStr;
+    }
+  }
+
+  // Re-renderizar el panel quincenal con el nuevo rango
+  const planta = document.getElementById('planta').value;
+  const fecha = document.getElementById('fecha').value;
+  if (planta && fecha) {
+    empleados = buildEmpleadosDePlanta(planta, fecha);
+    filterByDateAndPlanta();
+    render();
+  }
+}
+
+function onRangoChange() {
+  // Re-renderizar al cambiar fechas
+  const planta = document.getElementById('planta').value;
+  const fecha = document.getElementById('fecha').value;
+  if (planta && fecha) {
+    empleados = buildEmpleadosDePlanta(planta, fecha);
+    filterByDateAndPlanta();
+    render();
+  }
+}
 
 // ============================================================
 //  BOOT
