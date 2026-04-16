@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RRHH — Admin</title>
+<!--
+  RRHH_Admin.html — Panel de administración de registros RRHH
+  v1.0  2026-04-16  Versión inicial
+    - Clon de RRHH_Reportes con capacidades de edición y eliminación
+    - Login con PIN de administrador (Fondo936)
+    - Dos tabs: ASISTENCIA JORNALES y DESTAJO
+    - Cada fila tiene botones ✏ Editar y 🗑 Eliminar
+    - Edición: modal con campos editables del registro
+    - Eliminación: confirmación + borrado vía action=delete del Apps Script
+    - Audit log: cada acción (EDIT/DELETE) se registra en solapa AUDIT_LOG
+      con: Timestamp, Accion, Sheet, ID_Registro, Datos_Anteriores, Usuario
+    - Filtros: planta, company, rango de fechas, empleado (igual que Reportes)
+-->
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap');
+
+  :root {
+    --bg: #f4f1eb;
+    --card: #ffffff;
+    --primary: #6b1d1d;
+    --primary-light: #f5eaea;
+    --accent: #c5a030;
+    --accent-light: #fff8e1;
+    --text: #1a1a1a;
+    --text-muted: #6b6b6b;
+    --border: #ddd;
+    --danger: #c0392b;
+    --danger-light: #fceaea;
+    --success: #27ae60;
+    --success-light: #d4edda;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  .header { background: var(--primary); color: white; padding: 16px 20px; text-align: center; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+  .header h1 { font-size: 1.15rem; font-weight: 700; }
+  .header small { font-size: 0.75rem; opacity: 0.8; }
+  .header .admin-badge { display: inline-block; background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); padding: 2px 8px; border-radius: 4px; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin-left: 8px; vertical-align: middle; }
+
+  .container { max-width: 1200px; margin: 0 auto; padding: 16px; }
+
+  /* Login */
+  .login-screen { max-width: 360px; margin: 80px auto; text-align: center; }
+  .login-screen h2 { font-size: 1rem; color: var(--primary); margin-bottom: 6px; }
+  .login-screen p { font-size: 0.82rem; color: var(--text-muted); margin-bottom: 20px; }
+  .login-screen input { width: 100%; padding: 14px; border: 2px solid var(--border); border-radius: 10px; font-family: inherit; font-size: 1.1rem; text-align: center; letter-spacing: 0.2em; }
+  .login-screen button { width: 100%; margin-top: 14px; padding: 14px; background: var(--primary); color: white; border: none; border-radius: 10px; font-family: inherit; font-size: 0.95rem; font-weight: 700; cursor: pointer; }
+  .login-error { color: var(--danger); font-size: 0.82rem; margin-top: 10px; font-weight: 600; display: none; }
+
+  /* Filters */
+  .filters { background: var(--card); border-radius: 10px; padding: 14px; margin-bottom: 14px; border: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+  .filter-group { flex: 1; min-width: 120px; }
+  .filter-group label { display: block; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 3px; }
+  .filter-group input, .filter-group select { width: 100%; padding: 8px 10px; border: 1.5px solid var(--border); border-radius: 6px; font-family: inherit; font-size: 0.85rem; }
+  .filter-group input:focus, .filter-group select:focus { outline: none; border-color: var(--primary); }
+
+  .quick-btns { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 14px; }
+  .quick-btn { padding: 6px 12px; border: 1.5px solid var(--border); background: white; border-radius: 6px; font-family: inherit; font-size: 0.75rem; font-weight: 600; cursor: pointer; }
+  .quick-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 0; margin-bottom: 14px; border-radius: 8px; overflow: hidden; border: 1.5px solid var(--border); }
+  .tab-btn { flex: 1; padding: 10px; background: var(--bg); border: none; font-family: inherit; font-size: 0.82rem; font-weight: 600; cursor: pointer; color: var(--text-muted); }
+  .tab-btn.active { background: var(--primary); color: white; }
+
+  /* Table */
+  .table-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+  thead th { background: var(--primary); color: white; padding: 8px 6px; text-align: left; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.03em; font-weight: 600; position: sticky; top: 0; }
+  td { padding: 7px 6px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tr:hover td { background: rgba(107,29,29,0.03); }
+  .num { text-align: right; font-family: 'JetBrains Mono', monospace; font-weight: 500; }
+  .empty { text-align: center; color: var(--text-muted); padding: 30px; }
+
+  .tag { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; }
+  .tag-pres { background: var(--success-light); color: #155724; }
+  .tag-aus { background: var(--danger-light); color: var(--danger); }
+
+  .row-buttons { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 6px; }
+  .count-label { font-size: 0.82rem; color: var(--text-muted); font-weight: 600; }
+
+  /* Action buttons in rows */
+  .btn-action { padding: 4px 8px; border: 1px solid var(--border); background: white; border-radius: 4px; font-family: inherit; font-size: 0.7rem; font-weight: 600; cursor: pointer; margin-right: 3px; }
+  .btn-action:hover { background: var(--primary-light); }
+  .btn-action.delete { color: var(--danger); border-color: var(--danger-light); }
+  .btn-action.delete:hover { background: var(--danger-light); }
+  .btn-action.edit { color: var(--primary); }
+
+  /* Modal */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 500; padding: 20px; }
+  .modal-overlay.show { display: flex; }
+  .modal-box { background: white; border-radius: 12px; padding: 24px; max-width: 500px; width: 100%; max-height: 80vh; overflow-y: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.25); }
+  .modal-box h3 { font-size: 1rem; color: var(--primary); margin-bottom: 14px; }
+  .modal-field { margin-bottom: 10px; }
+  .modal-field label { display: block; font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 3px; }
+  .modal-field input, .modal-field select { width: 100%; padding: 8px 10px; border: 1.5px solid var(--border); border-radius: 6px; font-family: inherit; font-size: 0.88rem; }
+  .modal-field input:read-only { background: #f5f5f0; color: var(--text-muted); }
+  .modal-actions { display: flex; gap: 8px; margin-top: 16px; }
+  .modal-actions button { flex: 1; padding: 10px; border: none; border-radius: 8px; font-family: inherit; font-size: 0.88rem; font-weight: 600; cursor: pointer; }
+  .btn-cancel { background: var(--bg); color: var(--text); border: 1px solid var(--border) !important; }
+  .btn-save { background: var(--primary); color: white; }
+  .btn-save:disabled { opacity: 0.4; }
+
+  .hidden { display: none !important; }
+  .loading-overlay { position: fixed; inset: 0; background: rgba(255,255,255,0.92); display: flex; align-items: center; justify-content: center; z-index: 300; font-weight: 600; color: var(--primary); }
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #ddd; border-top-color: var(--primary); border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--primary); color: white; padding: 10px 20px; border-radius: 8px; font-size: 0.82rem; font-weight: 600; z-index: 999; opacity: 0; transition: opacity 0.3s; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+  .toast.show { opacity: 1; }
+  .toast.error { background: var(--danger); }
+
+  @media (max-width: 600px) { .filters { flex-direction: column; } table { font-size: 0.72rem; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>RRHH — Admin <span class="admin-badge">🔒 Restringido</span></h1>
+  <small>Edición y eliminación de registros</small>
+</div>
+
+<!-- LOGIN -->
+<div id="loginScreen" class="container">
+  <div class="login-screen" style="background:var(--card);padding:30px;border-radius:12px;border:2px solid var(--primary);">
+    <h2>🔐 Acceso administrador</h2>
+    <p>Solo personal autorizado</p>
+    <input type="password" id="pinInput" placeholder="Contraseña" autofocus>
+    <button onclick="checkPin()">Acceder</button>
+    <div class="login-error" id="loginError">Contraseña incorrecta</div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app" class="container hidden">
+
+  <!-- Filtros -->
+  <div class="filters">
+    <div class="filter-group"><label>Planta</label><select id="filtroPlanta"><option value="">— Todas —</option></select></div>
+    <div class="filter-group"><label>Company</label><select id="filtroCompany"><option value="">— Todas —</option><option>MT</option><option>ATG</option></select></div>
+    <div class="filter-group"><label>Desde</label><input type="date" id="filtroDesde"></div>
+    <div class="filter-group"><label>Hasta</label><input type="date" id="filtroHasta"></div>
+    <div class="filter-group"><label>Empleado</label><input type="text" id="filtroEmpleado" placeholder="Nombre..."></div>
+    <div class="filter-group" style="flex:0.4;align-self:end"><button class="quick-btn active" onclick="aplicarFiltros()" style="width:100%;padding:9px">Buscar</button></div>
+  </div>
+
+  <div class="quick-btns">
+    <button class="quick-btn" onclick="setHoy()">Hoy</button>
+    <button class="quick-btn active" onclick="setSemana()">Últimos 7 días</button>
+    <button class="quick-btn" onclick="setQuincena(1)">1ra Quincena</button>
+    <button class="quick-btn" onclick="setQuincena(2)">2da Quincena</button>
+    <button class="quick-btn" onclick="setMes()">Mes actual</button>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('asistencia')">Asistencia Jornales</button>
+    <button class="tab-btn" onclick="switchTab('destajo')">Destajo Operarios</button>
+  </div>
+
+  <!-- ASISTENCIA -->
+  <div class="tab-content" id="tab-asistencia">
+    <div class="row-buttons">
+      <div class="count-label"><span id="countAsis">0</span> registros</div>
+    </div>
+    <div class="table-wrap"><table id="tablaAsistencia">
+      <thead><tr><th>Acciones</th><th>Fecha</th><th>Leg</th><th>Empleado</th><th>Planta</th><th>Co</th><th>Tipo</th><th>Estado</th><th class="num">Jornal</th><th class="num">HE</th><th class="num">Total</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </div>
+
+  <!-- DESTAJO -->
+  <div class="tab-content hidden" id="tab-destajo">
+    <div class="row-buttons">
+      <div class="count-label"><span id="countDest">0</span> registros</div>
+    </div>
+    <div class="table-wrap"><table id="tablaDestajo">
+      <thead><tr><th>Acciones</th><th>Fecha</th><th>Leg</th><th>Operario</th><th>Actividad</th><th class="num">Unidades</th><th class="num">Importe</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal-box">
+    <h3 id="editTitle">Editar registro</h3>
+    <div id="editFields"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeEditModal()">Cancelar</button>
+      <button class="btn-save" id="btnSaveEdit" onclick="saveEdit()">Guardar cambios</button>
+    </div>
+  </div>
+</div>
+
+<div id="loadingOverlay" class="loading-overlay hidden"><div><span class="spinner"></span> Cargando datos...</div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+//  CONFIG
+// ============================================================
+const API = 'https://script.google.com/macros/s/AKfycbzud3BqEJzJPVy4ehTnfOH_m_DfQv05Arx1aEhEgYEUz1V0cKZb0rwSU1ZjR8ZbIECN/exec';
+const ADMIN_PIN = 'Fondo936';
+
+let datosAsistencia = [];
+let datosDestajo = [];
+let currentTab = 'asistencia';
+let editingRecord = null;  // {sheet, id, rawRow, type}
+
+// ============================================================
+//  LOGIN
+// ============================================================
+document.getElementById('pinInput').addEventListener('keypress', e => { if (e.key === 'Enter') checkPin(); });
+
+function checkPin() {
+  if (document.getElementById('pinInput').value === ADMIN_PIN) {
+    sessionStorage.setItem('admin_auth', '1');
+    showApp();
+  } else {
+    document.getElementById('loginError').style.display = 'block';
+    document.getElementById('pinInput').value = '';
+    document.getElementById('pinInput').focus();
+  }
+}
+
+function showApp() {
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  init();
+}
+
+if (sessionStorage.getItem('admin_auth') === '1') showApp();
+
+// ============================================================
+//  HELPERS
+// ============================================================
+function fmt(v) { if (!v) return ''; const d = String(v).slice(0,10); const [y,m,dd] = d.split('-'); return `${dd}/${m}/${y}`; }
+function fmtMoney(n) { return n ? '$ ' + Math.round(n).toLocaleString('es-AR') : '—'; }
+function todayISO() { const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+
+async function fetchSheet(sheet) {
+  const url = API + '?action=get&sheet=' + encodeURIComponent(sheet) + '&_=' + Date.now();
+  const r = await fetch(url); const j = await r.json();
+  if (j.ok) return j.data; throw new Error(j.error || 'Error');
+}
+
+async function deleteRecord(sheet, id) {
+  const url = API + '?action=delete&sheet=' + encodeURIComponent(sheet) + '&id=' + encodeURIComponent(id) + '&_=' + Date.now();
+  const r = await fetch(url); const j = await r.json();
+  if (!j.ok) throw new Error(j.error || 'Error al eliminar');
+  return j;
+}
+
+async function postBatch(sheet, rows) {
+  const payload = JSON.stringify({ sheet, rows });
+  const url = API + '?action=post_batch&data=' + encodeURIComponent(payload) + '&_=' + Date.now();
+  const r = await fetch(url); const j = await r.json();
+  if (!j.ok) throw new Error(j.error || 'Error al guardar');
+  return j;
+}
+
+async function logAudit(accion, sheet, id, datosAnteriores) {
+  try {
+    const ts = new Date().toISOString();
+    const logId = ts + '||' + accion + '||' + id;
+    const row = [logId, ts, accion, sheet, id, JSON.stringify(datosAnteriores).slice(0, 500), 'ADMIN'];
+    await postBatch('AUDIT_LOG', [row]);
+  } catch (e) {
+    console.error('Audit log error:', e);
+  }
+}
+
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast show' + (type === 'error' ? ' error' : '');
+  clearTimeout(t._timer); t._timer = setTimeout(() => t.className = 'toast', 3000);
+}
+
+// ============================================================
+//  INIT
+// ============================================================
+async function init() {
+  document.getElementById('loadingOverlay').classList.remove('hidden');
+  try {
+    setSemana();
+    const [asisData, destData] = await Promise.all([
+      fetchSheet('ASISTENCIA JORNALES'),
+      fetchSheet('DESTAJO')
+    ]);
+
+    datosAsistencia = asisData.slice(1).filter(r => r[0]).map(r => ({
+      rawRow: r,
+      id: String(r[0]),
+      fecha: String(r[1]||'').slice(0,10),
+      legajo: String(r[2]||'').trim(),
+      nombre: String(r[3]||'').trim(),
+      planta: String(r[4]||'').trim(),
+      company: String(r[5]||'').trim(),
+      tipoPago: String(r[6]||'').trim(),
+      presente: String(r[7]||'').toUpperCase() === 'SI',
+      ausente: String(r[8]||'').toUpperCase() === 'SI',
+      certMedico: String(r[9]||'').toUpperCase() === 'SI',
+      horasExtras: parseFloat(r[10]) || 0,
+      jornal: parseFloat(r[11]) || 0,
+      importeHE: parseFloat(r[12]) || 0,
+      importeTotal: parseFloat(r[13]) || 0
+    }));
+
+    datosDestajo = destData.slice(1).filter(r => r[0]).map(r => ({
+      rawRow: r,
+      id: String(r[0]),
+      fecha: String(r[1]||'').slice(0,10),
+      legajo: String(r[2]||'').trim(),
+      nombre: String(r[3]||'').trim(),
+      actividad: String(r[4]||'').trim(),
+      unidades: parseInt(r[5]) || 0,
+      importe: parseFloat(r[6]) || 0
+    }));
+
+    const plantas = [...new Set(datosAsistencia.map(r => r.planta).concat('CICLO II'))].filter(Boolean).sort();
+    const sel = document.getElementById('filtroPlanta');
+    plantas.forEach(p => { const o = document.createElement('option'); o.value = p; o.textContent = p; sel.appendChild(o); });
+
+    document.getElementById('loadingOverlay').classList.add('hidden');
+    aplicarFiltros();
+  } catch (e) {
+    document.getElementById('loadingOverlay').innerHTML = `<div style="color:var(--danger);text-align:center">Error: ${e.message}</div>`;
+  }
+}
+
+// ============================================================
+//  QUICK FILTERS
+// ============================================================
+function setHoy() { document.getElementById('filtroDesde').value = todayISO(); document.getElementById('filtroHasta').value = todayISO(); markActive(0); aplicarFiltros(); }
+function setSemana() { const h = new Date(); const d = new Date(h); d.setDate(d.getDate()-7); document.getElementById('filtroDesde').value = toISO(d); document.getElementById('filtroHasta').value = toISO(h); markActive(1); aplicarFiltros(); }
+function setQuincena(q) { const h = new Date(); const y = h.getFullYear(), m = h.getMonth(); let desde, hasta; if (q===1) { desde=new Date(y,m,1); hasta=new Date(y,m,15); } else { desde=new Date(y,m,16); hasta=new Date(y,m+1,0); } document.getElementById('filtroDesde').value=toISO(desde); document.getElementById('filtroHasta').value=toISO(hasta); markActive(q===1?2:3); aplicarFiltros(); }
+function setMes() { const h = new Date(); document.getElementById('filtroDesde').value=toISO(new Date(h.getFullYear(),h.getMonth(),1)); document.getElementById('filtroHasta').value=toISO(new Date(h.getFullYear(),h.getMonth()+1,0)); markActive(4); aplicarFiltros(); }
+function toISO(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function markActive(i) { document.querySelectorAll('.quick-btn').forEach((b,idx) => b.classList.toggle('active', idx===i)); }
+
+// ============================================================
+//  TABS
+// ============================================================
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', ['asistencia','destajo'][i]===tab));
+  document.getElementById('tab-asistencia').classList.toggle('hidden', tab !== 'asistencia');
+  document.getElementById('tab-destajo').classList.toggle('hidden', tab !== 'destajo');
+}
+
+// ============================================================
+//  FILTROS + RENDER
+// ============================================================
+function aplicarFiltros() {
+  const planta = document.getElementById('filtroPlanta').value.toUpperCase();
+  const company = document.getElementById('filtroCompany').value.toUpperCase();
+  const desde = document.getElementById('filtroDesde').value;
+  const hasta = document.getElementById('filtroHasta').value;
+  const empleado = document.getElementById('filtroEmpleado').value.toUpperCase().trim();
+
+  const asisFilt = datosAsistencia.filter(r => {
+    if (planta && r.planta.toUpperCase() !== planta) return false;
+    if (company && r.company.toUpperCase() !== company) return false;
+    if (desde && r.fecha < desde) return false;
+    if (hasta && r.fecha > hasta) return false;
+    if (empleado && !r.nombre.toUpperCase().includes(empleado)) return false;
+    return true;
+  });
+
+  const destFilt = datosDestajo.filter(r => {
+    if (planta && planta !== 'CICLO II') return false;
+    if (desde && r.fecha < desde) return false;
+    if (hasta && r.fecha > hasta) return false;
+    if (empleado && !r.nombre.toUpperCase().includes(empleado)) return false;
+    return true;
+  });
+
+  renderAsistencia(asisFilt);
+  renderDestajo(destFilt);
+}
+
+function renderAsistencia(data) {
+  const tbody = document.querySelector('#tablaAsistencia tbody');
+  document.getElementById('countAsis').textContent = data.length;
+  if (!data.length) { tbody.innerHTML = '<tr><td colspan="11" class="empty">Sin registros</td></tr>'; return; }
+
+  const sorted = [...data].sort((a,b) => b.fecha.localeCompare(a.fecha) || a.nombre.localeCompare(b.nombre));
+  tbody.innerHTML = sorted.map(r => {
+    const estado = r.presente ? '<span class="tag tag-pres">PRES</span>' : (r.ausente ? '<span class="tag tag-aus">AUS</span>' : '—');
+    return `<tr>
+      <td><button class="btn-action edit" onclick="editAsistencia('${r.id}')">✏</button><button class="btn-action delete" onclick="eliminarAsistencia('${r.id}')">🗑</button></td>
+      <td>${fmt(r.fecha)}</td><td>${r.legajo}</td><td>${r.nombre}</td><td>${r.planta}</td><td>${r.company}</td><td>${r.tipoPago}</td><td>${estado}</td>
+      <td class="num">${Math.round(r.jornal).toLocaleString('es-AR')}</td>
+      <td class="num">${Math.round(r.importeHE).toLocaleString('es-AR')}</td>
+      <td class="num"><strong>${Math.round(r.importeTotal).toLocaleString('es-AR')}</strong></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderDestajo(data) {
+  const tbody = document.querySelector('#tablaDestajo tbody');
+  document.getElementById('countDest').textContent = data.length;
+  if (!data.length) { tbody.innerHTML = '<tr><td colspan="7" class="empty">Sin registros</td></tr>'; return; }
+
+  const sorted = [...data].sort((a,b) => b.fecha.localeCompare(a.fecha) || a.nombre.localeCompare(b.nombre));
+  tbody.innerHTML = sorted.map(r => {
+    return `<tr>
+      <td><button class="btn-action edit" onclick="editDestajo('${r.id}')">✏</button><button class="btn-action delete" onclick="eliminarDestajo('${r.id}')">🗑</button></td>
+      <td>${fmt(r.fecha)}</td><td>${r.legajo}</td><td>${r.nombre}</td><td>${r.actividad}</td>
+      <td class="num">${r.unidades}</td>
+      <td class="num"><strong>${Math.round(r.importe).toLocaleString('es-AR')}</strong></td>
+    </tr>`;
+  }).join('');
+}
+
+// ============================================================
+//  EDIT MODAL
+// ============================================================
+function editAsistencia(id) {
+  const r = datosAsistencia.find(x => x.id === id);
+  if (!r) return;
+  editingRecord = { sheet: 'ASISTENCIA JORNALES', id, rawRow: [...r.rawRow], type: 'asis', original: {...r} };
+
+  document.getElementById('editTitle').textContent = 'Editar asistencia — ' + r.nombre;
+  document.getElementById('editFields').innerHTML = `
+    <div class="modal-field"><label>ID</label><input value="${r.id}" readonly></div>
+    <div class="modal-field"><label>Fecha</label><input id="ed_fecha" type="date" value="${r.fecha}"></div>
+    <div class="modal-field"><label>Nombre</label><input id="ed_nombre" value="${r.nombre}"></div>
+    <div class="modal-field"><label>Planta</label><input id="ed_planta" value="${r.planta}"></div>
+    <div class="modal-field"><label>Company</label><input id="ed_company" value="${r.company}"></div>
+    <div class="modal-field"><label>Tipo Pago</label><input id="ed_tipoPago" value="${r.tipoPago}"></div>
+    <div class="modal-field"><label>Presente</label><select id="ed_presente"><option value="SI" ${r.presente?'selected':''}>SI</option><option value="NO" ${!r.presente?'selected':''}>NO</option></select></div>
+    <div class="modal-field"><label>Ausente</label><select id="ed_ausente"><option value="SI" ${r.ausente?'selected':''}>SI</option><option value="NO" ${!r.ausente?'selected':''}>NO</option></select></div>
+    <div class="modal-field"><label>Jornal</label><input id="ed_jornal" type="number" value="${r.jornal}" step="0.01"></div>
+    <div class="modal-field"><label>Horas Extras</label><input id="ed_he" type="number" value="${r.horasExtras}" step="0.5"></div>
+    <div class="modal-field"><label>Importe HE</label><input id="ed_importeHE" type="number" value="${r.importeHE}" step="0.01"></div>
+    <div class="modal-field"><label>Importe Total</label><input id="ed_importeTotal" type="number" value="${r.importeTotal}" step="0.01"></div>
+  `;
+  document.getElementById('editModal').classList.add('show');
+}
+
+function editDestajo(id) {
+  const r = datosDestajo.find(x => x.id === id);
+  if (!r) return;
+  editingRecord = { sheet: 'DESTAJO', id, rawRow: [...r.rawRow], type: 'dest', original: {...r} };
+
+  document.getElementById('editTitle').textContent = 'Editar destajo — ' + r.nombre;
+  document.getElementById('editFields').innerHTML = `
+    <div class="modal-field"><label>ID</label><input value="${r.id}" readonly></div>
+    <div class="modal-field"><label>Fecha</label><input id="ed_fecha" type="date" value="${r.fecha}"></div>
+    <div class="modal-field"><label>Nombre</label><input id="ed_nombre" value="${r.nombre}"></div>
+    <div class="modal-field"><label>Actividad</label><input id="ed_actividad" value="${r.actividad}"></div>
+    <div class="modal-field"><label>Unidades</label><input id="ed_unidades" type="number" value="${r.unidades}"></div>
+    <div class="modal-field"><label>Importe</label><input id="ed_importe" type="number" value="${r.importe}" step="0.01"></div>
+  `;
+  document.getElementById('editModal').classList.add('show');
+}
+
+function closeEditModal() {
+  document.getElementById('editModal').classList.remove('show');
+  editingRecord = null;
+}
+
+async function saveEdit() {
+  if (!editingRecord) return;
+  const btn = document.getElementById('btnSaveEdit');
+  btn.disabled = true;
+  btn.textContent = 'Guardando...';
+
+  try {
+    let newRow;
+    if (editingRecord.type === 'asis') {
+      const raw = editingRecord.rawRow;
+      raw[1] = document.getElementById('ed_fecha').value;
+      raw[3] = document.getElementById('ed_nombre').value.trim();
+      raw[4] = document.getElementById('ed_planta').value.trim();
+      raw[5] = document.getElementById('ed_company').value.trim();
+      raw[6] = document.getElementById('ed_tipoPago').value.trim();
+      raw[7] = document.getElementById('ed_presente').value;
+      raw[8] = document.getElementById('ed_ausente').value;
+      raw[10] = parseFloat(document.getElementById('ed_he').value) || 0;
+      raw[11] = parseFloat(document.getElementById('ed_jornal').value) || 0;
+      raw[12] = parseFloat(document.getElementById('ed_importeHE').value) || 0;
+      raw[13] = parseFloat(document.getElementById('ed_importeTotal').value) || 0;
+      newRow = raw;
+    } else {
+      const raw = editingRecord.rawRow;
+      raw[1] = document.getElementById('ed_fecha').value;
+      raw[3] = document.getElementById('ed_nombre').value.trim();
+      raw[4] = document.getElementById('ed_actividad').value.trim();
+      raw[5] = parseInt(document.getElementById('ed_unidades').value) || 0;
+      raw[6] = parseFloat(document.getElementById('ed_importe').value) || 0;
+      newRow = raw;
+    }
+
+    await postBatch(editingRecord.sheet, [newRow]);
+    await logAudit('EDIT', editingRecord.sheet, editingRecord.id, editingRecord.original);
+
+    showToast('✓ Registro actualizado');
+    closeEditModal();
+    await init();
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Guardar cambios';
+  }
+}
+
+// ============================================================
+//  DELETE
+// ============================================================
+async function eliminarAsistencia(id) {
+  const r = datosAsistencia.find(x => x.id === id);
+  if (!r) return;
+  if (!confirm(`¿Eliminar registro de ${r.nombre} del ${fmt(r.fecha)}?\n\nEsta acción no se puede deshacer.`)) return;
+
+  try {
+    await deleteRecord('ASISTENCIA JORNALES', id);
+    await logAudit('DELETE', 'ASISTENCIA JORNALES', id, r);
+    showToast('✓ Registro eliminado');
+    datosAsistencia = datosAsistencia.filter(x => x.id !== id);
+    aplicarFiltros();
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+async function eliminarDestajo(id) {
+  const r = datosDestajo.find(x => x.id === id);
+  if (!r) return;
+  if (!confirm(`¿Eliminar registro de ${r.nombre} — ${r.actividad} (${r.unidades}u) del ${fmt(r.fecha)}?\n\nEsta acción no se puede deshacer.`)) return;
+
+  try {
+    await deleteRecord('DESTAJO', id);
+    await logAudit('DELETE', 'DESTAJO', id, r);
+    showToast('✓ Registro eliminado');
+    datosDestajo = datosDestajo.filter(x => x.id !== id);
+    aplicarFiltros();
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+</script>
+</body>
+</html>
