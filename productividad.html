@@ -185,6 +185,81 @@
     margin-top: 4px;
   }
 
+  /* Modo carga (importes ocultos) */
+  body.locked .importe-display,
+  body.locked #resumenCard,
+  body.locked .show-only-unlocked { display: none !important; }
+  body.locked .importe-hidden-msg { display: block !important; }
+  .importe-hidden-msg {
+    display: none;
+    background: var(--primary-light);
+    border: 1.5px dashed var(--primary);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin: 16px 0;
+    font-size: 0.82rem;
+    color: var(--primary);
+    text-align: center;
+    font-weight: 600;
+  }
+
+  /* Lock button flotante en el header */
+  .lock-btn {
+    position: absolute;
+    top: 14px;
+    right: 12px;
+    background: rgba(255,255,255,0.2);
+    color: white;
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-family: inherit;
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .lock-btn:hover { background: rgba(255,255,255,0.3); }
+
+  /* PIN modal */
+  .pin-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 400;
+    padding: 20px;
+  }
+  .pin-modal.show { display: flex; }
+  .pin-modal .pin-box {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 320px;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+  }
+  .pin-box h3 { font-size: 1rem; color: var(--primary); margin-bottom: 6px; }
+  .pin-box p { font-size: 0.82rem; color: var(--text-muted); margin-bottom: 16px; }
+  .pin-box input {
+    width: 100%;
+    padding: 12px;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 1rem;
+    text-align: center;
+    letter-spacing: 0.3em;
+    margin-bottom: 12px;
+  }
+  .pin-box input:focus { outline: none; border-color: var(--primary); }
+  .pin-box .actions { display: flex; gap: 8px; }
+  .pin-box .actions button { flex: 1; }
+  .pin-box .pin-error { color: var(--danger); font-size: 0.78rem; margin-top: 8px; font-weight: 600; }
+
   .btn {
     width: 100%;
     padding: 13px;
@@ -326,6 +401,7 @@
 <div class="header">
   <h1>Santa Faz — Destajo & Jornales</h1>
   <small>Registro diario de producción</small>
+  <button class="lock-btn" id="lockBtn" onclick="toggleLock()">🔒 Acceder</button>
 </div>
 
 <div id="loadingOverlay" class="loading-overlay">
@@ -370,6 +446,10 @@
       🚫 <span id="fijoConflictMsg"></span>
     </div>
 
+    <div class="importe-hidden-msg">
+      🔒 Modo carga · Los importes están ocultos
+    </div>
+
     <div class="importe-display">
       <div class="label">Importe calculado</div>
       <div class="value" id="importeValue">$ 0</div>
@@ -400,7 +480,76 @@
   <a href="./" class="nav-link">← Volver a Lotes y Recepción</a>
 </div>
 
+<!-- PIN Modal para desbloquear importes -->
+<div class="pin-modal" id="pinModal">
+  <div class="pin-box">
+    <h3>🔓 Acceso supervisor</h3>
+    <p>Ingresá la clave para ver los importes</p>
+    <input type="password" id="pinInputModal" placeholder="••••" maxlength="20" autocomplete="off">
+    <div class="actions">
+      <button class="btn btn-secondary" onclick="closePinModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="checkPinUnlock()">Desbloquear</button>
+    </div>
+    <div class="pin-error" id="pinErrorModal" style="display:none">Clave incorrecta</div>
+  </div>
+</div>
+
 <script>
+// ============================================================
+//  LOCK / UNLOCK (modo carga ciega vs supervisor)
+// ============================================================
+const LOCK_PIN = 'faz2026';
+
+function applyLockState() {
+  const unlocked = sessionStorage.getItem('prod_unlocked') === '1';
+  document.body.classList.toggle('locked', !unlocked);
+  const btn = document.getElementById('lockBtn');
+  if (btn) btn.innerHTML = unlocked ? '🔓 Ocultar' : '🔒 Acceder';
+}
+
+function toggleLock() {
+  const unlocked = sessionStorage.getItem('prod_unlocked') === '1';
+  if (unlocked) {
+    // Re-bloquear sin PIN
+    sessionStorage.removeItem('prod_unlocked');
+    applyLockState();
+    if (typeof renderRecientes === 'function') renderRecientes();
+  } else {
+    // Pedir PIN
+    document.getElementById('pinErrorModal').style.display = 'none';
+    document.getElementById('pinInputModal').value = '';
+    document.getElementById('pinModal').classList.add('show');
+    setTimeout(() => document.getElementById('pinInputModal').focus(), 50);
+  }
+}
+
+function closePinModal() {
+  document.getElementById('pinModal').classList.remove('show');
+}
+
+function checkPinUnlock() {
+  const pin = document.getElementById('pinInputModal').value.trim();
+  if (pin === LOCK_PIN) {
+    sessionStorage.setItem('prod_unlocked', '1');
+    closePinModal();
+    applyLockState();
+    if (typeof renderRecientes === 'function') renderRecientes();
+  } else {
+    document.getElementById('pinErrorModal').style.display = 'block';
+    document.getElementById('pinInputModal').value = '';
+    document.getElementById('pinInputModal').focus();
+  }
+}
+
+// Enter para desbloquear
+document.addEventListener('DOMContentLoaded', () => {
+  const inp = document.getElementById('pinInputModal');
+  if (inp) inp.addEventListener('keypress', (e) => { if (e.key === 'Enter') checkPinUnlock(); });
+});
+
+// Aplicar estado inicial (bloqueado por default)
+applyLockState();
+
 // ============================================================
 //  CONFIG
 // ============================================================
@@ -486,6 +635,7 @@ async function init() {
 
     // Parse OPERARIOS: [Legajo, Nombre, Modalidad, Act1, Act2, Act3, ...]
     // Activities are in columns D onwards (index 3+)
+    // Empleados con Modalidad='BAJA' (col C = indice 2) se excluyen del dropdown
     operarios = ops.slice(1).filter(r => r[0] || r[1]).map(r => {
       const actividades = [];
       // Act_1 a Act_8 = cols D-K = indices 3,4,5,6,7,8,9,10
@@ -496,10 +646,10 @@ async function init() {
         }
       }
       const nombre = String(r[1] || '').trim();
-      // Si no tiene legajo, usar nombre como identificador único
+      const modalidad = String(r[2] || '').trim().toUpperCase();
       const legajo = String(r[0] || '').trim() || nombre;
-      return { legajo, nombre, actividades };
-    }).filter(o => o.nombre);
+      return { legajo, nombre, modalidad, actividades };
+    }).filter(o => o.nombre && o.modalidad !== 'BAJA');
     operarios.sort((a,b) => a.nombre.localeCompare(b.nombre));
 
     // Populate operarios dropdown
@@ -959,14 +1109,18 @@ function renderRecientes() {
     return;
   }
 
-  let html = '<table class="recent-table"><thead><tr><th>Fecha</th><th>Operario</th><th>Actividad</th><th>U</th><th>Importe</th></tr></thead><tbody>';
+  const locked = document.body.classList.contains('locked');
+  const importeHead = locked ? '' : '<th>Importe</th>';
+
+  let html = '<table class="recent-table"><thead><tr><th>Fecha</th><th>Operario</th><th>Actividad</th><th>U</th>' + importeHead + '</tr></thead><tbody>';
   recent.forEach(r => {
+    const importeCell = locked ? '' : '<td style="white-space:nowrap">' + fmtMoney(parseFloat(r[6]) || 0) + '</td>';
     html += '<tr>' +
       '<td>' + fmt(String(r[1]).slice(0,10)) + '</td>' +
       '<td>' + (r[3] || '').split(' ').slice(0,2).join(' ') + '</td>' +
       '<td style="font-size:0.72rem">' + (r[4] || '') + '</td>' +
       '<td>' + (r[5] || '') + '</td>' +
-      '<td style="white-space:nowrap">' + fmtMoney(parseFloat(r[6]) || 0) + '</td>' +
+      importeCell +
       '</tr>';
   });
   html += '</tbody></table>';
