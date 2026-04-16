@@ -887,13 +887,25 @@ function checkConflicts() {
     String(r[2]) === legajo && String(r[1]).slice(0,10) === fecha
   );
 
+  // Actividades complementarias del jornal fijo (no son destajo real)
+  // No deben disparar el conflicto de combinación con FIJO.
+  const COMPLEMENTOS_FIJO = ['HS EXTRAS', '1/2 JORNAL', '1/2 JORNAL SUPERVISOR'];
+  const esComplemento = (act) => COMPLEMENTOS_FIJO.includes(String(act).trim().toUpperCase());
+
   let fijoConflict = false;
   if (regsHoy.length > 0 && !dup) {
-    const tiposExistentes = regsHoy.map(r => getTipoActividad(String(r[4])));
+    // Filtrar fuera los complementos para evaluar conflicto real
+    const tiposExistentes = regsHoy
+      .filter(r => !esComplemento(r[4]))
+      .map(r => getTipoActividad(String(r[4])));
     const hayFijoExistente = tiposExistentes.includes('FIJO');
     const hayDestajoExistente = tiposExistentes.some(t => t !== 'FIJO');
+    const nuevoEsComplemento = esComplemento(actividad);
 
-    if (tipoNuevo === 'FIJO' && hayDestajoExistente) {
+    if (nuevoEsComplemento) {
+      // HS EXTRAS y 1/2 JORNAL siempre se permiten
+      fijoConflict = false;
+    } else if (tipoNuevo === 'FIJO' && hayDestajoExistente) {
       fijoConflict = true;
       fijoMsg.textContent = 'Este operario ya tiene destajo registrado en esta fecha. No se puede combinar con jornal fijo.';
     } else if (tipoNuevo !== 'FIJO' && hayFijoExistente) {
