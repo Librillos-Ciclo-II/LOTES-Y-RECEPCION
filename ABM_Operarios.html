@@ -383,8 +383,6 @@
       </div>
     </div>
   </div>
-
-  <a class="nav-link" href="landing.html">← Volver al inicio</a>
 </div>
 
 <div id="loadingOverlay" class="loading-overlay hidden"><div><span class="spinner"></span> Cargando...</div></div>
@@ -842,8 +840,12 @@ async function guardar() {
   if (!validateForm()) return;
 
   const btn = document.getElementById('btnGuardar');
+  const btnBaja = document.getElementById('btnBaja');
+  const btnReactivar = document.getElementById('btnReactivar');
   btn.disabled = true;
   btn.textContent = 'Guardando...';
+  btnBaja.disabled = true;
+  btnReactivar.disabled = true;
 
   try {
     const isJornales = selectedTipo === 'JORN';
@@ -906,14 +908,19 @@ async function guardar() {
     }
 
     // Recargar datos y volver a lista
+    const wasJornales = selectedTipo === 'JORN' || editingCompany;
     await init();
-    if (selectedTipo === 'JORN' || editingCompany) listFilter = 'jornales';
+    if (wasJornales) listFilter = 'jornales';
     setListFilter(listFilter);
     switchMode('list');
   } catch (e) {
     showToast('Error: ' + e.message, 'error');
+  } finally {
+    // Siempre resetear estado de botones, haya tenido éxito o no
     btn.disabled = false;
     btn.textContent = 'Guardar';
+    btnBaja.disabled = false;
+    btnReactivar.disabled = false;
   }
 }
 
