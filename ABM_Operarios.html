@@ -604,14 +604,14 @@ function filterList() {
 // ============================================================
 //  MODE SWITCHING
 // ============================================================
-function switchMode(mode) {
+function switchMode(mode, skipReset) {
   document.getElementById('modeListBtn').classList.toggle('active', mode === 'list');
   document.getElementById('modeNewBtn').classList.toggle('active', mode === 'new');
   document.getElementById('listMode').classList.toggle('hidden', mode !== 'list');
   document.getElementById('formMode').classList.toggle('hidden', mode === 'list');
   document.getElementById('listFilterTabs').classList.toggle('hidden', mode !== 'list');
 
-  if (mode === 'new') {
+  if (mode === 'new' && !skipReset) {
     resetForm();
     document.getElementById('formTitle').textContent = 'Nuevo operario';
     document.getElementById('tipoSection').classList.remove('hidden');
@@ -623,7 +623,7 @@ function switchMode(mode) {
     document.getElementById('jornalesSection').classList.add('hidden');
     editingLegajo = null;
     editingCompany = null;
-  } else {
+  } else if (mode === 'list') {
     renderList();
   }
 }
@@ -707,10 +707,11 @@ function editOperario(legajo) {
   const op = operarios.find(o => o.legajo === legajo);
   if (!op) return;
 
+  // Mostrar form sin resetear estado, después seteamos las variables
+  switchMode('new', true);
   editingLegajo = legajo;
   editingCompany = null;
   selectedTipo = 'DEST';  // generic destajo edit flag
-  switchMode('new');
 
   document.getElementById('formTitle').textContent = 'Modificar: ' + op.nombre;
   document.getElementById('tipoSection').classList.add('hidden');
@@ -743,10 +744,10 @@ function editJornal(legajo, company) {
   const emp = empleadosJornal.find(e => e.legajo === legajo && e.company === company);
   if (!emp) return;
 
+  switchMode('new', true);
   editingLegajo = legajo;
   editingCompany = company;
   selectedTipo = 'JORN';
-  switchMode('new');
 
   document.getElementById('formTitle').textContent = 'Modificar jornal: ' + emp.nombre + ' (' + company + ')';
   document.getElementById('tipoSection').classList.add('hidden');
@@ -760,7 +761,7 @@ function editJornal(legajo, company) {
   document.getElementById('modalidad').value = (emp.activo === 'SI' ? 'DIA' : 'BAJA');
   document.getElementById('jornPlanta').value = emp.planta;
   document.getElementById('jornCompany').value = emp.company;
-  document.getElementById('jornCompany').disabled = true;  // no permitir cambiar company al editar
+  document.getElementById('jornCompany').disabled = true;
   document.getElementById('jornTipoPago').value = emp.tipoPago;
   document.getElementById('jornMonto').value = emp.jornal || 0;
   document.getElementById('jornValorHE').value = emp.valorHE || 0;
