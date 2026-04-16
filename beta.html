@@ -38,6 +38,9 @@
     - Contraseñas configurables en solapa CONFIG del Google Sheet
 
   v1.4 — FCL Tracking + Fixes  ← VERSIÓN ACTUAL
+    - FIX: renderLista usa cache de initHeaders (no fuerza 2do fetch)
+    - FIX: initHeaders con fallback a llamadas individuales si get_all falla
+    - FIX: manejo de errores visible en lugar de "Cargando..." infinito
     - Card verde en Tab 2 mostrando FCL actual, % y kgs restantes
     - Cálculo automático: FCL = FCL_NUM_INICIO + floor(kgs_acum / capacidad)
     - Parámetros en CONFIG del Google Sheet (filas 4-7):
@@ -435,8 +438,19 @@ async function apiGetAll(){
 let _headersChecked = false;
 async function initHeaders(){
   if(_headersChecked) return;
-  const d = await apiGetAll();
-  if(!d) return;
+  let d = null;
+  try { d = await apiGetAll(); } catch(e) { console.error('get_all failed:', e); }
+  if(!d) {
+    // Fallback: llamadas individuales si get_all falla
+    try {
+      const [r1, r2] = await Promise.all([apiGet('RECEPCIONES'), apiGet('LOTES')]);
+      cacheRec = r1.slice(1).filter(r=>r[0]);
+      cacheLot = r2.slice(1).filter(r=>r[0]);
+      cacheTsRec = Date.now(); cacheTsLot = Date.now();
+      _headersChecked = true;
+    } catch(e2) { console.error('Fallback also failed:', e2); }
+    return;
+  }
   const rows  = d.recepciones || [];
   const rows2 = d.lotes       || [];
   if(d.config) cachedConfig = {
@@ -512,7 +526,7 @@ function showTab(n){
   document.getElementById('nav1').classList.toggle('active',n===1);
   document.getElementById('nav2').classList.toggle('active',n===2);
   if(n===1) renderLista();
-  if(n===2) { renderLotesRecientes(); renderFCLCard(); }
+  if(n===2) { renderLotesRecientes().catch(e=>console.error(e)); renderFCLCard(); }
 }
 
 
@@ -606,9 +620,10 @@ function f1Nuevo(){
 
 async function renderLista(){
   const el = document.getElementById('f1-lista');
-  el.innerHTML='<p style="font-size:12px;color:#999">Cargando...</p>';
-  const rows = await getRecepciones(true);
-  if(!rows.length){el.innerHTML='<p style="font-size:12px;color:#999">Sin registros aún</p>';return;}
+  if(!cacheRec) el.innerHTML='<p style="font-size:12px;color:#999">Cargando...</p>';
+  try {
+    const rows = await getRecepciones();
+    if(!rows.length){el.innerHTML='<p style="font-size:12px;color:#999">Sin registros aún</p>';return;}
   const recientes = [...rows].reverse().slice(0,8);
   el.innerHTML = recientes.map(r=>`
     <div class="recep-row">
@@ -1019,7 +1034,13 @@ async function renderLotesRecientes(){
   }).join('');
 }
 
-initHeaders().then(()=>{ renderLista(); }).catch(e=>console.error(e));
+initHeaders()
+  .then(()=>{ renderLista(); })
+  .catch(e=>{
+    console.error('Init failed:', e);
+    const el=document.getElementById('f1-lista');
+    if(el) el.innerHTML='<p style="font-size:12px;color:#dc2626">Error de conexión. Recargá la página.</p>';
+  });
 </script>
 </body>
 </html>
