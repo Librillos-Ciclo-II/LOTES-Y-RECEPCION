@@ -1,3 +1,58 @@
+<!--
+=============================================================
+  SANTA FAZ — FORMULARIO BETA
+  Repo: librillos-ciclo-ii/LOTES-Y-RECEPCION
+  URL:  https://librillos-ciclo-ii.github.io/LOTES-Y-RECEPCION/beta.html
+  Apps Script Beta: AKfycbyUriV9ehnNUCpIbZZkRVfXEMBTKjLRYhOfAD4hSa-kKF3XJc5vQdClxU1dOSDfLM_A
+=============================================================
+
+  CHANGELOG
+  ---------
+
+  v1.0 — Base productivo
+    - Tab 1: Recepción MP (frigorífico, fecha, unidades, tambores, comentarios)
+    - Tab 2: Registro de lote clasificado (categorías AAA-D, kgs, observaciones)
+    - Validación duplicados por Frigorifico+Fecha
+    - Lotes parciales con barra de progreso
+    - User Agent capturado silenciosamente
+
+  v1.1 — Performance (beta)
+    - Endpoint get_all: una sola llamada trae RECEPCIONES + LOTES + CONFIG
+    - Cache separado cacheTsRec / cacheTsLot (TTL 60s independientes)
+    - invalidateCache('rec'/'lot'/'all') selectivo
+    - initHeaders corre solo una vez (_headersChecked flag)
+    - f2Buscar usa Promise.all en paralelo
+    - Fondo celeste + banner BETA para distinguir del productivo
+
+  v1.2 — Modificación T+1
+    - Botón "Modificar recepción del día anterior" en Tab 1
+    - Permite cambiar Unidades, Tambores y Comentarios hasta 48hs del registro
+    - Si hay lotes parciales, actualiza Total_Lote automáticamente
+    - Acción update_recepcion + update_total_lote en Apps Script
+
+  v1.3 — Cierre con diferencia
+    - Botón "Cerrar lote con diferencia" para faltantes Y sobrantes
+    - Hasta 0.5%: confirmación simple
+    - 0.5%-5%: contraseña Supervisor (CONFIG B1)
+    - Más de 5%: contraseña Administrador (CONFIG B2)
+    - Contraseñas configurables en solapa CONFIG del Google Sheet
+
+  v1.4 — FCL Tracking (en desarrollo)
+    - Card verde en Tab 2 mostrando FCL actual, % y kgs restantes
+    - Cálculo automático: FCL = FCL_NUM_INICIO + floor(kgs_acum / capacidad)
+    - Parámetros configurables en CONFIG (filas 4-7):
+        B4 = FCL_NUM_INICIO   (default: 11)
+        B5 = FCL_FECHA_INICIO (default: 2026-04-13)
+        B6 = FCL_KGS_INICIO   (default: 13880)
+        B7 = FCL_CAPACIDAD_KG (default: 28000)
+    - FCL se graba en columna FCL de la solapa LOTES al cerrar un batch
+    - Barra de progreso: verde <70% / naranja 70-90% / rojo >90%
+
+  PRÓXIMO
+    - Pasar FCL validado a productivo
+    - Integrar FCL en LOTES_Nuevo.xlsx (columna nueva)
+=============================================================
+-->
 <!DOCTYPE html>
 <html lang="es">
 <head>
