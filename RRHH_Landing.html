@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Santa Faz — RRHH</title>
+<!--
+  RRHH_Landing.html — Hub central de Recursos Humanos
+  v1.0  2026-04-16
+
+  Dashboard con accesos a todos los módulos de RRHH y KPIs en vivo del día.
+  Tema azul, claro, optimizado para uso en planta.
+-->
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f4f1eb;
+    --surface: #ffffff;
+    --primary: #1e4d8c;
+    --primary-light: #e3edf7;
+    --primary-dark: #163a6b;
+    --accent: #C5A030;
+    --accent-light: #fdf6e3;
+    --green: #27ae60;
+    --green-light: #d4edda;
+    --danger: #c0392b;
+    --danger-light: #fceaea;
+    --text: #1a1a1a;
+    --text-muted: #6b6b60;
+    --border: #e0ddd4;
+    --radius: 12px;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
+    --shadow-md: 0 4px 12px rgba(30,77,140,0.08);
+    --shadow-lg: 0 8px 24px rgba(30,77,140,0.12);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding-bottom: 60px;
+  }
+
+  /* ---- HEADER ---- */
+  .header {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    color: white;
+    padding: 26px 20px 56px;
+    position: relative;
+    overflow: hidden;
+  }
+  .header::before {
+    content: '';
+    position: absolute;
+    top: -100px; right: -80px;
+    width: 280px; height: 280px;
+    background: radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .header::after {
+    content: '';
+    position: absolute;
+    bottom: -60px; left: -40px;
+    width: 200px; height: 200px;
+    background: radial-gradient(circle, rgba(197,160,48,0.12) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .header-inner {
+    max-width: 1100px;
+    margin: 0 auto;
+    position: relative;
+    z-index: 2;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .header h1 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .header h1 .accent {
+    color: var(--accent);
+    font-weight: 800;
+  }
+  .header small {
+    display: block;
+    opacity: 0.8;
+    font-size: 0.78rem;
+    margin-top: 2px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .header-date {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    background: rgba(255,255,255,0.15);
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.2);
+  }
+  .header-date strong {
+    font-weight: 600;
+  }
+
+  .container {
+    max-width: 1100px;
+    margin: -36px auto 0;
+    padding: 0 20px;
+    position: relative;
+    z-index: 5;
+  }
+
+  /* ---- KPIs ---- */
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .kpi-card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    box-shadow: var(--shadow-md);
+    border: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+  .kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--primary);
+  }
+  .kpi-card.green::before { background: var(--green); }
+  .kpi-card.accent::before { background: var(--accent); }
+  .kpi-card.danger::before { background: var(--danger); }
+
+  .kpi-icon {
+    font-size: 1rem;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+  .kpi-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--primary);
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+  }
+  .kpi-card.green .kpi-value { color: var(--green); }
+  .kpi-card.accent .kpi-value { color: var(--accent); }
+  .kpi-card.danger .kpi-value { color: var(--danger); }
+  .kpi-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+  .kpi-detail {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+  .kpi-loading {
+    display: inline-block;
+    width: 50px;
+    height: 16px;
+    background: linear-gradient(90deg, #eee 0%, #f5f5f5 50%, #eee 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s infinite;
+    border-radius: 4px;
+  }
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* ---- ALERTS BAR ---- */
+  .alerts-bar {
+    margin-bottom: 24px;
+  }
+  .alert-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    margin-right: 6px;
+    margin-bottom: 6px;
+  }
+  .alert-pill.warning {
+    background: var(--accent-light);
+    color: #8a6d10;
+    border: 1px solid #e8d9a0;
+  }
+  .alert-pill.success {
+    background: var(--green-light);
+    color: #155724;
+    border: 1px solid #b8d4b0;
+  }
+  .alert-pill.danger {
+    background: var(--danger-light);
+    color: var(--danger);
+    border: 1px solid #e8b0b0;
+  }
+
+  /* ---- SECTION TITLE ---- */
+  .section-title {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* ---- MODULES GRID ---- */
+  .modules-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 14px;
+    margin-bottom: 32px;
+  }
+  .module-card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 22px 20px;
+    border: 1.5px solid var(--border);
+    text-decoration: none;
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    box-shadow: var(--shadow-sm);
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  .module-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--primary);
+  }
+  .module-card::after {
+    content: '→';
+    position: absolute;
+    top: 18px;
+    right: 18px;
+    font-size: 1.1rem;
+    color: var(--text-muted);
+    transition: all 0.2s ease;
+  }
+  .module-card:hover::after {
+    transform: translateX(4px);
+    color: var(--primary);
+  }
+
+  .module-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: var(--primary-light);
+    color: var(--primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    margin-bottom: 4px;
+  }
+  .module-card.gold .module-icon { background: var(--accent-light); color: var(--accent); }
+  .module-card.green .module-icon { background: var(--green-light); color: var(--green); }
+  .module-card.danger .module-icon { background: var(--danger-light); color: var(--danger); }
+
+  .module-title {
+    font-size: 1.02rem;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+  }
+  .module-desc {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+  .module-tag {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: var(--primary-light);
+    color: var(--primary);
+    margin-top: 4px;
+    align-self: flex-start;
+  }
+  .module-card.gold .module-tag { background: var(--accent-light); color: #8a6d10; }
+  .module-card.green .module-tag { background: var(--green-light); color: #155724; }
+  .module-card.danger .module-tag { background: var(--danger-light); color: var(--danger); }
+
+  /* ---- FOOTER NAV ---- */
+  .footer-nav {
+    text-align: center;
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+  }
+  .footer-nav a {
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 0.82rem;
+    font-weight: 600;
+    transition: color 0.2s;
+  }
+  .footer-nav a:hover { color: var(--primary); }
+
+  @media (max-width: 600px) {
+    .header { padding: 22px 16px 50px; }
+    .header h1 { font-size: 1.15rem; }
+    .container { padding: 0 14px; }
+    .kpi-value { font-size: 1.35rem; }
+    .module-card { padding: 18px 16px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-inner">
+    <div>
+      <h1><span class="accent">Santa Faz</span> · Recursos Humanos</h1>
+      <small>Panel de gestión de personal</small>
+    </div>
+    <div class="header-date" id="headerDate">—</div>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- KPIs en vivo -->
+  <div class="kpi-row">
+    <div class="kpi-card green">
+      <div class="kpi-icon">👥</div>
+      <div class="kpi-value" id="kpiPresentes"><span class="kpi-loading"></span></div>
+      <div class="kpi-label">Presentes hoy</div>
+      <div class="kpi-detail" id="kpiPresentesDetail">&nbsp;</div>
+    </div>
+    <div class="kpi-card danger">
+      <div class="kpi-icon">⊘</div>
+      <div class="kpi-value" id="kpiAusentes"><span class="kpi-loading"></span></div>
+      <div class="kpi-label">Ausentes hoy</div>
+      <div class="kpi-detail" id="kpiAusentesDetail">&nbsp;</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon">📋</div>
+      <div class="kpi-value" id="kpiAsistencia"><span class="kpi-loading"></span></div>
+      <div class="kpi-label">Cargas Asistencia</div>
+      <div class="kpi-detail" id="kpiAsistenciaDetail">&nbsp;</div>
+    </div>
+    <div class="kpi-card accent">
+      <div class="kpi-icon">🔨</div>
+      <div class="kpi-value" id="kpiDestajo"><span class="kpi-loading"></span></div>
+      <div class="kpi-label">Cargas Destajo</div>
+      <div class="kpi-detail" id="kpiDestajoDetail">&nbsp;</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon">✓</div>
+      <div class="kpi-value" id="kpiAprobaciones"><span class="kpi-loading"></span></div>
+      <div class="kpi-label">Aprobados hoy</div>
+      <div class="kpi-detail" id="kpiAprobacionesDetail">&nbsp;</div>
+    </div>
+  </div>
+
+  <!-- Alertas -->
+  <div class="alerts-bar" id="alertsBar"></div>
+
+  <!-- Módulos -->
+  <div class="section-title">Módulos disponibles</div>
+  <div class="modules-grid">
+
+    <a href="RRHH_Jornales.html" class="module-card green">
+      <div class="module-icon">✅</div>
+      <div class="module-title">Asistencia Jornaleros</div>
+      <div class="module-desc">Carga diaria de presentismo y horas extras por planta</div>
+      <span class="module-tag">carga diaria</span>
+    </a>
+
+    <a href="productividad.html" class="module-card gold">
+      <div class="module-icon">🔨</div>
+      <div class="module-title">Destajo Operarios</div>
+      <div class="module-desc">Registro de producción por unidad. Clasificado, despellejado, salado y más</div>
+      <span class="module-tag">carga diaria</span>
+    </a>
+
+    <a href="RRHH_Diario.html" class="module-card">
+      <div class="module-icon">🔍</div>
+      <div class="module-title">Control Diario</div>
+      <div class="module-desc">Vista de supervisor para revisar y aprobar las cargas del día</div>
+      <span class="module-tag">aprobación</span>
+    </a>
+
+    <a href="RRHH_Reportes.html" class="module-card">
+      <div class="module-icon">📊</div>
+      <div class="module-title">Reportes</div>
+      <div class="module-desc">Consulta histórica con filtros por fecha, planta, empleado y company</div>
+      <span class="module-tag">consulta</span>
+    </a>
+
+    <a href="ABM_Operarios.html" class="module-card">
+      <div class="module-icon">👥</div>
+      <div class="module-title">ABM Operarios</div>
+      <div class="module-desc">Alta, baja y modificación de operarios destajo y empleados jornales</div>
+      <span class="module-tag">admin</span>
+    </a>
+
+  </div>
+
+  <div class="footer-nav">
+    <a href="landing.html">← Volver al menú general</a>
+  </div>
+
+</div>
+
+<script>
+const API = 'https://script.google.com/macros/s/AKfycbzud3BqEJzJPVy4ehTnfOH_m_DfQv05Arx1aEhEgYEUz1V0cKZb0rwSU1ZjR8ZbIECN/exec';
+const TODAS_PLANTAS = ['CICLO II', 'DELTA', 'ALBA', 'RECREO', 'CCP'];
+
+// ============================================================
+//  HEADER DATE
+// ============================================================
+function renderDate() {
+  const now = new Date();
+  const days = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const dia = days[now.getDay()];
+  const fecha = `${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}`;
+  document.getElementById('headerDate').innerHTML = `<strong>${dia}</strong> · ${fecha}`;
+}
+renderDate();
+
+// ============================================================
+//  KPIs
+// ============================================================
+async function fetchSheet(sheet) {
+  const url = `${API}?action=get&sheet=${encodeURIComponent(sheet)}&_=${Date.now()}`;
+  const resp = await fetch(url);
+  const data = await resp.json();
+  if (!data.ok) throw new Error(data.error || 'Error');
+  return data.data;
+}
+
+function setKpi(id, value, detail) {
+  const v = document.getElementById(id);
+  if (v) v.textContent = value;
+  const d = document.getElementById(id + 'Detail');
+  if (d && detail !== undefined) d.textContent = detail || '\u00a0';
+}
+
+function setKpiError(id) {
+  const v = document.getElementById(id);
+  if (v) v.textContent = '—';
+}
+
+async function loadKpis() {
+  const today = new Date().toISOString().slice(0, 10);
+
+  let asis = [], dest = [], aprob = [];
+  try {
+    const [a, d] = await Promise.all([
+      fetchSheet('ASISTENCIA JORNALES').catch(() => []),
+      fetchSheet('DESTAJO').catch(() => [])
+    ]);
+    asis = a.slice(1).filter(r => r[0]);
+    dest = d.slice(1).filter(r => r[0]);
+  } catch (e) {
+    console.error(e);
+    ['kpiPresentes','kpiAusentes','kpiAsistencia','kpiDestajo','kpiAprobaciones'].forEach(setKpiError);
+    return;
+  }
+
+  try {
+    const ap = await fetchSheet('APROBACIONES');
+    aprob = ap.slice(1).filter(r => r[0]);
+  } catch (e) {
+    aprob = [];
+  }
+
+  // Filter for today
+  const asisHoy = asis.filter(r => String(r[1] || '').trim().slice(0, 10) === today);
+  const destHoy = dest.filter(r => String(r[1] || '').trim().slice(0, 10) === today);
+  const aprobHoy = aprob.filter(r => String(r[1] || '').trim().slice(0, 10) === today);
+
+  // Presentes / Ausentes — únicos por nombre (no contar duplicados MT/ATG)
+  const presentesSet = new Set();
+  const ausentesSet = new Set();
+  asisHoy.forEach(r => {
+    const nombre = String(r[3] || '').trim();
+    if (!nombre) return;
+    if (String(r[7] || '').toUpperCase() === 'SI') presentesSet.add(nombre);
+    if (String(r[8] || '').toUpperCase() === 'SI') ausentesSet.add(nombre);
+  });
+
+  // Plantas con asistencia cargada
+  const plantasCargadas = new Set(asisHoy.map(r => String(r[4] || '').trim().toUpperCase()).filter(Boolean));
+  const plantasFaltantes = TODAS_PLANTAS.filter(p => !plantasCargadas.has(p));
+
+  // Operarios distintos en destajo
+  const operariosDestajo = new Set(destHoy.map(r => String(r[3] || '').trim()).filter(Boolean));
+
+  // Render KPIs
+  setKpi('kpiPresentes', presentesSet.size, plantasCargadas.size + ' planta' + (plantasCargadas.size !== 1 ? 's' : ''));
+  setKpi('kpiAusentes', ausentesSet.size, ausentesSet.size === 0 ? 'Sin ausencias' : 'empleados');
+  setKpi('kpiAsistencia', asisHoy.length, 'registros');
+  setKpi('kpiDestajo', destHoy.length, operariosDestajo.size + ' operarios');
+  setKpi('kpiAprobaciones', aprobHoy.length, aprobHoy.length > 0 ? 'registros aprobados' : 'sin aprobaciones');
+
+  // Alerts
+  renderAlerts(asisHoy, destHoy, aprobHoy, plantasFaltantes);
+}
+
+function renderAlerts(asis, dest, aprob, plantasFaltantes) {
+  const bar = document.getElementById('alertsBar');
+  const alerts = [];
+
+  if (asis.length === 0 && dest.length === 0) {
+    alerts.push(`<span class="alert-pill danger">⚠ Sin cargas hoy</span>`);
+  } else {
+    if (plantasFaltantes.length > 0) {
+      alerts.push(`<span class="alert-pill warning">⚠ Sin asistencia: ${plantasFaltantes.join(', ')}</span>`);
+    }
+    if (plantasFaltantes.length === 0 && asis.length > 0) {
+      alerts.push(`<span class="alert-pill success">✓ Todas las plantas cargaron</span>`);
+    }
+    const totalRegs = asis.length + dest.length;
+    if (aprob.length === totalRegs && totalRegs > 0) {
+      alerts.push(`<span class="alert-pill success">✓ Todo aprobado</span>`);
+    } else if (aprob.length > 0) {
+      const pendientes = totalRegs - aprob.length;
+      alerts.push(`<span class="alert-pill warning">○ ${pendientes} registro${pendientes !== 1 ? 's' : ''} pendiente${pendientes !== 1 ? 's' : ''} de aprobar</span>`);
+    }
+  }
+
+  bar.innerHTML = alerts.join('');
+}
+
+// Cargar KPIs
+loadKpis();
+
+// Refresh every 60 seconds
+setInterval(loadKpis, 60000);
+</script>
+</body>
+</html>
