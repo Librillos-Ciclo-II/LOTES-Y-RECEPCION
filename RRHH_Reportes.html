@@ -413,6 +413,7 @@
             <th class="num">Jornal</th>
             <th class="num">Imp. HE</th>
             <th class="num">Total</th>
+            <th>Aprob.</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -436,6 +437,7 @@
             <th>Actividad</th>
             <th class="num">Unidades</th>
             <th class="num">Importe</th>
+            <th>Aprob.</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -478,6 +480,7 @@ const API = 'https://script.google.com/macros/s/AKfycbzud3BqEJzJPVy4ehTnfOH_m_Df
 
 let datosAsistencia = [];
 let datosDestajo = [];
+let approvedIds = new Set();
 let currentTab = 'asistencia';
 
 // ============================================================
@@ -527,6 +530,12 @@ async function init() {
       fetchSheet('ASISTENCIA JORNALES'),
       fetchSheet('DESTAJO')
     ]);
+
+    // Cargar aprobaciones (puede no existir aún)
+    try {
+      const aprobData = await fetchSheet('APROBACIONES');
+      approvedIds = new Set(aprobData.slice(1).filter(r => r[0]).map(r => String(r[0])));
+    } catch(e) { approvedIds = new Set(); }
 
     // Parse ASISTENCIA
     // [ID, Fecha, Legajo, Nombre, Planta, Company, Tipo_Pago, Presente, Ausente,
@@ -764,7 +773,7 @@ function renderAsistencia(data) {
   document.getElementById('countAsis').textContent = data.length;
 
   if (data.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="11" class="empty">Sin registros en el período seleccionado</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="12" class="empty">Sin registros en el período seleccionado</td></tr>';
     return;
   }
 
@@ -789,6 +798,9 @@ function renderAsistencia(data) {
       ? ' <span class="tag tag-fijo" title="Fijo quincenal prorrateado">FIJO</span>'
       : '';
     const rowClass = r.presente ? 'presente' : (r.ausente ? 'ausente' : '');
+    const aprobTag = approvedIds.has(r.id)
+      ? '<span class="tag tag-pres">✓</span>'
+      : '<span style="color:var(--text-muted)">—</span>';
 
     return `
       <tr class="${rowClass}">
@@ -803,6 +815,7 @@ function renderAsistencia(data) {
         <td class="num">${fmtMoney(r.jornal)}</td>
         <td class="num">${fmtMoney(r.importeHE)}</td>
         <td class="num"><strong>${fmtMoney(r.importeTotal)}</strong></td>
+        <td>${aprobTag}</td>
       </tr>
     `;
   }).join('') + `
@@ -811,6 +824,7 @@ function renderAsistencia(data) {
       <td class="num">${fmtMoney(totJornal)}</td>
       <td class="num">${fmtMoney(totHE)}</td>
       <td class="num"><strong>${fmtMoney(totImporte)}</strong></td>
+      <td></td>
     </tr>`;
 }
 
@@ -822,7 +836,7 @@ function renderDestajo(data) {
   document.getElementById('countDest').textContent = data.length;
 
   if (data.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" class="empty">Sin registros de destajo en el período</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">Sin registros de destajo en el período</td></tr>';
     return;
   }
 
@@ -834,7 +848,11 @@ function renderDestajo(data) {
   const totUnidades = sorted.reduce((s,r) => s + r.unidades, 0);
   const totImporte = sorted.reduce((s,r) => s + r.importe, 0);
 
-  tbody.innerHTML = sorted.map(r => `
+  tbody.innerHTML = sorted.map(r => {
+    const aprobTag = approvedIds.has(r.id)
+      ? '<span class="tag tag-pres">✓</span>'
+      : '<span style="color:var(--text-muted)">—</span>';
+    return `
     <tr>
       <td>${fmt(r.fecha)}</td>
       <td>${r.legajo}</td>
@@ -842,12 +860,14 @@ function renderDestajo(data) {
       <td>${r.actividad}</td>
       <td class="num">${r.unidades}</td>
       <td class="num"><strong>${fmtMoney(r.importe)}</strong></td>
-    </tr>
-  `).join('') + `
+      <td>${aprobTag}</td>
+    </tr>`;
+  }).join('') + `
     <tr style="background:var(--accent-light);font-weight:700;border-top:2px solid var(--primary)">
       <td colspan="4" style="text-align:right">TOTAL</td>
       <td class="num">${totUnidades.toLocaleString('es-AR')}</td>
       <td class="num"><strong>${fmtMoney(totImporte)}</strong></td>
+      <td></td>
     </tr>`;
 }
 
