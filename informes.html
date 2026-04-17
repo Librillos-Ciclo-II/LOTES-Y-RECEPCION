@@ -872,64 +872,64 @@ function renderTab3(){
   </div>`;
 
   // ── Tabla CLASIFICACIÓN ───────────────────────────────────────────────────
-  // Santa Faz trabaja 5 días/sem. Proyección: un/día × 5 (neto feriados)
+  // El ritmo de clasificación es de la PLANTA Santa Faz (no por frigorífico).
+  // Los días efectivos son las fechas únicas donde hubo clasificación (todas juntas).
+  // Por frigorífico mostramos totales y % de participación.
   const activeFgosClas = FGOS.filter(f => clasByFgo[f].unid > 0);
   const perClasGlobal = calcPeriodo(allClasFechas);
   const ferPorSemClas = perClasGlobal.semanas > 0 ? perClasGlobal.feriados / perClasGlobal.semanas : 0;
   const diasClasNeto = Math.max(1, DIAS_CLASIF_SEMANA - ferPorSemClas);
 
+  // Ritmo global de la planta
+  const plantaUDia = diasClas > 0 ? Math.round(totalClasUnid / diasClas) : 0;
+  const plantaKDia = diasClas > 0 ? Math.round(totalClasKgs / diasClas) : 0;
+  const plantaUSem = Math.round(plantaUDia * diasClasNeto);
+  const plantaUMes = Math.round(plantaUSem * 4.33);
+  const plantaKSem = Math.round(plantaKDia * diasClasNeto);
+  const plantaKMes = Math.round(plantaKSem * 4.33);
+
   let clasRows = activeFgosClas.map(f => {
     const d = clasByFgo[f];
-    const de = diasEfectivos(d.fechas);
-    const uDia = de > 0 ? Math.round(d.unid / de) : 0;
-    const kDia = de > 0 ? Math.round(d.kgs / de) : 0;
-    const uSem = Math.round(uDia * diasClasNeto);
-    const uMes = Math.round(uSem * 4.33);
-    const kSem = Math.round(kDia * diasClasNeto);
-    const kMes = Math.round(kSem * 4.33);
+    const pctU = totalClasUnid > 0 ? (d.unid / totalClasUnid * 100).toFixed(1) : '0.0';
+    const pctK = totalClasKgs > 0 ? (d.kgs / totalClasKgs * 100).toFixed(1) : '0.0';
     return `<tr>
-      <td>${f}</td><td>${de}</td>
+      <td>${f}</td>
       <td>${d.unid.toLocaleString('es-AR')}</td>
-      <td style="font-weight:700">${uDia.toLocaleString('es-AR')}</td>
-      <td>${uSem.toLocaleString('es-AR')}</td>
-      <td>${uMes.toLocaleString('es-AR')}</td>
-      <td>${d.kgs?Math.round(d.kgs).toLocaleString('es-AR'):'—'}</td>
-      <td style="font-weight:700">${kDia.toLocaleString('es-AR')}</td>
-      <td>${kSem.toLocaleString('es-AR')}</td>
-      <td>${kMes.toLocaleString('es-AR')}</td>
+      <td>${pctU}%</td>
+      <td>${d.kgs ? Math.round(d.kgs).toLocaleString('es-AR') : '—'}</td>
+      <td>${pctK}%</td>
+      <td>${d.unid > 0 && d.kgs > 0 ? (d.kgs / d.unid).toFixed(3) : '—'}</td>
     </tr>`;
   }).join('');
 
-  const totClasUSem = Math.round(clasDia * diasClasNeto);
-  const totClasUMes = Math.round(totClasUSem * 4.33);
-  const totClasKSem = Math.round(kgsDia * diasClasNeto);
-  const totClasKMes = Math.round(totClasKSem * 4.33);
   clasRows += `<tr class="total-row">
-    <td>TOTAL</td><td>${diasClas}</td>
+    <td>TOTAL</td>
     <td>${totalClasUnid.toLocaleString('es-AR')}</td>
-    <td style="font-weight:700">${clasDia.toLocaleString('es-AR')}</td>
-    <td>${totClasUSem.toLocaleString('es-AR')}</td>
-    <td>${totClasUMes.toLocaleString('es-AR')}</td>
-    <td>${totalClasKgs?Math.round(totalClasKgs).toLocaleString('es-AR'):'—'}</td>
-    <td style="font-weight:700">${kgsDia.toLocaleString('es-AR')}</td>
-    <td>${totClasKSem.toLocaleString('es-AR')}</td>
-    <td>${totClasKMes.toLocaleString('es-AR')}</td>
+    <td>100%</td>
+    <td>${totalClasKgs ? Math.round(totalClasKgs).toLocaleString('es-AR') : '—'}</td>
+    <td>100%</td>
+    <td>${totalClasUnid > 0 && totalClasKgs > 0 ? (totalClasKgs / totalClasUnid).toFixed(3) : '—'}</td>
   </tr>`;
 
   document.getElementById('pr-clasificacion').innerHTML = `<div class="prod-section">
     <div class="prod-section-title">Clasificación y empaque (Santa Faz)</div>
-    <div class="prod-section-sub">Planta ${DIAS_CLASIF_SEMANA} días/sem · Proyección semanal neta de feriados · Mensual = semanal × 4,33</div>
+    <div class="prod-section-sub">Planta ${DIAS_CLASIF_SEMANA} días/sem · ${diasClas} días efectivos en el período · Neto feriados</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+      <div style="background:var(--green-bg);border:1px solid var(--green-bd);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:var(--green)">${plantaUDia.toLocaleString('es-AR')}</div>
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase">Un/día</div>
+        <div style="font-size:11px;color:var(--text);margin-top:2px">${plantaUSem.toLocaleString('es-AR')} /sem · ${plantaUMes.toLocaleString('es-AR')} /mes</div>
+      </div>
+      <div style="background:var(--amber-bg);border:1px solid var(--amber-bd);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:var(--amber)">${plantaKDia.toLocaleString('es-AR')}</div>
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase">Kgs/día</div>
+        <div style="font-size:11px;color:var(--text);margin-top:2px">${plantaKSem.toLocaleString('es-AR')} /sem · ${plantaKMes.toLocaleString('es-AR')} /mes</div>
+      </div>
+    </div>
+    <div style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--muted)">Desglose por proveedor de origen</div>
     <div style="overflow-x:auto">
     <table class="prod-table">
-      <thead>
-        <tr>
-          <th style="text-align:left" rowspan="2">Frigorífico</th>
-          <th rowspan="2">Días ef.</th>
-          <th colspan="4" style="text-align:center;border-bottom:1px solid var(--border)">Unidades clasificadas</th>
-          <th colspan="4" style="text-align:center;border-bottom:1px solid var(--border)">Kgs salados</th>
-        </tr>
-        <tr><th>Total</th><th>Día</th><th>Sem</th><th>Mes</th><th>Total</th><th>Día</th><th>Sem</th><th>Mes</th></tr>
-      </thead>
+      <thead><tr><th style="text-align:left">Frigorífico</th><th>Unid.</th><th>%Un</th><th>Kgs</th><th>%Kgs</th><th>Kg/un</th></tr></thead>
       <tbody>${clasRows}</tbody>
     </table>
     </div>
