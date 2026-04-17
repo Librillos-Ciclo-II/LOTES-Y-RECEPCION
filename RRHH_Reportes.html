@@ -15,16 +15,24 @@
     - Filtros: Planta, Company, rango de fechas (o quincena
       rápida), empleado (opcional)
     - 3 vistas intercambiables:
-      1. ASISTENCIA: lista diaria de jornaleros (de solapa
-         ASISTENCIA) con presente/ausente, HE, importe
+      1. ASISTENCIA: lista diaria de jornaleros
       2. DESTAJO: lista diaria de actividades de destajo
-         (de solapa RRHH) con actividad, unidades, importe
       3. RESUMEN: consolidado por empleado del período
-         mostrando total jornales + total destajo
     - Contadores superiores: presentes, ausentes, total
       jornales, total destajo, total general
     - Exportación a CSV de cualquier vista
     - No modifica datos, es 100% consulta
+
+  v1.1  2026-04-16  Filtro Categoría + separación Cuadrilla + totales
+    - Nuevo filtro "Categoría": Todas / Quincenal (legajos numéricos)
+      / Cuadrilla (legajos C). Filtra en las 3 tabs.
+    - KPIs reorganizados:
+      · Total MT y Total ATG ahora excluyen cuadrilla (solo quincenal)
+      · Destajo Quincenal: solo legajos numéricos
+      · Total Quincenal: jornales + destajo quincenal (lo que va a liquidación)
+      · Cuadrilla (efectivo): total destajo de legajos C, separado
+    - Fila TOTAL al final de cada tabla (Asistencia, Destajo, Resumen)
+      con sumas de todas las columnas numéricas visibles
 
   ============================================================
 -->
@@ -345,6 +353,14 @@
         </select>
       </div>
       <div>
+        <label>Categoría</label>
+        <select id="filtroCategoria">
+          <option value="">— Todas —</option>
+          <option value="QUINCENAL">Quincenal (legajos numéricos)</option>
+          <option value="CUADRILLA">Cuadrilla (legajos C)</option>
+        </select>
+      </div>
+      <div>
         <label>Desde</label>
         <input type="date" id="filtroDesde">
       </div>
@@ -637,6 +653,15 @@ function aplicarFiltros() {
   const desde = document.getElementById('filtroDesde').value;
   const hasta = document.getElementById('filtroHasta').value;
   const empleado = document.getElementById('filtroEmpleado').value.toUpperCase().trim();
+  const categoria = document.getElementById('filtroCategoria').value;
+
+  const esCuadrilla = (legajo) => /^C/i.test(String(legajo));
+  const matchCategoria = (legajo) => {
+    if (!categoria) return true;
+    if (categoria === 'CUADRILLA') return esCuadrilla(legajo);
+    if (categoria === 'QUINCENAL') return !esCuadrilla(legajo);
+    return true;
+  };
 
   const matchRow = (r, incluyePlanta = true) => {
     if (incluyePlanta && planta && String(r.planta||'').toUpperCase() !== planta) return false;
@@ -644,21 +669,20 @@ function aplicarFiltros() {
     if (desde && r.fecha < desde) return false;
     if (hasta && r.fecha > hasta) return false;
     if (empleado && !r.nombre.toUpperCase().includes(empleado)) return false;
+    if (!matchCategoria(r.legajo)) return false;
     return true;
   };
 
   // Asistencia
   const asisFiltrada = datosAsistencia.filter(r => matchRow(r));
 
-  // Destajo (no tiene company ni planta estrictamente, asumimos CICLO II + match por nombre)
+  // Destajo
   const destFiltrado = datosDestajo.filter(r => {
-    // Para destajo, asumimos que siempre es CICLO II. Si hay filtro de planta,
-    // solo aplica si es CICLO II o está vacío.
     if (planta && planta !== 'CICLO II') return false;
     if (desde && r.fecha < desde) return false;
     if (hasta && r.fecha > hasta) return false;
     if (empleado && !r.nombre.toUpperCase().includes(empleado)) return false;
-    // Company no filtra destajo (no tiene ese dato)
+    if (!matchCategoria(r.legajo)) return false;
     return true;
   });
 
@@ -672,12 +696,25 @@ function aplicarFiltros() {
 //  KPIs
 // ============================================================
 function renderKPIs(asis, dest) {
+  const esCuadrilla = (legajo) => /^C/i.test(String(legajo));
   const pres = asis.filter(r => r.presente).length;
   const aus = asis.filter(r => r.ausente).length;
-  const totalJornales = asis.reduce((s, r) => s + r.importeTotal, 0);
-  const totalDestajo = dest.reduce((s, r) => s + r.importe, 0);
-  const totalMT = asis.filter(r => r.company === 'MT').reduce((s, r) => s + r.importeTotal, 0);
-  const totalATG = asis.filter(r => r.company === 'ATG').reduce((s, r) => s + r.importeTotal, 0);
+
+  // Jornales: solo legajos numéricos (quincenal)
+  const asisQuinc = asis.filter(r => !esCuadrilla(r.legajo));
+  const totalMT = asisQuinc.filter(r => r.company === 'MT').reduce((s, r) => s + r.importeTotal, 0);
+  const totalATG = asisQuinc.filter(r => r.company === 'ATG').reduce((s, r) => s + r.importeTotal, 0);
+  const totalJornales = totalMT + totalATG;
+
+  // Destajo: separar quincenal vs cuadrilla
+  const destQuinc = dest.filter(r => !esCuadrilla(r.legajo));
+  const destCuad = dest.filter(r => esCuadrilla(r.legajo));
+  const totalDestajoQuinc = destQuinc.reduce((s, r) => s + r.importe, 0);
+  const totalDestajoCuad = destCuad.reduce((s, r) => s + r.importe, 0);
+  const totalDestajo = totalDestajoQuinc + totalDestajoCuad;
+
+  // General quincenal = jornales + destajo quincenal (lo que va a liquidación)
+  const totalQuincenal = totalJornales + totalDestajoQuinc;
 
   const container = document.getElementById('kpisContainer');
   container.innerHTML = `
@@ -694,27 +731,27 @@ function renderKPIs(asis, dest) {
     <div class="kpi mt">
       <div class="label">Total MT</div>
       <div class="value">${fmtMoney(totalMT)}</div>
-      <div class="sub">solo jornales</div>
+      <div class="sub">jornales quincenal</div>
     </div>
     <div class="kpi atg">
       <div class="label">Total ATG</div>
       <div class="value">${fmtMoney(totalATG)}</div>
-      <div class="sub">solo jornales</div>
+      <div class="sub">jornales quincenal</div>
     </div>
     <div class="kpi">
-      <div class="label">Total Jornales</div>
-      <div class="value">${fmtMoney(totalJornales)}</div>
-      <div class="sub">MT + ATG</div>
-    </div>
-    <div class="kpi">
-      <div class="label">Total Destajo</div>
-      <div class="value">${fmtMoney(totalDestajo)}</div>
-      <div class="sub">Ciclo II</div>
+      <div class="label">Destajo Quincenal</div>
+      <div class="value">${fmtMoney(totalDestajoQuinc)}</div>
+      <div class="sub">legajos numéricos</div>
     </div>
     <div class="kpi" style="border-left-color:var(--accent)">
-      <div class="label">Total General</div>
-      <div class="value">${fmtMoney(totalJornales + totalDestajo)}</div>
+      <div class="label">Total Quincenal</div>
+      <div class="value">${fmtMoney(totalQuincenal)}</div>
       <div class="sub">jornales + destajo</div>
+    </div>
+    <div class="kpi" style="border-left-color:#e67e22; background:#fef9f0">
+      <div class="label">Cuadrilla (efectivo)</div>
+      <div class="value">${fmtMoney(totalDestajoCuad)}</div>
+      <div class="sub">${destCuad.length} registros · pago semanal</div>
     </div>
   `;
 }
@@ -736,6 +773,10 @@ function renderAsistencia(data) {
     if (a.fecha !== b.fecha) return b.fecha.localeCompare(a.fecha);
     return a.nombre.localeCompare(b.nombre);
   });
+
+  const totJornal = sorted.reduce((s,r) => s + r.jornal, 0);
+  const totHE = sorted.reduce((s,r) => s + r.importeHE, 0);
+  const totImporte = sorted.reduce((s,r) => s + r.importeTotal, 0);
 
   tbody.innerHTML = sorted.map(r => {
     const estadoTag = r.presente
@@ -764,7 +805,13 @@ function renderAsistencia(data) {
         <td class="num"><strong>${fmtMoney(r.importeTotal)}</strong></td>
       </tr>
     `;
-  }).join('');
+  }).join('') + `
+    <tr style="background:var(--accent-light);font-weight:700;border-top:2px solid var(--primary)">
+      <td colspan="8" style="text-align:right">TOTAL</td>
+      <td class="num">${fmtMoney(totJornal)}</td>
+      <td class="num">${fmtMoney(totHE)}</td>
+      <td class="num"><strong>${fmtMoney(totImporte)}</strong></td>
+    </tr>`;
 }
 
 // ============================================================
@@ -784,6 +831,9 @@ function renderDestajo(data) {
     return a.nombre.localeCompare(b.nombre);
   });
 
+  const totUnidades = sorted.reduce((s,r) => s + r.unidades, 0);
+  const totImporte = sorted.reduce((s,r) => s + r.importe, 0);
+
   tbody.innerHTML = sorted.map(r => `
     <tr>
       <td>${fmt(r.fecha)}</td>
@@ -793,7 +843,12 @@ function renderDestajo(data) {
       <td class="num">${r.unidades}</td>
       <td class="num"><strong>${fmtMoney(r.importe)}</strong></td>
     </tr>
-  `).join('');
+  `).join('') + `
+    <tr style="background:var(--accent-light);font-weight:700;border-top:2px solid var(--primary)">
+      <td colspan="4" style="text-align:right">TOTAL</td>
+      <td class="num">${totUnidades.toLocaleString('es-AR')}</td>
+      <td class="num"><strong>${fmtMoney(totImporte)}</strong></td>
+    </tr>`;
 }
 
 // ============================================================
@@ -858,6 +913,13 @@ function renderResumen(asis, dest) {
     return a.nombre.localeCompare(b.nombre);
   });
 
+  const totDiasPres = rows.reduce((s,r) => s + r.dias_pres, 0);
+  const totDiasAus = rows.reduce((s,r) => s + r.dias_aus, 0);
+  const totHE = rows.reduce((s,r) => s + r.total_he, 0);
+  const totJornales = rows.reduce((s,r) => s + r.total_jornales, 0);
+  const totDestajo = rows.reduce((s,r) => s + r.total_destajo, 0);
+  const totGeneral = totJornales + totDestajo;
+
   tbody.innerHTML = rows.map(r => {
     const total = r.total_jornales + r.total_destajo;
     const companyTag = r.company
@@ -876,7 +938,16 @@ function renderResumen(asis, dest) {
         <td class="num"><strong>${fmtMoney(total)}</strong></td>
       </tr>
     `;
-  }).join('');
+  }).join('') + `
+    <tr style="background:var(--accent-light);font-weight:700;border-top:2px solid var(--primary)">
+      <td colspan="3" style="text-align:right">TOTAL</td>
+      <td class="num">${totDiasPres}</td>
+      <td class="num">${totDiasAus || '—'}</td>
+      <td class="num">${fmtNum(totHE) || '—'}</td>
+      <td class="num">${fmtMoney(totJornales)}</td>
+      <td class="num">${fmtMoney(totDestajo)}</td>
+      <td class="num"><strong>${fmtMoney(totGeneral)}</strong></td>
+    </tr>`;
 }
 
 // ============================================================
