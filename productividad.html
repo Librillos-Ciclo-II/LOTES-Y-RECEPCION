@@ -56,6 +56,44 @@
     - Ahora usa nombre como identificador fallback cuando legajo
       está vacío, permitiendo registrar normalmente
 
+  v1.4  2026-04-16  Act_6/Act_7/Act_8 + filtro BAJA + Fernández Sol
+    - Parsing de actividades extendido a Act_1..Act_8 (índices 3-10)
+    - Operarios con Modalidad='BAJA' excluidos del dropdown
+    - Nuevo operario: FERNANDEZ SOL (197) con RESALADO, LIMPIEZA, CLASIFICADO
+
+  v1.5  2026-04-16  Fix cálculo BASE_PLUS
+    - Antes sumaba base + plus cuando superaba umbral (incorrecto)
+    - Ahora: ≤ umbral → solo base fija; > umbral → solo unidades × plus (sin base)
+    - Ejemplo RESALADO 332u: 332 × $100 = $33.200 (no $53.200)
+
+  v1.6  2026-04-16  Modo carga ciega (importes ocultos por default)
+    - Por default el HTML arranca en modo "locked" (importes ocultos)
+    - Botón "🔒 Acceder" arriba a la derecha del header
+    - Modal de PIN (clave: faz2026) para desbloquear importes
+    - CSS body.locked oculta: importe-display, resumen del día
+    - Tabla de registros recientes no muestra columna Importe en modo locked
+    - Mensaje "🔒 Modo Carga" donde iría el importe
+    - Botón cambia a "🔓 Ocultar" para volver a bloquear sin PIN
+    - Estado guardado en sessionStorage (se resetea al cerrar pestaña)
+
+  v1.7  2026-04-16  HS EXTRAS compatibles con JORNAL FIJO
+    - Las actividades HS EXTRAS, 1/2 JORNAL y 1/2 JORNAL SUPERVISOR
+      se consideran complementos del jornal fijo
+    - Ya no disparan el conflicto "No se puede combinar con destajo"
+    - Constante COMPLEMENTOS_FIJO define la lista de actividades exentas
+    - Permite cargar HS EXTRAS para Dible (19) y Robaina (118) aunque
+      ya tengan JORNAL FIJO SUPERVISOR registrado ese día
+
+  v1.8  2026-04-20  Planta y Company en registros DESTAJO
+    - Cada registro guardado ahora incluye Planta='CICLO II' y
+      Company='MT' como columnas 10 y 11 (índices 9-10)
+    - Aplica tanto al registro nuevo como a las correcciones
+      automáticas de BASE_PLUS
+    - Los 342 registros existentes sin estas columnas se manejan
+      con fallback en RRHH_Reportes (asume CICLO II/MT)
+    - No se modifica la estructura de OPERARIOS para no romper
+      índices de Act_1..Act_8 en producción
+
   ============================================================
 -->
 <style>
@@ -977,7 +1015,7 @@ async function guardar() {
     const ua = navigator.userAgent.substring(0, 120);
     const ts = new Date().toISOString();
 
-    const row = [id, fecha, legajo, op.nombre, actividad, parseInt(unidades) || 1, Math.round(result.total), ua, ts];
+    const row = [id, fecha, legajo, op.nombre, actividad, parseInt(unidades) || 1, Math.round(result.total), ua, ts, 'CICLO II', 'MT'];
 
     invalidateCache();
     const resp = await postRow('DESTAJO', row);
@@ -1019,7 +1057,7 @@ async function guardar() {
             aCorregir.push({
               id: String(reg[0]),
               actReg, unidadesReg, importeCorrecto,
-              row: [String(reg[0]), fecha, legajo, op.nombre, actReg, unidadesReg, Math.round(importeCorrecto), ua, ts]
+              row: [String(reg[0]), fecha, legajo, op.nombre, actReg, unidadesReg, Math.round(importeCorrecto), ua, ts, 'CICLO II', 'MT']
             });
           }
         }
