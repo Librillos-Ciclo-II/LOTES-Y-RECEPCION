@@ -16,6 +16,11 @@
     - Audit log: cada acción (EDIT/DELETE) se registra en solapa AUDIT_LOG
       con: Timestamp, Accion, Sheet, ID_Registro, Datos_Anteriores, Usuario
     - Filtros: planta, company, rango de fechas, empleado (igual que Reportes)
+
+  v1.1  2026-04-20  Planta/Company en destajo + fix delete
+    - Destajo parsea Planta (col 10) y Company (col 11) con fallback CICLO II/MT
+    - Filtro de planta/company aplica a destajo (antes hardcodeado CICLO II)
+    - Fix deleteRecord: usa parámetro data con JSON como espera Code.gs
 -->
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap');
@@ -322,7 +327,9 @@ async function init() {
       nombre: String(r[3]||'').trim(),
       actividad: String(r[4]||'').trim(),
       unidades: parseInt(r[5]) || 0,
-      importe: parseFloat(r[6]) || 0
+      importe: parseFloat(r[6]) || 0,
+      planta: String(r[9]||'CICLO II').trim() || 'CICLO II',
+      company: String(r[10]||'MT').trim() || 'MT'
     }));
 
     const plantas = [...new Set(datosAsistencia.map(r => r.planta).concat('CICLO II'))].filter(Boolean).sort();
@@ -376,7 +383,8 @@ function aplicarFiltros() {
   });
 
   const destFilt = datosDestajo.filter(r => {
-    if (planta && planta !== 'CICLO II') return false;
+    if (planta && r.planta.toUpperCase() !== planta) return false;
+    if (company && r.company.toUpperCase() !== company) return false;
     if (desde && r.fecha < desde) return false;
     if (hasta && r.fecha > hasta) return false;
     if (empleado && !r.nombre.toUpperCase().includes(empleado)) return false;
