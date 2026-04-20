@@ -34,6 +34,15 @@
     - Fila TOTAL al final de cada tabla (Asistencia, Destajo, Resumen)
       con sumas de todas las columnas numéricas visibles
 
+  v1.2  2026-04-20  Planta/Company en destajo + columna Aprobado
+    - Destajo ahora parsea Planta (col 10) y Company (col 11) de cada registro
+    - Fallback para registros viejos (pre-v1.8): Planta=CICLO II, Company=MT
+    - Filtro de planta y company ahora aplica también a destajo (no hardcodeado)
+    - KPIs "Total MT" y "Total ATG" ahora incluyen jornales + destajo quincenal
+    - Nueva columna "Company" en la tabla de Destajo
+    - Nueva columna "Aprob." en tablas Asistencia y Destajo (cruza con APROBACIONES)
+    - Carga la solapa APROBACIONES al iniciar para construir Set de IDs aprobados
+
   ============================================================
 -->
 <style>
@@ -434,6 +443,7 @@
             <th>Fecha</th>
             <th>Legajo</th>
             <th>Operario</th>
+            <th>Co</th>
             <th>Actividad</th>
             <th class="num">Unidades</th>
             <th class="num">Importe</th>
@@ -558,7 +568,8 @@ async function init() {
     }));
 
     // Parse RRHH (destajo)
-    // [ID, Fecha, Legajo, Operario, Actividad, Unidades, Importe, UA, Timestamp]
+    // [ID, Fecha, Legajo, Operario, Actividad, Unidades, Importe, UA, Timestamp, Planta?, Company?]
+    // Registros viejos (pre-v1.8) no tienen Planta/Company → fallback CICLO II / MT
     datosDestajo = rrhhData.slice(1).filter(r => r[0]).map(r => ({
       id: String(r[0]),
       fecha: String(r[1]||'').slice(0,10),
@@ -566,7 +577,9 @@ async function init() {
       nombre: String(r[3]||'').trim(),
       actividad: String(r[4]||'').trim(),
       unidades: parseInt(r[5]) || 0,
-      importe: parseFloat(r[6]) || 0
+      importe: parseFloat(r[6]) || 0,
+      planta: String(r[9]||'CICLO II').trim() || 'CICLO II',
+      company: String(r[10]||'MT').trim() || 'MT'
     }));
 
     // Poblar dropdown de plantas
@@ -685,9 +698,10 @@ function aplicarFiltros() {
   // Asistencia
   const asisFiltrada = datosAsistencia.filter(r => matchRow(r));
 
-  // Destajo
+  // Destajo — ahora tiene planta y company (con fallback para registros viejos)
   const destFiltrado = datosDestajo.filter(r => {
-    if (planta && planta !== 'CICLO II') return false;
+    if (planta && r.planta.toUpperCase() !== planta) return false;
+    if (company && r.company.toUpperCase() !== company) return false;
     if (desde && r.fecha < desde) return false;
     if (hasta && r.fecha > hasta) return false;
     if (empleado && !r.nombre.toUpperCase().includes(empleado)) return false;
@@ -709,21 +723,24 @@ function renderKPIs(asis, dest) {
   const pres = asis.filter(r => r.presente).length;
   const aus = asis.filter(r => r.ausente).length;
 
-  // Jornales: solo legajos numéricos (quincenal)
+  // Jornales quincenal (excluye cuadrilla)
   const asisQuinc = asis.filter(r => !esCuadrilla(r.legajo));
-  const totalMT = asisQuinc.filter(r => r.company === 'MT').reduce((s, r) => s + r.importeTotal, 0);
-  const totalATG = asisQuinc.filter(r => r.company === 'ATG').reduce((s, r) => s + r.importeTotal, 0);
-  const totalJornales = totalMT + totalATG;
+  const jornalesMT = asisQuinc.filter(r => r.company === 'MT').reduce((s, r) => s + r.importeTotal, 0);
+  const jornalesATG = asisQuinc.filter(r => r.company === 'ATG').reduce((s, r) => s + r.importeTotal, 0);
 
-  // Destajo: separar quincenal vs cuadrilla
+  // Destajo quincenal (excluye cuadrilla)
   const destQuinc = dest.filter(r => !esCuadrilla(r.legajo));
-  const destCuad = dest.filter(r => esCuadrilla(r.legajo));
-  const totalDestajoQuinc = destQuinc.reduce((s, r) => s + r.importe, 0);
-  const totalDestajoCuad = destCuad.reduce((s, r) => s + r.importe, 0);
-  const totalDestajo = totalDestajoQuinc + totalDestajoCuad;
+  const destajoMT = destQuinc.filter(r => r.company === 'MT').reduce((s, r) => s + r.importe, 0);
+  const destajoATG = destQuinc.filter(r => r.company === 'ATG').reduce((s, r) => s + r.importe, 0);
 
-  // General quincenal = jornales + destajo quincenal (lo que va a liquidación)
-  const totalQuincenal = totalJornales + totalDestajoQuinc;
+  // Cuadrilla (pago semanal efectivo)
+  const destCuad = dest.filter(r => esCuadrilla(r.legajo));
+  const totalDestajoCuad = destCuad.reduce((s, r) => s + r.importe, 0);
+
+  // Totales por company = jornales + destajo
+  const totalMT = jornalesMT + destajoMT;
+  const totalATG = jornalesATG + destajoATG;
+  const totalQuincenal = totalMT + totalATG;
 
   const container = document.getElementById('kpisContainer');
   container.innerHTML = `
@@ -740,27 +757,22 @@ function renderKPIs(asis, dest) {
     <div class="kpi mt">
       <div class="label">Total MT</div>
       <div class="value">${fmtMoney(totalMT)}</div>
-      <div class="sub">jornales quincenal</div>
+      <div class="sub">jornales + destajo</div>
     </div>
     <div class="kpi atg">
       <div class="label">Total ATG</div>
       <div class="value">${fmtMoney(totalATG)}</div>
-      <div class="sub">jornales quincenal</div>
-    </div>
-    <div class="kpi">
-      <div class="label">Destajo Quincenal</div>
-      <div class="value">${fmtMoney(totalDestajoQuinc)}</div>
-      <div class="sub">legajos numéricos</div>
+      <div class="sub">jornales + destajo</div>
     </div>
     <div class="kpi" style="border-left-color:var(--accent)">
       <div class="label">Total Quincenal</div>
       <div class="value">${fmtMoney(totalQuincenal)}</div>
-      <div class="sub">jornales + destajo</div>
+      <div class="sub">MT + ATG (sin cuadrilla)</div>
     </div>
     <div class="kpi" style="border-left-color:#e67e22; background:#fef9f0">
       <div class="label">Cuadrilla (efectivo)</div>
       <div class="value">${fmtMoney(totalDestajoCuad)}</div>
-      <div class="sub">${destCuad.length} registros · pago semanal</div>
+      <div class="sub">${destCuad.length} reg · pago semanal</div>
     </div>
   `;
 }
@@ -836,7 +848,7 @@ function renderDestajo(data) {
   document.getElementById('countDest').textContent = data.length;
 
   if (data.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="empty">Sin registros de destajo en el período</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="empty">Sin registros de destajo en el período</td></tr>';
     return;
   }
 
@@ -852,11 +864,15 @@ function renderDestajo(data) {
     const aprobTag = approvedIds.has(r.id)
       ? '<span class="tag tag-pres">✓</span>'
       : '<span style="color:var(--text-muted)">—</span>';
+    const companyTag = r.company
+      ? `<span class="tag tag-${r.company.toLowerCase()}">${r.company}</span>`
+      : '—';
     return `
     <tr>
       <td>${fmt(r.fecha)}</td>
       <td>${r.legajo}</td>
       <td>${r.nombre}</td>
+      <td>${companyTag}</td>
       <td>${r.actividad}</td>
       <td class="num">${r.unidades}</td>
       <td class="num"><strong>${fmtMoney(r.importe)}</strong></td>
@@ -864,7 +880,7 @@ function renderDestajo(data) {
     </tr>`;
   }).join('') + `
     <tr style="background:var(--accent-light);font-weight:700;border-top:2px solid var(--primary)">
-      <td colspan="4" style="text-align:right">TOTAL</td>
+      <td colspan="5" style="text-align:right">TOTAL</td>
       <td class="num">${totUnidades.toLocaleString('es-AR')}</td>
       <td class="num"><strong>${fmtMoney(totImporte)}</strong></td>
       <td></td>
