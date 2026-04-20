@@ -229,7 +229,16 @@ function cargarDia() {
     if (planta && String(r[4]||'').trim().toUpperCase() !== planta.toUpperCase()) return false;
     return true;
   });
-  filteredDest = allDestajo.filter(r => String(r[1]||'').trim().slice(0,10) === fecha);
+  filteredDest = allDestajo.filter(r => {
+    const f = String(r[1]||'').trim().slice(0,10);
+    if (f !== fecha) return false;
+    // Planta en col 10 (index 9) con fallback a CICLO II para registros viejos
+    if (planta) {
+      const rPlanta = String(r[9]||'CICLO II').trim().toUpperCase() || 'CICLO II';
+      if (rPlanta !== planta.toUpperCase()) return false;
+    }
+    return true;
+  });
 
   renderKPIs();
   renderAlerts();
@@ -388,7 +397,7 @@ function renderResumen() {
   });
   filteredDest.forEach(r => {
     const n = String(r[3]||'').trim(); if (!n) return;
-    if (!byEmp[n]) byEmp[n] = { planta: 'CICLO II', jornales: 0, destajo: 0, estado: '—' };
+    if (!byEmp[n]) byEmp[n] = { planta: String(r[9]||'CICLO II').trim() || 'CICLO II', jornales: 0, destajo: 0, estado: '—' };
     byEmp[n].destajo += parseFloat(r[6]) || 0;
   });
   const emps = Object.entries(byEmp).sort((a,b) => a[0].localeCompare(b[0]));
