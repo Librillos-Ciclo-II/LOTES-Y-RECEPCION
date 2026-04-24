@@ -1,0 +1,949 @@
+<!--
+  Santa Faz - Formulario Admin Facturas MP v1
+  ============================================
+  Changelog:
+  v1.0 (2026-04-24): Creacion inicial. Login + Nueva Factura + Buscar Facturas.
+                     Integrado con Apps Script via GET (no CORS preflight).
+                     Misma Google Sheet (solapa FACTURAS_MP).
+                     Autenticacion por usuario via solapa USERS_ADMIN.
+-->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Santa Faz · Admin Facturas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #faf8f3;
+    --card: #ffffff;
+    --ink: #1e293b;
+    --ink-2: #475569;
+    --ink-3: #94a3b8;
+    --border: #e2e8f0;
+    --border-strong: #cbd5e1;
+    --accent: #991b1b;
+    --accent-hover: #7f1d1d;
+    --amber: #d97706;
+    --amber-soft: #fef3c7;
+    --green: #059669;
+    --red: #dc2626;
+    --blue: #0369a1;
+    --shadow: 0 1px 3px rgba(15,23,42,.06), 0 1px 2px rgba(15,23,42,.04);
+    --shadow-lg: 0 10px 15px -3px rgba(15,23,42,.08), 0 4px 6px -2px rgba(15,23,42,.04);
+    --radius: 6px;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+  .mono { font-family: 'IBM Plex Mono', monospace; }
+
+  /* Header */
+  header.top {
+    background: var(--ink);
+    color: #fff;
+    padding: 14px 24px;
+    display: flex; justify-content: space-between; align-items: center;
+    box-shadow: var(--shadow);
+    position: sticky; top: 0; z-index: 20;
+  }
+  header.top h1 {
+    font-size: 15px; font-weight: 600; margin: 0;
+    letter-spacing: .02em;
+  }
+  header.top .brand { display: flex; align-items: center; gap: 12px; }
+  header.top .brand .badge {
+    background: var(--accent); color: #fff;
+    padding: 3px 10px; border-radius: 3px;
+    font-size: 10px; font-weight: 700;
+    letter-spacing: .12em; text-transform: uppercase;
+  }
+  header.top .user-info {
+    display: flex; align-items: center; gap: 14px;
+    font-size: 13px; color: #cbd5e1;
+  }
+  header.top .user-info .user { color: #fff; font-weight: 500; }
+  header.top button.logout {
+    background: transparent; border: 1px solid #475569;
+    color: #cbd5e1; padding: 6px 12px; border-radius: 4px;
+    font-family: inherit; font-size: 12px; cursor: pointer;
+    transition: all .15s;
+  }
+  header.top button.logout:hover { background: #334155; color: #fff; }
+
+  /* Login screen */
+  .login-wrap {
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  .login-card {
+    background: var(--card);
+    max-width: 380px; width: 100%;
+    padding: 40px 36px;
+    border-radius: 8px;
+    box-shadow: var(--shadow-lg);
+    border-top: 3px solid var(--accent);
+  }
+  .login-card h2 {
+    margin: 0 0 6px 0; font-size: 22px; font-weight: 600;
+    letter-spacing: -.01em;
+  }
+  .login-card .sub {
+    margin: 0 0 28px 0; font-size: 13px; color: var(--ink-2);
+  }
+  .login-card label {
+    display: block; font-size: 11px; font-weight: 600;
+    color: var(--ink-2); text-transform: uppercase;
+    letter-spacing: .08em; margin-bottom: 6px;
+  }
+  .login-card input {
+    width: 100%; padding: 10px 12px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    font-family: inherit; font-size: 14px;
+    background: #fff; color: var(--ink);
+    margin-bottom: 18px;
+    transition: border-color .15s;
+  }
+  .login-card input:focus {
+    outline: none; border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(153,27,27,.08);
+  }
+  .login-card button {
+    width: 100%; padding: 11px;
+    background: var(--accent); color: #fff;
+    border: none; border-radius: var(--radius);
+    font-family: inherit; font-size: 14px; font-weight: 600;
+    cursor: pointer; letter-spacing: .01em;
+    transition: background .15s;
+  }
+  .login-card button:hover { background: var(--accent-hover); }
+  .login-card button:disabled { background: var(--ink-3); cursor: not-allowed; }
+  .login-err {
+    color: var(--red); font-size: 13px; margin: -8px 0 14px 0;
+    padding: 8px 12px; background: #fef2f2;
+    border: 1px solid #fecaca; border-radius: 4px;
+  }
+
+  /* Main app */
+  main { padding: 24px; max-width: 1200px; margin: 0 auto; }
+  .tabs {
+    display: flex; gap: 2px; margin-bottom: 24px;
+    background: #e8e4dc; padding: 3px; border-radius: 6px;
+    width: fit-content;
+  }
+  .tab {
+    padding: 8px 18px; font-size: 13px; font-weight: 500;
+    border: none; background: transparent; cursor: pointer;
+    color: var(--ink-2); border-radius: 4px;
+    font-family: inherit; transition: all .15s;
+  }
+  .tab.active { background: var(--card); color: var(--ink); box-shadow: var(--shadow); }
+  .tab:hover:not(.active) { color: var(--ink); }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* Form */
+  .form-card {
+    background: var(--card);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    padding: 28px 32px;
+  }
+  .form-card h3 {
+    margin: 0 0 4px 0; font-size: 17px; font-weight: 600;
+  }
+  .form-card .hint {
+    margin: 0 0 24px 0; font-size: 13px; color: var(--ink-2);
+  }
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px 20px;
+  }
+  .field { display: flex; flex-direction: column; }
+  .field.full { grid-column: 1 / -1; }
+  .field.half { grid-column: span 1; }
+  .field label {
+    font-size: 11px; font-weight: 600;
+    color: var(--ink-2); text-transform: uppercase;
+    letter-spacing: .06em; margin-bottom: 5px;
+  }
+  .field label .req { color: var(--accent); margin-left: 2px; }
+  .field input, .field select, .field textarea {
+    padding: 8px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    font-family: inherit; font-size: 13px;
+    background: #fff; color: var(--ink);
+    transition: border-color .15s;
+  }
+  .field.mono-input input { font-family: 'IBM Plex Mono', monospace; }
+  .field input:focus, .field select:focus, .field textarea:focus {
+    outline: none; border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(153,27,27,.08);
+  }
+  .field.readonly input { background: #f8fafc; color: var(--ink-2); }
+  .field textarea { resize: vertical; min-height: 60px; }
+  .field .helper {
+    font-size: 11px; color: var(--ink-3); margin-top: 3px;
+    font-style: italic;
+  }
+  .field.error input, .field.error select {
+    border-color: var(--red);
+    background: #fef2f2;
+  }
+  .field .err-msg {
+    font-size: 11px; color: var(--red); margin-top: 3px;
+  }
+
+  /* Section dividers in form */
+  .form-section {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--border);
+    padding-top: 14px; margin-top: 8px;
+    font-size: 11px; font-weight: 700;
+    color: var(--ink-3); letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+  .form-section:first-child { border-top: none; padding-top: 0; margin-top: 0; }
+
+  /* Actions */
+  .actions {
+    margin-top: 28px; padding-top: 20px;
+    border-top: 1px solid var(--border);
+    display: flex; gap: 10px; justify-content: flex-end;
+  }
+  .btn {
+    padding: 9px 18px;
+    font-family: inherit; font-size: 13px; font-weight: 600;
+    border-radius: 4px; cursor: pointer;
+    border: 1px solid transparent;
+    transition: all .15s;
+  }
+  .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-secondary {
+    background: transparent; color: var(--ink);
+    border-color: var(--border-strong);
+  }
+  .btn-secondary:hover { background: #f1f5f9; }
+
+  /* Info bar */
+  .info-bar {
+    background: var(--amber-soft);
+    border: 1px solid #fde68a;
+    padding: 10px 14px;
+    border-radius: 4px;
+    font-size: 12px;
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+    margin-bottom: 20px;
+  }
+  .info-bar .kv { display: flex; flex-direction: column; gap: 2px; }
+  .info-bar .kv .k {
+    font-size: 10px; font-weight: 700; color: #92400e;
+    letter-spacing: .08em; text-transform: uppercase;
+  }
+  .info-bar .kv .v { font-weight: 500; color: var(--ink); }
+
+  /* Table */
+  .table-wrap {
+    background: var(--card); border-radius: 8px;
+    box-shadow: var(--shadow); overflow: hidden;
+  }
+  .table-head {
+    padding: 16px 24px; border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .table-head h3 { margin: 0; font-size: 15px; font-weight: 600; }
+  .search-input {
+    padding: 7px 10px; border: 1px solid var(--border-strong);
+    border-radius: 4px; font-family: inherit; font-size: 13px;
+    width: 240px;
+  }
+  table.facturas {
+    width: 100%; border-collapse: collapse; font-size: 12px;
+  }
+  table.facturas thead {
+    background: #f1f5f9;
+  }
+  table.facturas th {
+    padding: 9px 12px; text-align: left;
+    font-size: 10px; font-weight: 700;
+    color: var(--ink-2); text-transform: uppercase;
+    letter-spacing: .06em;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  table.facturas td {
+    padding: 8px 12px; border-bottom: 1px solid var(--border);
+    font-family: 'IBM Plex Mono', monospace;
+    white-space: nowrap;
+  }
+  table.facturas td.frigo {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-weight: 500;
+  }
+  table.facturas tr:hover td { background: #fafafa; }
+  table.facturas td.num { text-align: right; }
+  table.facturas .pago-ok { color: var(--green); font-weight: 600; }
+  table.facturas .pago-no { color: var(--ink-3); }
+  .empty-state {
+    padding: 48px 24px; text-align: center;
+    color: var(--ink-2); font-size: 13px;
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 20px; right: 20px;
+    background: var(--ink); color: #fff;
+    padding: 10px 16px; border-radius: 4px;
+    font-size: 13px; box-shadow: var(--shadow-lg);
+    z-index: 100;
+    animation: slideIn .2s ease-out;
+  }
+  .toast.success { background: var(--green); }
+  .toast.error { background: var(--red); }
+  @keyframes slideIn {
+    from { transform: translateX(20px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+
+  /* Spinner */
+  .spinner {
+    display: inline-block; width: 12px; height: 12px;
+    border: 2px solid rgba(255,255,255,.3); border-top-color: #fff;
+    border-radius: 50%; animation: spin .6s linear infinite;
+    margin-right: 6px; vertical-align: -2px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 760px) {
+    .form-grid { grid-template-columns: 1fr; }
+    .info-bar { grid-template-columns: repeat(2, 1fr); }
+    table.facturas { font-size: 11px; }
+    table.facturas th, table.facturas td { padding: 6px 8px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginView" class="login-wrap">
+  <div class="login-card">
+    <h2>Santa Faz · Admin</h2>
+    <p class="sub">Facturacion de Materia Prima · acceso autorizado</p>
+    <div id="loginErr" class="login-err" style="display:none"></div>
+    <label for="loginUser">Usuario</label>
+    <input type="text" id="loginUser" autocomplete="username" autofocus>
+    <label for="loginPass">Contrasena</label>
+    <input type="password" id="loginPass" autocomplete="current-password">
+    <button id="loginBtn" onclick="doLogin()">Ingresar</button>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="appView" style="display:none">
+  <header class="top">
+    <div class="brand">
+      <h1>Santa Faz · Admin Facturas MP</h1>
+      <span class="badge">Admin</span>
+    </div>
+    <div class="user-info">
+      <span>Usuario: <span class="user" id="currentUser"></span></span>
+      <button class="logout" onclick="doLogout()">Salir</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="tabs">
+      <button class="tab active" data-tab="nueva" onclick="switchTab('nueva')">Nueva Factura</button>
+      <button class="tab" data-tab="buscar" onclick="switchTab('buscar')">Buscar Facturas</button>
+    </div>
+
+    <!-- NUEVA FACTURA -->
+    <div class="tab-panel active" id="tab-nueva">
+      <div class="form-card">
+        <h3>Alta de Factura - Materia Prima</h3>
+        <p class="hint">Ingresar la factura o remito del frigorifico. Los campos marcados con <span style="color:var(--accent)">*</span> son obligatorios.</p>
+
+        <div id="infoBar" class="info-bar" style="display:none">
+          <div class="kv"><span class="k">Facturacion</span><span class="v" id="ibBilling">—</span></div>
+          <div class="kv"><span class="k">Base de precio</span><span class="v" id="ibBase">—</span></div>
+          <div class="kv"><span class="k">Moneda ref.</span><span class="v" id="ibMoneda">—</span></div>
+          <div class="kv"><span class="k">Semana ISO</span><span class="v" id="ibSemana">—</span></div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-section">Identificacion</div>
+
+          <div class="field">
+            <label for="fFrigo">Frigorifico<span class="req">*</span></label>
+            <select id="fFrigo" onchange="onFrigoChange()">
+              <option value="">-- Seleccionar --</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="fFechaEntrega">Fecha Entrega<span class="req">*</span></label>
+            <input type="date" id="fFechaEntrega" onchange="onFechaChange()">
+          </div>
+          <div class="field">
+            <label for="fFechaFactura">Fecha Factura</label>
+            <input type="date" id="fFechaFactura">
+          </div>
+
+          <div class="field">
+            <label for="fFC">N° FC / Remito<span class="req">*</span></label>
+            <input type="text" id="fFC" placeholder="Ej: A-0001-12345">
+          </div>
+          <div class="field readonly">
+            <label>Semana ISO</label>
+            <input type="text" id="fSemana" readonly>
+          </div>
+          <div class="field readonly">
+            <label>ID Unico</label>
+            <input type="text" id="fID" readonly>
+          </div>
+
+          <div class="form-section">Volumen</div>
+
+          <div class="field mono-input">
+            <label for="fUnidades">Unidades<span class="req" id="reqUnid" style="display:none">*</span></label>
+            <input type="number" id="fUnidades" min="0" step="1" placeholder="0">
+            <span class="helper" id="helpUnid">Solo enteros</span>
+          </div>
+          <div class="field mono-input">
+            <label for="fKgs">Kgs<span class="req" id="reqKgs" style="display:none">*</span></label>
+            <input type="number" id="fKgs" min="0" step="0.01" placeholder="0.00">
+            <span class="helper" id="helpKgs">Kgs frescos entregados</span>
+          </div>
+          <div class="field mono-input">
+            <label for="fPrecioUnit">Precio Unit. (sin IVA)<span class="req">*</span></label>
+            <input type="number" id="fPrecioUnit" min="0" step="0.0001" placeholder="0.00" onchange="recalcTotales()">
+            <span class="helper" id="helpPrecio">Por kg o unidad segun frigo</span>
+          </div>
+
+          <div class="form-section">Valores</div>
+
+          <div class="field mono-input">
+            <label for="fNeto">Neto ARS<span class="req">*</span></label>
+            <input type="number" id="fNeto" min="0" step="0.01" placeholder="0.00" onchange="recalcTotales()">
+          </div>
+          <div class="field mono-input">
+            <label for="fIVA">IVA ARS</label>
+            <input type="number" id="fIVA" min="0" step="0.01" placeholder="0.00" onchange="recalcTotales()">
+          </div>
+          <div class="field mono-input">
+            <label for="fIIBB">IIBB ARS</label>
+            <input type="number" id="fIIBB" min="0" step="0.01" placeholder="0.00" onchange="recalcTotales()">
+          </div>
+
+          <div class="field mono-input readonly">
+            <label>Total ARS (calculado)</label>
+            <input type="text" id="fTotalCalc" readonly>
+          </div>
+          <div class="field mono-input">
+            <label for="fTotalPagado">Total Pagado ARS<span class="req">*</span></label>
+            <input type="number" id="fTotalPagado" min="0" step="0.01" placeholder="0.00">
+            <span class="helper">Lo realmente pagado (puede diferir del calculado)</span>
+          </div>
+          <div class="field mono-input">
+            <label for="fTC">TC FC</label>
+            <input type="number" id="fTC" min="0" step="1" placeholder="1400">
+            <span class="helper">Tipo de cambio aplicado</span>
+          </div>
+
+          <div class="form-section">Pagos</div>
+
+          <div class="field">
+            <label><input type="checkbox" id="fPagoA" onchange="togglePago('A')"> Pago A realizado</label>
+          </div>
+          <div class="field">
+            <label for="fFechaPagoA">Fecha Pago A</label>
+            <input type="date" id="fFechaPagoA" disabled>
+          </div>
+          <div class="field"></div>
+
+          <div class="field">
+            <label><input type="checkbox" id="fPagoB" onchange="togglePago('B')"> Pago B realizado</label>
+          </div>
+          <div class="field">
+            <label for="fFechaPagoB">Fecha Pago B</label>
+            <input type="date" id="fFechaPagoB" disabled>
+          </div>
+          <div class="field"></div>
+
+          <div class="field full">
+            <label for="fComentarios">Comentarios</label>
+            <textarea id="fComentarios" rows="2"></textarea>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="btn btn-secondary" onclick="limpiarForm()">Limpiar</button>
+          <button class="btn btn-primary" id="submitBtn" onclick="submitFactura()">Guardar Factura</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- BUSCAR FACTURAS -->
+    <div class="tab-panel" id="tab-buscar">
+      <div class="table-wrap">
+        <div class="table-head">
+          <h3>Facturas cargadas</h3>
+          <div style="display:flex; gap:10px; align-items:center;">
+            <input type="text" class="search-input" id="searchInput" placeholder="Buscar por frigo, FC o fecha..." oninput="filterTable()">
+            <button class="btn btn-secondary" onclick="loadFacturas()">Actualizar</button>
+          </div>
+        </div>
+        <div id="tableBody">
+          <div class="empty-state">Cargando...</div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div id="toast" style="display:none"></div>
+
+<script>
+// ==================================================================
+// CONFIG
+// ==================================================================
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/REEMPLAZAR_AQUI/exec';
+const STORAGE_KEY = 'santafaz_admin_user';
+
+// Estado global
+const state = {
+  user: null,
+  frigos: [],
+  billingTypes: {},   // frigo -> 'KG' | 'UNIT'
+  salKgPorUnid: {},   // frigo -> kg/u (para referencia)
+  facturas: [],
+  filteredFacturas: [],
+};
+
+// ==================================================================
+// APP INIT
+// ==================================================================
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved) {
+    try {
+      const u = JSON.parse(saved);
+      if (u && u.user) {
+        state.user = u;
+        showApp();
+        return;
+      }
+    } catch(e) {}
+  }
+  document.getElementById('loginUser').focus();
+  document.getElementById('loginPass').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doLogin();
+  });
+});
+
+// ==================================================================
+// AUTH
+// ==================================================================
+async function doLogin() {
+  const user = document.getElementById('loginUser').value.trim();
+  const pass = document.getElementById('loginPass').value;
+  const errEl = document.getElementById('loginErr');
+  const btn = document.getElementById('loginBtn');
+
+  if (!user || !pass) {
+    errEl.textContent = 'Ingresar usuario y contrasena.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Validando...';
+
+  try {
+    const r = await fetchAPI('auth_admin', { user, pass });
+    if (r.ok) {
+      state.user = { user: r.user, display_name: r.display_name || r.user };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state.user));
+      showApp();
+    } else {
+      errEl.textContent = r.error || 'Credenciales invalidas.';
+      errEl.style.display = 'block';
+      btn.disabled = false;
+      btn.innerHTML = 'Ingresar';
+    }
+  } catch (e) {
+    errEl.textContent = 'Error de conexion: ' + e.message;
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.innerHTML = 'Ingresar';
+  }
+}
+
+function doLogout() {
+  localStorage.removeItem(STORAGE_KEY);
+  state.user = null;
+  location.reload();
+}
+
+// ==================================================================
+// APP SHOW
+// ==================================================================
+async function showApp() {
+  document.getElementById('loginView').style.display = 'none';
+  document.getElementById('appView').style.display = 'block';
+  document.getElementById('currentUser').textContent = state.user.display_name || state.user.user;
+
+  await loadFrigosConfig();
+  await loadFacturas();
+}
+
+async function loadFrigosConfig() {
+  try {
+    const r = await fetchAPI('get_frigos_config');
+    if (r.ok) {
+      state.frigos = r.frigos;
+      state.billingTypes = r.billing;
+      state.salKgPorUnid = r.sal || {};
+      const sel = document.getElementById('fFrigo');
+      sel.innerHTML = '<option value="">-- Seleccionar --</option>' +
+        r.frigos.map(f => `<option value="${f}">${f}</option>`).join('');
+    }
+  } catch (e) {
+    toast('No se pudieron cargar los frigorificos: ' + e.message, 'error');
+  }
+}
+
+// ==================================================================
+// TABS
+// ==================================================================
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+  if (name === 'buscar') loadFacturas();
+}
+
+// ==================================================================
+// FORM LOGIC
+// ==================================================================
+function onFrigoChange() {
+  const frigo = document.getElementById('fFrigo').value;
+  if (!frigo) {
+    document.getElementById('infoBar').style.display = 'none';
+    return;
+  }
+  const billing = state.billingTypes[frigo] || 'UNIT';
+  const base = billing === 'KG' ? 'Kg fresco' : 'Unidad';
+  const moneda = frigo === 'RECREO' ? 'USD' : 'ARS';
+
+  document.getElementById('ibBilling').textContent = billing;
+  document.getElementById('ibBase').textContent = base;
+  document.getElementById('ibMoneda').textContent = moneda;
+  document.getElementById('infoBar').style.display = 'grid';
+
+  document.getElementById('reqUnid').style.display = billing === 'UNIT' ? 'inline' : 'none';
+  document.getElementById('reqKgs').style.display = billing === 'KG' ? 'inline' : 'none';
+  document.getElementById('helpPrecio').textContent = billing === 'KG' ? `${moneda} / Kg fresco` : `${moneda} / Unidad`;
+
+  updateID();
+  updateSemana();
+}
+
+function onFechaChange() {
+  updateID();
+  updateSemana();
+}
+
+function updateID() {
+  const frigo = document.getElementById('fFrigo').value;
+  const fecha = document.getElementById('fFechaEntrega').value;
+  const fc = document.getElementById('fFC').value.trim();
+  if (frigo && fecha) {
+    const id = fc ? `${frigo}||${fecha}||${fc}` : `${frigo}||${fecha}`;
+    document.getElementById('fID').value = id;
+  } else {
+    document.getElementById('fID').value = '';
+  }
+}
+
+function updateSemana() {
+  const fecha = document.getElementById('fFechaEntrega').value;
+  if (!fecha) {
+    document.getElementById('fSemana').value = '';
+    document.getElementById('ibSemana').textContent = '—';
+    return;
+  }
+  const w = isoWeek(new Date(fecha + 'T00:00:00'));
+  const lbl = `${w.year}-W${String(w.week).padStart(2,'0')}`;
+  document.getElementById('fSemana').value = lbl;
+  document.getElementById('ibSemana').textContent = lbl;
+}
+
+function isoWeek(d) {
+  const target = new Date(d.valueOf());
+  const dayNr = (d.getDay() + 6) % 7;
+  target.setDate(target.getDate() - dayNr + 3);
+  const firstThursday = target.valueOf();
+  target.setMonth(0, 1);
+  if (target.getDay() !== 4) {
+    target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
+  }
+  const week = 1 + Math.ceil((firstThursday - target) / 604800000);
+  return { year: d.getFullYear(), week };
+}
+
+function recalcTotales() {
+  const n = parseFloat(document.getElementById('fNeto').value) || 0;
+  const iva = parseFloat(document.getElementById('fIVA').value) || 0;
+  const iibb = parseFloat(document.getElementById('fIIBB').value) || 0;
+  const tot = n + iva + iibb;
+  document.getElementById('fTotalCalc').value = tot ? tot.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '';
+}
+
+function togglePago(letra) {
+  const chk = document.getElementById('fPago' + letra).checked;
+  const input = document.getElementById('fFechaPago' + letra);
+  input.disabled = !chk;
+  if (!chk) input.value = '';
+}
+
+document.addEventListener('input', e => {
+  if (e.target.id === 'fFC') updateID();
+});
+
+function limpiarForm() {
+  ['fFrigo','fFechaEntrega','fFechaFactura','fFC','fSemana','fID',
+   'fUnidades','fKgs','fPrecioUnit','fNeto','fIVA','fIIBB','fTotalCalc',
+   'fTotalPagado','fTC','fFechaPagoA','fFechaPagoB','fComentarios'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('fPagoA').checked = false;
+  document.getElementById('fPagoB').checked = false;
+  document.getElementById('fFechaPagoA').disabled = true;
+  document.getElementById('fFechaPagoB').disabled = true;
+  document.getElementById('infoBar').style.display = 'none';
+  document.querySelectorAll('.field.error').forEach(f => f.classList.remove('error'));
+}
+
+// ==================================================================
+// SUBMIT
+// ==================================================================
+async function submitFactura() {
+  const frigo = document.getElementById('fFrigo').value;
+  const fecha = document.getElementById('fFechaEntrega').value;
+  const fc = document.getElementById('fFC').value.trim();
+  const unid = parseFloat(document.getElementById('fUnidades').value) || 0;
+  const kgs = parseFloat(document.getElementById('fKgs').value) || 0;
+  const precio = parseFloat(document.getElementById('fPrecioUnit').value) || 0;
+  const neto = parseFloat(document.getElementById('fNeto').value) || 0;
+  const totalPag = parseFloat(document.getElementById('fTotalPagado').value) || 0;
+
+  // Limpiar errores previos
+  document.querySelectorAll('.field.error').forEach(f => f.classList.remove('error'));
+
+  const errs = [];
+  if (!frigo) { markErr('fFrigo'); errs.push('Seleccionar frigorifico'); }
+  if (!fecha) { markErr('fFechaEntrega'); errs.push('Fecha de entrega'); }
+  if (!fc)    { markErr('fFC'); errs.push('N° FC/Remito'); }
+  if (precio <= 0) { markErr('fPrecioUnit'); errs.push('Precio unitario'); }
+  if (neto <= 0) { markErr('fNeto'); errs.push('Neto ARS'); }
+  if (totalPag <= 0) { markErr('fTotalPagado'); errs.push('Total Pagado'); }
+
+  const billing = state.billingTypes[frigo];
+  if (billing === 'UNIT' && unid <= 0) { markErr('fUnidades'); errs.push('Unidades (obligatorio para frigos UNIT)'); }
+  if (billing === 'KG' && kgs <= 0) { markErr('fKgs'); errs.push('Kgs (obligatorio para frigos KG)'); }
+
+  if (errs.length) {
+    toast('Revisar campos: ' + errs.join(', '), 'error');
+    return;
+  }
+
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Guardando...';
+
+  const data = {
+    sheet: 'FACTURAS_MP',
+    row: buildRow(),
+  };
+
+  try {
+    const r = await fetchAPI('post', { data: JSON.stringify(data) });
+    if (r.ok) {
+      toast('Factura guardada correctamente', 'success');
+      limpiarForm();
+    } else {
+      toast(r.error || 'Error al guardar', 'error');
+    }
+  } catch (e) {
+    toast('Error: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Guardar Factura';
+  }
+}
+
+function markErr(id) {
+  document.getElementById(id).closest('.field').classList.add('error');
+}
+
+function buildRow() {
+  // Orden de columnas (definido en apps_script_admin_v1.js FACTURAS_MP_HEADERS)
+  return [
+    document.getElementById('fID').value,
+    document.getElementById('fSemana').value,
+    document.getElementById('fFechaEntrega').value,
+    document.getElementById('fFechaFactura').value,
+    document.getElementById('fFrigo').value,
+    document.getElementById('fFC').value.trim(),
+    parseFloat(document.getElementById('fUnidades').value) || 0,
+    parseFloat(document.getElementById('fKgs').value) || 0,
+    parseFloat(document.getElementById('fPrecioUnit').value) || 0,
+    state.billingTypes[document.getElementById('fFrigo').value] || '',
+    parseFloat(document.getElementById('fNeto').value) || 0,
+    parseFloat(document.getElementById('fIVA').value) || 0,
+    parseFloat(document.getElementById('fIIBB').value) || 0,
+    parseFloat(document.getElementById('fTotalPagado').value) || 0,
+    parseFloat(document.getElementById('fTC').value) || 0,
+    document.getElementById('fPagoA').checked ? 'SI' : 'NO',
+    document.getElementById('fFechaPagoA').value,
+    document.getElementById('fPagoB').checked ? 'SI' : 'NO',
+    document.getElementById('fFechaPagoB').value,
+    document.getElementById('fComentarios').value.trim(),
+    state.user.user,
+    new Date().toISOString(),
+    new Date().toISOString(),
+  ];
+}
+
+// ==================================================================
+// LISTADO
+// ==================================================================
+async function loadFacturas() {
+  const tbody = document.getElementById('tableBody');
+  tbody.innerHTML = '<div class="empty-state">Cargando...</div>';
+  try {
+    const r = await fetchAPI('get', { sheet: 'FACTURAS_MP' });
+    if (r.ok) {
+      state.facturas = r.data || [];
+      state.filteredFacturas = state.facturas;
+      renderTable();
+    } else {
+      tbody.innerHTML = '<div class="empty-state">Error cargando facturas</div>';
+    }
+  } catch (e) {
+    tbody.innerHTML = '<div class="empty-state">Error: ' + e.message + '</div>';
+  }
+}
+
+function filterTable() {
+  const q = document.getElementById('searchInput').value.toLowerCase().trim();
+  if (!q) {
+    state.filteredFacturas = state.facturas;
+  } else {
+    state.filteredFacturas = state.facturas.filter(f =>
+      JSON.stringify(f).toLowerCase().includes(q)
+    );
+  }
+  renderTable();
+}
+
+function renderTable() {
+  const tbody = document.getElementById('tableBody');
+  if (!state.filteredFacturas.length) {
+    tbody.innerHTML = '<div class="empty-state">No hay facturas para mostrar</div>';
+    return;
+  }
+  // Orden por fecha descendente
+  const sorted = [...state.filteredFacturas].sort((a, b) => {
+    const fa = a.Fecha_Entrega || '';
+    const fb = b.Fecha_Entrega || '';
+    return fb.localeCompare(fa);
+  });
+  const rows = sorted.map(f => {
+    const fE = f.Fecha_Entrega ? fmtDate(f.Fecha_Entrega) : '';
+    return `
+      <tr>
+        <td>${fE}</td>
+        <td class="frigo">${f.Frigorifico || ''}</td>
+        <td>${f.N_FC_Remito || ''}</td>
+        <td class="num">${fmt(f.Unidades)}</td>
+        <td class="num">${fmt(f.Kgs)}</td>
+        <td class="num">${fmt(f.Total_Pagado_ARS, 0)}</td>
+        <td class="num">${fmt(f.TC_FC, 0)}</td>
+        <td class="${f.Pago_A === 'SI' ? 'pago-ok' : 'pago-no'}">${f.Pago_A === 'SI' ? 'A✓' : 'A·'}</td>
+        <td class="${f.Pago_B === 'SI' ? 'pago-ok' : 'pago-no'}">${f.Pago_B === 'SI' ? 'B✓' : 'B·'}</td>
+        <td>${f.Usuario || ''}</td>
+      </tr>
+    `;
+  }).join('');
+  tbody.innerHTML = `
+    <table class="facturas">
+      <thead>
+        <tr>
+          <th>Fecha</th><th>Frigorifico</th><th>N° FC</th>
+          <th style="text-align:right">Unid</th><th style="text-align:right">Kgs</th>
+          <th style="text-align:right">Total ARS</th><th style="text-align:right">TC</th>
+          <th>Pago A</th><th>Pago B</th><th>Cargo</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+function fmt(v, decimals = 2) {
+  if (v === null || v === undefined || v === '') return '—';
+  const n = parseFloat(v);
+  if (isNaN(n)) return v;
+  return n.toLocaleString('es-AR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+function fmtDate(iso) {
+  if (!iso) return '';
+  if (iso.includes('T')) iso = iso.split('T')[0];
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+// ==================================================================
+// TOAST
+// ==================================================================
+function toast(msg, type = 'info') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast ' + type;
+  el.style.display = 'block';
+  clearTimeout(el._to);
+  el._to = setTimeout(() => { el.style.display = 'none'; }, 3500);
+}
+
+// ==================================================================
+// API
+// ==================================================================
+async function fetchAPI(action, params = {}) {
+  const qp = new URLSearchParams({ action, ...params });
+  const url = `${APPS_SCRIPT_URL}?${qp.toString()}`;
+  const resp = await fetch(url, { method: 'GET', redirect: 'follow' });
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  return await resp.json();
+}
+</script>
+
+</body>
+</html>
