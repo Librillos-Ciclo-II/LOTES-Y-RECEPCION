@@ -389,7 +389,7 @@ function buildData(){
   return recepciones.map(r=>{
     const id=r[0],fgo=r[1],fecha=String(r[2]).slice(0,10),unid=num(r[3]);
     const kgs=r[4]||'',kg_unid=r[5]||'',tambores=r[6]||'',comentarios=r[7]||'';
-    const misLotes=lotes.filter(l=>l[0]===id);
+    const misLotes=lotes.filter(l=>l[0]===id && String(l[2]).slice(0,10)===fecha);
     const cerrado=misLotes.some(l=>String(l[5])==='1'||l[5]===true||l[5]==='TRUE');
     const tieneCargas=misLotes.length>0;
     const acum=misLotes.reduce((s,l)=>s+num(l[6]),0);
@@ -456,7 +456,7 @@ function renderRecItem(r){
   const fc=r.estado==='cerrado'?'var(--green)':r.estado==='parcial'?'var(--amber)':'var(--gray)';
   const sc=r.estado==='cerrado'?'st-cerrado':r.estado==='parcial'?'st-parcial':'st-sin';
   const sl=r.estado==='cerrado'?'Cerrado':r.estado==='parcial'?'Parcial':'Sin clasificar';
-  const uid=r.id.replace(/[^a-zA-Z0-9]/g,'_');
+  const uid=(r.id+'_'+r.fecha).replace(/[^a-zA-Z0-9]/g,'_');
   let prog='';
   if(r.estado!=='sin')prog=`<div class="rec-progress"><div class="rec-progress-fill" style="width:${pct}%;background:${fc}"></div></div><div class="rec-progress-txt"><span>${r.acum}/${r.unid} un</span><span>${pct}%</span></div>`;
   let meta=`<span>${r.unid} un</span>`;
@@ -818,7 +818,7 @@ function renderTab3(){
     </div>
     <div style="text-align:center;font-size:11px;color:var(--muted);margin:-8px 0 14px">
       Promedios sobre días efectivos — Recepción: ${diasRec} días · Clasificación: ${diasClas} días
-      ${perRec.feriados?'<br>Feriados en el período: '+perRec.feriados:''}
+      ${perRec.feriados?'<br>Feriados nacionales en el período: '+perRec.feriados+' (ya excluidos del promedio diario)':''}
     </div>`;
 
   // ── Tabla RECEPCIÓN ───────────────────────────────────────────────────────
@@ -830,11 +830,8 @@ function renderTab3(){
     const de = diasEfectivos(d.fechas);
     const dia = de > 0 ? Math.round(d.unid / de) : 0;
     const dfSem = DIAS_FAENA_SEMANA[f] || 5;
-    // Feriados proporcionales por semana en este período
-    const per = calcPeriodo(d.fechas);
-    const ferPorSem = per.semanas > 0 ? per.feriados / per.semanas : 0;
-    const diasSemNeto = Math.max(1, dfSem - ferPorSem);
-    const unSem = Math.round(dia * diasSemNeto);
+    // un/día ya es efectivo (solo días con actividad), la proyección usa días nominales
+    const unSem = Math.round(dia * dfSem);
     const unMes = Math.round(unSem * 4.33);
     return `<tr>
       <td>${f}</td>
@@ -862,7 +859,7 @@ function renderTab3(){
 
   document.getElementById('pr-recepcion').innerHTML = `<div class="prod-section">
     <div class="prod-section-title">Recepción de materia prima</div>
-    <div class="prod-section-sub">Proyección semanal = un/día × días faena/sem (neto feriados) · Mensual = semanal × 4,33</div>
+    <div class="prod-section-sub">Proyección semanal = un/día efectivo × días faena/sem · Mensual = semanal × 4,33</div>
     <div style="overflow-x:auto">
     <table class="prod-table">
       <thead><tr><th style="text-align:left">Frigorífico</th><th>Recep.</th><th>Días ef.</th><th>Faena/sem</th><th>Total un.</th><th>Un/día</th><th>Un/sem</th><th>Un/mes</th></tr></thead>
@@ -877,15 +874,13 @@ function renderTab3(){
   // Por frigorífico mostramos totales y % de participación.
   const activeFgosClas = FGOS.filter(f => clasByFgo[f].unid > 0);
   const perClasGlobal = calcPeriodo(allClasFechas);
-  const ferPorSemClas = perClasGlobal.semanas > 0 ? perClasGlobal.feriados / perClasGlobal.semanas : 0;
-  const diasClasNeto = Math.max(1, DIAS_CLASIF_SEMANA - ferPorSemClas);
 
-  // Ritmo global de la planta
+  // Ritmo global de la planta — un/día ya es efectivo, proyectar con días nominales
   const plantaUDia = diasClas > 0 ? Math.round(totalClasUnid / diasClas) : 0;
   const plantaKDia = diasClas > 0 ? Math.round(totalClasKgs / diasClas) : 0;
-  const plantaUSem = Math.round(plantaUDia * diasClasNeto);
+  const plantaUSem = Math.round(plantaUDia * DIAS_CLASIF_SEMANA);
   const plantaUMes = Math.round(plantaUSem * 4.33);
-  const plantaKSem = Math.round(plantaKDia * diasClasNeto);
+  const plantaKSem = Math.round(plantaKDia * DIAS_CLASIF_SEMANA);
   const plantaKMes = Math.round(plantaKSem * 4.33);
 
   let clasRows = activeFgosClas.map(f => {
@@ -913,7 +908,7 @@ function renderTab3(){
 
   document.getElementById('pr-clasificacion').innerHTML = `<div class="prod-section">
     <div class="prod-section-title">Clasificación y empaque (Santa Faz)</div>
-    <div class="prod-section-sub">Planta ${DIAS_CLASIF_SEMANA} días/sem · ${diasClas} días efectivos en el período · Neto feriados</div>
+    <div class="prod-section-sub">Planta ${DIAS_CLASIF_SEMANA} días/sem · ${diasClas} días efectivos · Proyección = día × ${DIAS_CLASIF_SEMANA} × 4,33</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
       <div style="background:var(--green-bg);border:1px solid var(--green-bd);border-radius:8px;padding:10px;text-align:center">
         <div style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:var(--green)">${plantaUDia.toLocaleString('es-AR')}</div>
