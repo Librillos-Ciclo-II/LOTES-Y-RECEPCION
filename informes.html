@@ -805,64 +805,72 @@ function renderTab3(){
   const clasDia = diasClas > 0 ? Math.round(totalClasUnid / diasClas) : 0;
   const kgsDia = diasClas > 0 ? Math.round(totalClasKgs / diasClas) : 0;
 
-  // Período global para contar feriados
-  const perRec = calcPeriodo(allRecFechas);
-  const perClas = calcPeriodo(allClasFechas);
+  // Período global para info
+  // (variables de semana se calculan inline en cada tabla)
 
   // ── KPIs ──────────────────────────────────────────────────────────────────
   document.getElementById('pr-kpis').innerHTML = `
     <div class="prod-kpis">
-      <div class="prod-kpi rec"><div class="kpi-val">${recDia.toLocaleString('es-AR')}</div><div class="kpi-lbl">Un recep./día</div></div>
-      <div class="prod-kpi clas"><div class="kpi-val">${clasDia.toLocaleString('es-AR')}</div><div class="kpi-lbl">Un clasif./día</div></div>
-      <div class="prod-kpi kgs"><div class="kpi-val">${kgsDia.toLocaleString('es-AR')}</div><div class="kpi-lbl">Kgs salados/día</div></div>
+      <div class="prod-kpi rec"><div class="kpi-val">${recDia.toLocaleString('es-AR')}</div><div class="kpi-lbl">Un recep./día ef.</div></div>
+      <div class="prod-kpi clas"><div class="kpi-val">${clasDia.toLocaleString('es-AR')}</div><div class="kpi-lbl">Un clasif./día ef.</div></div>
+      <div class="prod-kpi kgs"><div class="kpi-val">${kgsDia.toLocaleString('es-AR')}</div><div class="kpi-lbl">Kgs salados/día ef.</div></div>
     </div>
     <div style="text-align:center;font-size:11px;color:var(--muted);margin:-8px 0 14px">
-      Promedios sobre días efectivos — Recepción: ${diasRec} días · Clasificación: ${diasClas} días
-      ${perRec.feriados?'<br>Feriados nacionales en el período: '+perRec.feriados+' (ya excluidos del promedio diario)':''}
+      Días efectivos — Recepción: ${diasRec} · Clasificación: ${diasClas}
     </div>`;
 
   // ── Tabla RECEPCIÓN ───────────────────────────────────────────────────────
-  // Un/semana = un/día_efectivo × días_faena_semana (descontando feriados proporcionales)
-  // Un/mes = un/semana × 4.33
+  // Un/sem = total_un / semanas_en_período_del_fgo (fecha primera a última)
+  // Un/mes = un/sem × 4.33 · Un/día = un/sem / días_faena
   const activeFgosRec = FGOS.filter(f => recByFgo[f].count > 0);
   let recRows = activeFgosRec.map(f => {
     const d = recByFgo[f];
     const de = diasEfectivos(d.fechas);
-    const dia = de > 0 ? Math.round(d.unid / de) : 0;
     const dfSem = DIAS_FAENA_SEMANA[f] || 5;
-    // un/día ya es efectivo (solo días con actividad), la proyección usa días nominales
-    const unSem = Math.round(dia * dfSem);
+    // Calcular semanas entre primera y última fecha del frigorífico
+    const sorted = [...d.fechas].sort();
+    const f1 = new Date(sorted[0]+'T12:00:00');
+    const f2 = new Date(sorted[sorted.length-1]+'T12:00:00');
+    const diasCal = Math.max(1, Math.round((f2-f1)/(1000*86400)) + 1);
+    const semanas = Math.max(1, diasCal / 7);
+    const unSem = Math.round(d.unid / semanas);
     const unMes = Math.round(unSem * 4.33);
+    const unDia = dfSem > 0 ? Math.round(unSem / dfSem) : 0;
     return `<tr>
       <td>${f}</td>
       <td>${d.count}</td>
-      <td>${de}</td>
+      <td>${Math.round(semanas*10)/10}</td>
       <td>${dfSem}</td>
       <td>${d.unid.toLocaleString('es-AR')}</td>
-      <td style="font-weight:700">${dia.toLocaleString('es-AR')}</td>
+      <td>${unDia.toLocaleString('es-AR')}</td>
       <td style="font-weight:700">${unSem.toLocaleString('es-AR')}</td>
-      <td>${unMes.toLocaleString('es-AR')}</td>
+      <td style="font-weight:700">${unMes.toLocaleString('es-AR')}</td>
     </tr>`;
   }).join('');
 
-  // Total recepción: promedio ponderado
-  const totDfSem = 5; // promedio general
-  const totUnSem = Math.round(recDia * totDfSem);
+  // Total: semanas del período global
+  const sortedAll = [...allRecFechas].sort();
+  const gF1 = new Date(sortedAll[0]+'T12:00:00');
+  const gF2 = new Date(sortedAll[sortedAll.length-1]+'T12:00:00');
+  const gDiasCal = Math.max(1, Math.round((gF2-gF1)/(1000*86400)) + 1);
+  const gSemanas = Math.max(1, gDiasCal / 7);
+  const totUnSem = Math.round(totalRecUnid / gSemanas);
   const totUnMes = Math.round(totUnSem * 4.33);
+  const totUnDia = Math.round(totUnSem / 5);
   recRows += `<tr class="total-row">
-    <td>TOTAL</td><td>${filtered.length}</td><td>${diasRec}</td><td>—</td>
+    <td>TOTAL</td><td>${filtered.length}</td><td>${Math.round(gSemanas*10)/10}</td><td>—</td>
     <td>${totalRecUnid.toLocaleString('es-AR')}</td>
-    <td style="font-weight:700">${recDia.toLocaleString('es-AR')}</td>
+    <td>${totUnDia.toLocaleString('es-AR')}</td>
     <td style="font-weight:700">${totUnSem.toLocaleString('es-AR')}</td>
-    <td>${totUnMes.toLocaleString('es-AR')}</td>
+    <td style="font-weight:700">${totUnMes.toLocaleString('es-AR')}</td>
   </tr>`;
 
   document.getElementById('pr-recepcion').innerHTML = `<div class="prod-section">
     <div class="prod-section-title">Recepción de materia prima</div>
-    <div class="prod-section-sub">Proyección semanal = un/día efectivo × días faena/sem · Mensual = semanal × 4,33</div>
+    <div class="prod-section-sub">Un/sem = total ÷ semanas del período · Un/mes = semanal × 4,33 · Un/día = semanal ÷ faena/sem</div>
     <div style="overflow-x:auto">
     <table class="prod-table">
-      <thead><tr><th style="text-align:left">Frigorífico</th><th>Recep.</th><th>Días ef.</th><th>Faena/sem</th><th>Total un.</th><th>Un/día</th><th>Un/sem</th><th>Un/mes</th></tr></thead>
+      <thead><tr><th style="text-align:left">Frigorífico</th><th>Recep.</th><th>Semanas</th><th>Faena/sem</th><th>Total un.</th><th>Un/día</th><th>Un/sem</th><th>Un/mes</th></tr></thead>
       <tbody>${recRows}</tbody>
     </table>
     </div>
@@ -873,15 +881,19 @@ function renderTab3(){
   // Los días efectivos son las fechas únicas donde hubo clasificación (todas juntas).
   // Por frigorífico mostramos totales y % de participación.
   const activeFgosClas = FGOS.filter(f => clasByFgo[f].unid > 0);
-  const perClasGlobal = calcPeriodo(allClasFechas);
 
-  // Ritmo global de la planta — un/día ya es efectivo, proyectar con días nominales
-  const plantaUDia = diasClas > 0 ? Math.round(totalClasUnid / diasClas) : 0;
-  const plantaKDia = diasClas > 0 ? Math.round(totalClasKgs / diasClas) : 0;
-  const plantaUSem = Math.round(plantaUDia * DIAS_CLASIF_SEMANA);
+  // Ritmo global de la planta — basado en semanas del período
+  const clasSorted = [...allClasFechas].sort();
+  const cF1 = clasSorted.length ? new Date(clasSorted[0]+'T12:00:00') : new Date();
+  const cF2 = clasSorted.length ? new Date(clasSorted[clasSorted.length-1]+'T12:00:00') : new Date();
+  const cDiasCal = Math.max(1, Math.round((cF2-cF1)/(1000*86400)) + 1);
+  const cSemanas = Math.max(1, cDiasCal / 7);
+  const plantaUSem = Math.round(totalClasUnid / cSemanas);
   const plantaUMes = Math.round(plantaUSem * 4.33);
-  const plantaKSem = Math.round(plantaKDia * DIAS_CLASIF_SEMANA);
+  const plantaUDia = Math.round(plantaUSem / DIAS_CLASIF_SEMANA);
+  const plantaKSem = Math.round(totalClasKgs / cSemanas);
   const plantaKMes = Math.round(plantaKSem * 4.33);
+  const plantaKDia = Math.round(plantaKSem / DIAS_CLASIF_SEMANA);
 
   let clasRows = activeFgosClas.map(f => {
     const d = clasByFgo[f];
@@ -908,7 +920,7 @@ function renderTab3(){
 
   document.getElementById('pr-clasificacion').innerHTML = `<div class="prod-section">
     <div class="prod-section-title">Clasificación y empaque (Santa Faz)</div>
-    <div class="prod-section-sub">Planta ${DIAS_CLASIF_SEMANA} días/sem · ${diasClas} días efectivos · Proyección = día × ${DIAS_CLASIF_SEMANA} × 4,33</div>
+    <div class="prod-section-sub">Planta ${DIAS_CLASIF_SEMANA} días/sem · ${Math.round(cSemanas*10)/10} semanas en período · Total ÷ semanas × 4,33</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
       <div style="background:var(--green-bg);border:1px solid var(--green-bd);border-radius:8px;padding:10px;text-align:center">
         <div style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:var(--green)">${plantaUDia.toLocaleString('es-AR')}</div>
